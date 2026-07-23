@@ -6,6 +6,7 @@
 #   piw <path>                  Launch with workspace
 #   piw build [profile]         Build a variant (default: core)
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
+#   piw install-packages        Install packages from extensions.txt
 #   piw update                  Pull harness updates + rebuild
 #   piw --profile <name>        Launch with a specific variant
 #   piw --help                  Show this help
@@ -17,6 +18,7 @@
 #   piw build
 #   piw build --no-cache
 #   piw build devops
+#   piw install-packages
 #   piw update
 #
 # Environment:
@@ -54,6 +56,15 @@ validate_profile() {
   if [[ ! -f "$dir/Dockerfile" ]]; then
     echo "ERROR: Variant '$profile' has no Dockerfile at $dir/Dockerfile" >&2
     exit 1
+  fi
+}
+
+# ── Utility: resolve pi config directory ─────────────────────────────────────
+resolve_config_dir() {
+  if [[ "${PI_CONFIG_DIR:-}" = /* ]]; then
+    echo "$PI_CONFIG_DIR"
+  else
+    echo "$SCRIPT_DIR/${PI_CONFIG_DIR:-.pi/agent}"
   fi
 }
 
@@ -105,13 +116,8 @@ cmd_launch() {
   fi
 
   # Resolve config dir (default: .pi/agent/ inside harness)
-  # Supports both absolute and relative paths in PI_CONFIG_DIR
   local config_dir
-  if [[ "${PI_CONFIG_DIR:-}" = /* ]]; then
-    config_dir="$PI_CONFIG_DIR"
-  else
-    config_dir="$SCRIPT_DIR/${PI_CONFIG_DIR:-.pi/agent}"
-  fi
+  config_dir="$(resolve_config_dir)"
   bootstrap_config "$config_dir"
 
   # Ensure APPEND_SYSTEM.md exists
@@ -158,10 +164,12 @@ cmd_launch() {
     --user "$(id -u):$(id -g)" \
     -e HOME=/home/pi \
     -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+    -e npm_config_cache=/tmp/.npm-cache \
     "${env_flags[@]}" \
     -v "$config_dir:/home/pi/.pi/agent:z" \
     -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
     -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
+    -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
     -v "$workspace:$workspace:z" \
     -w "$workspace" \
     "$image_tag"
@@ -184,6 +192,69 @@ cmd_build() {
   echo "INFO: Building pi-harness:$profile…"
   docker build -t "$image_tag" "${build_args[@]}"
   echo "INFO: Build complete: $image_tag"
+}
+
+# ── Command: install packages from extensions.txt ────────────────────────────
+cmd_install_packages() {
+  local profile="$1"
+  local packages_file="$SCRIPT_DIR/extensions.txt"
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+
+  if [[ ! -f "$packages_file" ]]; then
+    echo "INFO: No extensions.txt found. Nothing to install."
+    return
+  fi
+
+  # Ensure image exists
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  if ! docker image inspect "$image_tag" &>/dev/null; then
+    echo "INFO: Image '$image_tag' not found. Building…"
+    docker build -t "$image_tag" "$SCRIPT_DIR/variants/$profile"
+  fi
+
+  # Read packages, skip blank lines and comments
+  local packages=()
+  while IFS= read -r line; do
+    line="${line/#"${line%%[![:space:]]*}"/}"   # trim leading whitespace
+    line="${line/%"${line##*[![:space:]]}"/}"   # trim trailing whitespace
+    [[ -z "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+    packages+=("$line")
+  done < "$packages_file"
+
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    echo "INFO: No packages listed in extensions.txt."
+    return
+  fi
+
+  local settings_file="$config_dir/settings.json"
+  local exit_code=0
+
+  echo "Installing packages for pi-harness:$profile…"
+  for pkg in "${packages[@]}"; do
+    # Skip if already installed (mentioned in settings.json)
+    if [[ -f "$settings_file" ]] && grep -qF "$pkg" "$settings_file" 2>/dev/null; then
+      echo "  ✓ $pkg (already installed)"
+      continue
+    fi
+
+    printf "  Installing %s… " "$pkg"
+    if docker run --rm \
+      -v "$config_dir:/home/pi/.pi/agent:z" \
+      -e npm_config_cache=/tmp/.npm-cache \
+      "$image_tag" \
+      pi install "$pkg" &>/dev/null; then
+      echo "done"
+    else
+      echo "failed" >&2
+      exit_code=1
+    fi
+  done
+
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "WARNING: One or more packages failed to install." >&2
+  fi
 }
 
 # ── Command: update harness and rebuild ───────────────────────────────────────
@@ -227,7 +298,7 @@ while [[ $# -gt 0 ]]; do
   --help | -h)
     show_help
     ;;
-  build | update)
+  build | update | install-packages)
     COMMAND="$1"
     shift
     ;;
@@ -249,6 +320,9 @@ build)
   ;;
 update)
   cmd_update "${POSITIONAL[0]:-}"
+  ;;
+install-packages)
+  cmd_install_packages "${POSITIONAL[0]:-$PROFILE}"
   ;;
 *)
   cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}"
