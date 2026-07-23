@@ -23,9 +23,13 @@ RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 # Create the pi user. UID/GID are remapped at runtime via --user in run.sh.
 # 755 on /home/pi so any UID can traverse into it after remapping.
+# Create the pi user. UID/GID are remapped at runtime via --user in piw.
+# Pre-create writable subdirs so the remapped user (typically `node`, UID 1000)
+# can write npm cache and pi state without owning /home/pi.
 RUN useradd -m pi \
     && chmod 755 /home/pi \
-    && mkdir -p /home/pi/.pi/agent \
+    && mkdir -p /home/pi/.pi/agent /home/pi/.npm /home/pi/.cache \
+    && chmod 777 /home/pi/.npm /home/pi/.cache \
     && chown -R pi:pi /home/pi
 
 CMD ["pi"]
