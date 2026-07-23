@@ -9,6 +9,7 @@
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
 #   piw install-packages        Install packages from extensions.txt
 #   piw update                  Pull harness updates + rebuild
+#   piw doctor [profile]        Diagnose harness setup
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
 #   piw --profile <name>        Launch with a specific variant
@@ -23,6 +24,8 @@
 #   piw build --no-cache
 #   piw build devops
 #   piw install-packages
+#   piw doctor
+#   piw doctor devops
 #   piw --install
 #   piw --install ~/bin
 #   piw --uninstall
@@ -43,7 +46,7 @@ DEFAULT_PROFILE="core"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
-  sed -n '2,33p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  sed -n '2,38p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
   exit 0
 }
 
@@ -344,6 +347,149 @@ cmd_uninstall() {
   fi
 }
 
+# ── Command: diagnose harness setup ──────────────────────────────────────────
+cmd_doctor() {
+  local profile="${1:-$DEFAULT_PROFILE}"
+  local errors=0
+
+  echo "pi-harness doctor — diagnosing \"$profile\" profile"
+  echo ""
+
+  # ── Docker ──
+  echo "── Docker ──"
+  if command -v docker &>/dev/null; then
+    echo "  ✓ docker found at $(command -v docker)"
+    if docker info &>/dev/null 2>&1; then
+      echo "  ✓ Docker daemon is running"
+    else
+      echo "  ✗ Docker daemon is not running (or permission denied)"
+      errors+=1
+    fi
+  else
+    echo "  ✗ docker not found on PATH"
+    errors+=1
+  fi
+
+  # ── Variant ──
+  echo "── Variant ($profile) ──"
+  local variant_dir="$SCRIPT_DIR/variants/$profile"
+  if [[ -d "$variant_dir" ]]; then
+    echo "  ✓ Variant directory: $variant_dir"
+    if [[ -f "$variant_dir/Dockerfile" ]]; then
+      echo "  ✓ Dockerfile exists"
+    else
+      echo "  ✗ No Dockerfile in $variant_dir"
+      errors+=1
+    fi
+  else
+    echo "  ✗ Variant directory not found: $variant_dir"
+    errors+=1
+  fi
+
+  # ── Docker image ──
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  if docker image inspect "$image_tag" &>/dev/null 2>&1; then
+    echo "  ✓ Docker image built: $image_tag"
+  else
+    echo "  ⚠ Docker image not yet built (auto-built on first launch)"
+  fi
+
+  # ── Environment ──
+  echo "── Environment ──"
+  if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    echo "  ✓ .env file exists"
+    if grep -qP '^[A-Z_]+=\s*$' "$SCRIPT_DIR/.env" 2>/dev/null; then
+      echo "  ⚠ Some variables in .env are empty (placeholders?)"
+    fi
+  else
+    echo "  ⚠ .env not found (copy .env.example to .env)"
+  fi
+
+  local found_keys=0
+  for var in ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY FIREWORKS_API_KEY; do
+    if [[ -n "${!var:-}" ]]; then
+      echo "  ✓ $var is set"
+      found_keys+=1
+    fi
+  done
+  if [[ $found_keys -eq 0 ]]; then
+    echo "  ⚠ No API keys found (set at least one in .env or export it)"
+  fi
+
+  # ── Config directory ──
+  echo "── Config ──"
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  if [[ -d "$config_dir" ]]; then
+    echo "  ✓ Config directory: $config_dir"
+    [[ -f "$config_dir/settings.json" ]] && echo "  ✓ settings.json" || echo "  ⚠ No settings.json (seeded on first launch)"
+    [[ -f "$config_dir/models.json" ]] && echo "  ✓ models.json" || echo "  ⚠ No models.json (seeded on first launch)"
+  else
+    echo "  ⚠ Config directory not found (created on first launch)"
+  fi
+
+  # ── Skills & Extensions ──
+  echo "── Skills & Extensions ──"
+  if [[ -d "$SCRIPT_DIR/skills/workflow" ]]; then
+    echo "  ✓ Workflow skill: skills/workflow"
+    [[ -f "$SCRIPT_DIR/skills/workflow/SKILL.md" ]] && echo "  ✓   SKILL.md" || echo "  ⚠   Missing SKILL.md"
+    [[ -f "$SCRIPT_DIR/skills/workflow/APPEND_SYSTEM.md" ]] && echo "  ✓   APPEND_SYSTEM.md" || echo "  ⚠   Missing APPEND_SYSTEM.md"
+  else
+    echo "  ⚠ Workflow skill directory not found: skills/workflow"
+  fi
+  [[ -d "$SCRIPT_DIR/skills/ready" ]] && echo "  ✓ skills/ready directory" || echo "  ⚠ skills/ready not found (optional)"
+  [[ -d "$SCRIPT_DIR/extensions" ]] && echo "  ✓ Extensions directory" || echo "  ⚠ Extensions directory not found"
+
+  # ── Packages ──
+  echo "── Packages ──"
+  if [[ -f "$SCRIPT_DIR/extensions.txt" ]]; then
+    echo "  ✓ extensions.txt found"
+    if [[ -f "$config_dir/settings.json" ]]; then
+      local total=0 installed=0
+      while IFS= read -r line; do
+        line="${line/#"${line%%[![:space:]]*}"/}"
+        line="${line/%"${line##*[![:space:]]}"/}"
+        [[ -z "$line" ]] && continue
+        [[ "$line" == \#* ]] && continue
+        total+=1
+        if grep -qF "$line" "$config_dir/settings.json" 2>/dev/null; then
+          installed+=1
+        fi
+      done < "$SCRIPT_DIR/extensions.txt"
+      echo "  Packages: $installed/$total installed"
+      if [[ $installed -lt $total ]]; then
+        echo "  ⚠ Run 'piw install-packages' to install missing packages"
+      fi
+    else
+      echo "  ⚠ Cannot check package status (settings.json not seeded yet)"
+    fi
+  else
+    echo "  ⚠ No extensions.txt found"
+  fi
+
+  # ── Repository ──
+  echo "── Repository ──"
+  if git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
+    echo "  ✓ Git repository"
+    if [[ -z "$(git -C "$SCRIPT_DIR" status --porcelain 2>/dev/null)" ]]; then
+      echo "  ✓ Working tree clean"
+    else
+      echo "  ⚠ Uncommitted changes"
+    fi
+  else
+    echo "  ⚠ Not a git repository"
+  fi
+
+  # ── Summary ──
+  echo ""
+  if [[ $errors -eq 0 ]]; then
+    echo "✓ All checks passed. Run 'piw' to launch."
+  else
+    echo "✗ $errors issue(s) found. Review the items above."
+    return 1
+  fi
+}
+
 # ── Command: update harness and rebuild ───────────────────────────────────────
 cmd_update() {
   local profile="${1:-$DEFAULT_PROFILE}"
@@ -398,7 +544,7 @@ while [[ $# -gt 0 ]]; do
   --help | -h)
     show_help
     ;;
-  build | update | install-packages | install | uninstall)
+  build | update | install-packages | install | uninstall | doctor)
     COMMAND="$1"
     shift
     ;;
@@ -429,6 +575,9 @@ install)
   ;;
 uninstall)
   cmd_uninstall "${POSITIONAL[0]:-}"
+  ;;
+doctor)
+  cmd_doctor "${POSITIONAL[0]:-$PROFILE}"
   ;;
 *)
   cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME"
