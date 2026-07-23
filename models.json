@@ -1,0 +1,55 @@
+{
+  "providers": {
+    "siliconflow": {
+      "baseUrl": "https://api.siliconflow.com/v1/chat/completions",
+      "api": "chat-completions",
+      "apiKey": "$SILICONFLOW_API_KEY",
+      "models": [
+        {
+          "id": "deepseek-ai/DeepSeek-V4-Flash",
+          "name": "DeepSeek V4 Flash (SiliconFlow)",
+          "contextLength": 122880
+        },
+        {
+          "id": "deepseek-ai/DeepSeek-R1",
+          "name": "DeepSeek R1 (SiliconFlow)",
+          "contextLength": 122880
+        }
+      ]
+    },
+    "fireworks": {
+      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "api": "openai-completions",
+      "apiKey": "$FIREWORKS_API_KEY",
+      "models": [
+        {
+          "id": "accounts/fireworks/models/deepseek-v4",
+          "name": "DeepSeek V4 (Fireworks)",
+          "contextLength": 131072
+        },
+        {
+          "id": "accounts/fireworks/models/llama-v4-scout",
+          "name": "Llama 4 Scout (Fireworks)",
+          "contextLength": 131072
+        },
+        {
+          "id": "accounts/fireworks/models/llama-v4-maverick",
+          "name": "Llama 4 Maverick (Fireworks)",
+          "contextLength": 131072
+        }
+      ]
+    },
+    "llamacpp": {
+      "baseUrl": "http://host.docker.internal:8080/v1",
+      "api": "openai-completions",
+      "apiKey": "none",
+      "models": [
+        {
+          "id": "local",
+          "name": "llama.cpp local model",
+          "contextLength": 8192
+        }
+      ]
+    }
+  }
+}
