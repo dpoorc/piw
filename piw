@@ -493,17 +493,36 @@ cmd_doctor() {
 # ── Command: update harness and rebuild ───────────────────────────────────────
 cmd_update() {
   local profile="${1:-$DEFAULT_PROFILE}"
+  local no_cache="${2:-false}"
+  local do_all="${3:-false}"
 
-  # If git remote is configured, pull updates
+  # Pull harness updates
   if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
     echo "INFO: Pulling harness updates from git…"
-    git -C "$SCRIPT_DIR" pull --rebase
+    if ! git -C "$SCRIPT_DIR" pull --rebase 2>&1; then
+      echo "ERROR: Git pull failed. Resolve conflicts and try again." >&2
+      return 1
+    fi
   else
     echo "INFO: No git remote configured. Skipping pull."
   fi
 
-  cmd_build "$profile" "false"
-  echo "INFO: Update complete. Run 'piw' to launch."
+  if [[ "$do_all" == "true" ]]; then
+    for variant_dir in "$SCRIPT_DIR"/variants/*/; do
+      local p
+      p="$(basename "$variant_dir")"
+      [[ "$p" == "template" ]] && continue
+      echo "--- $p ---"
+      cmd_build "$p" "$no_cache"
+      cmd_install_packages "$p"
+    done
+  else
+    cmd_build "$profile" "$no_cache"
+    cmd_install_packages "$profile"
+  fi
+
+  echo ""
+  echo "✓ Update complete. Run 'piw' to launch."
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -513,6 +532,7 @@ PROFILE="$DEFAULT_PROFILE"
 COMMAND=""
 NO_CACHE="false"
 RESUME="false"
+UPDATE_ALL="false"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -531,6 +551,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   -r | --resume)
     RESUME="true"
+    shift
+    ;;
+  --all)
+    UPDATE_ALL="true"
     shift
     ;;
   --install)
@@ -565,7 +589,7 @@ build)
   cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE"
   ;;
 update)
-  cmd_update "${POSITIONAL[0]:-}"
+  cmd_update "${POSITIONAL[0]:-}" "$NO_CACHE" "$UPDATE_ALL"
   ;;
 install-packages)
   cmd_install_packages "${POSITIONAL[0]:-$PROFILE}"
