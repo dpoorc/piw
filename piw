@@ -469,6 +469,19 @@ cmd_doctor() {
     echo "  ⚠ No extensions.txt found"
   fi
 
+  # ── rtk ──
+  echo "── rtk ──"
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  if docker image inspect "$image_tag" &>/dev/null 2>&1; then
+    if rtk_version=$(docker run --rm "$image_tag" rtk --version 2>/dev/null); then
+      echo "  ✓ $rtk_version"
+    else
+      echo "  ⚠ rtk binary not found (rebuild image with 'piw build $profile')"
+    fi
+  else
+    echo "  ⚠ Cannot check rtk (image not built yet)"
+  fi
+
   # ── Repository ──
   echo "── Repository ──"
   if git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
