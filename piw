@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+# piw — pi-harness: launch the pi coding agent in Docker
+#
+# Usage:
+#   piw                         Launch (default profile, current directory)
+#   piw <path>                  Launch with workspace
+#   piw build [profile]         Build a variant (default: core)
+#   piw build --no-cache        Full rebuild (ignore Docker cache)
+#   piw update                  Pull harness updates + rebuild
+#   piw --profile <name>        Launch with a specific variant
+#   piw --help                  Show this help
+#
+# Examples:
+#   piw
+#   piw --profile devops
+#   piw ~/my-project
+#   piw build
+#   piw build --no-cache
+#   piw build devops
+#   piw update
+#
+# Environment:
+#   API keys are sourced from .env (if present) or from the host environment.
+#   See .env.example for the full list of supported variables.
+#
+#   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
+#
+set -euo pipefail
+
+# ── Constants ─────────────────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+IMAGE_PREFIX="pi-harness"
+DEFAULT_PROFILE="core"
+
+# ── Help ──────────────────────────────────────────────────────────────────────
+show_help() {
+  sed -n '2,28p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  exit 0
+}
+
+# ── Utility: validate profile exists ──────────────────────────────────────────
+validate_profile() {
+  local profile="$1"
+  local dir="$SCRIPT_DIR/variants/$profile"
+  if [[ ! -d "$dir" ]]; then
+    echo "ERROR: Unknown profile '$profile'." >&2
+    echo "  Available:" >&2
+    for d in "$SCRIPT_DIR"/variants/*/; do
+      name="$(basename "$d")"
+      [[ "$name" != "template" ]] && echo "    - $name"
+    done >&2
+    exit 1
+  fi
+  if [[ ! -f "$dir/Dockerfile" ]]; then
+    echo "ERROR: Variant '$profile' has no Dockerfile at $dir/Dockerfile" >&2
+    exit 1
+  fi
+}
+
+# ── Utility: source .env if present ───────────────────────────────────────────
+load_env() {
+  local env_file="$SCRIPT_DIR/.env"
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck source=/dev/null
+    source "$env_file"
+    set +a
+  fi
+}
+
+
+
+# ── Utility: bootstrap pi config on the host ─────────────────────────────────
+bootstrap_config() {
+  local config_dir="$1"
+  mkdir -p "$config_dir"
+
+  # Seed models.json
+  if [[ ! -f "$config_dir/models.json" ]] && [[ -f "$SCRIPT_DIR/models.json" ]]; then
+    cp "$SCRIPT_DIR/models.json" "$config_dir/models.json"
+    echo "INFO: Seeded $config_dir/models.json from harness defaults."
+    echo "      Edit it there to tweak models or add providers."
+  fi
+
+  # Seed settings.json
+  if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/settings.json" ]]; then
+    cp "$SCRIPT_DIR/settings.json" "$config_dir/settings.json"
+    echo "INFO: Seeded $config_dir/settings.json from harness defaults."
+  fi
+}
+
+# ── Command: launch pi in Docker ──────────────────────────────────────────────
+cmd_launch() {
+  local profile="$1"
+  local workspace="$2"
+  local variant_dir="$SCRIPT_DIR/variants/$profile"
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+
+  validate_profile "$profile"
+
+  # Workspace must exist
+  if [[ ! -d "$workspace" ]]; then
+    echo "ERROR: Workspace not found: $workspace" >&2
+    exit 1
+  fi
+
+  # Resolve config dir (default: .pi/agent/ inside harness)
+  # Supports both absolute and relative paths in PI_CONFIG_DIR
+  local config_dir
+  if [[ "${PI_CONFIG_DIR:-}" = /* ]]; then
+    config_dir="$PI_CONFIG_DIR"
+  else
+    config_dir="$SCRIPT_DIR/${PI_CONFIG_DIR:-.pi/agent}"
+  fi
+  bootstrap_config "$config_dir"
+
+  # Ensure APPEND_SYSTEM.md exists
+  local append_src="$SCRIPT_DIR/skills/workflow/APPEND_SYSTEM.md"
+  if [[ ! -f "$append_src" ]]; then
+    echo "WARNING: $append_src not found. Creating empty placeholder."
+    mkdir -p "$(dirname "$append_src")"
+    touch "$append_src"
+  fi
+
+  # Build image if missing
+  if ! docker image inspect "$image_tag" &>/dev/null; then
+    echo "INFO: Image '$image_tag' not found. Building…"
+    docker build -t "$image_tag" "$variant_dir"
+  fi
+
+  # Build Docker env-var flags from known API keys
+  local -a env_flags=()
+  local known_keys=(
+    SILICONFLOW_API_KEY
+    FIREWORKS_API_KEY
+    ANTHROPIC_API_KEY
+    OPENAI_API_KEY
+    DEEPSEEK_API_KEY
+    GEMINI_API_KEY
+    OPENROUTER_API_KEY
+    HUGGINGFACE_API_KEY
+    GROQ_API_KEY
+    MISTRAL_API_KEY
+    XAI_API_KEY
+    TOGETHER_API_KEY
+    AZURE_OPENAI_API_KEY
+  )
+  for var in "${known_keys[@]}"; do
+    if [[ -n "${!var:-}" ]]; then
+      env_flags+=(-e "$var")
+    fi
+  done
+
+  echo "INFO: Launching pi-harness ($profile) in $workspace"
+  # shellcheck disable=SC2086
+  exec docker run --rm -it \
+    --add-host host.docker.internal:host-gateway \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/pi \
+    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+    "${env_flags[@]}" \
+    -v "$config_dir:/home/pi/.pi/agent:z" \
+    -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
+    -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
+    -v "$workspace:$workspace:z" \
+    -w "$workspace" \
+    "$image_tag"
+}
+
+# ── Command: build a variant image ────────────────────────────────────────────
+cmd_build() {
+  local profile="$1"
+  local no_cache="$2"
+  local variant_dir="$SCRIPT_DIR/variants/$profile"
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+
+  validate_profile "$profile"
+
+  local build_args=("$variant_dir")
+  if [[ "$no_cache" == "true" ]]; then
+    build_args=("--no-cache" "${build_args[@]}")
+  fi
+
+  echo "INFO: Building pi-harness:$profile…"
+  docker build -t "$image_tag" "${build_args[@]}"
+  echo "INFO: Build complete: $image_tag"
+}
+
+# ── Command: update harness and rebuild ───────────────────────────────────────
+cmd_update() {
+  local profile="${1:-$DEFAULT_PROFILE}"
+
+  # If git remote is configured, pull updates
+  if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
+    echo "INFO: Pulling harness updates from git…"
+    git -C "$SCRIPT_DIR" pull --rebase
+  else
+    echo "INFO: No git remote configured. Skipping pull."
+  fi
+
+  cmd_build "$profile" "false"
+  echo "INFO: Update complete. Run 'piw' to launch."
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+load_env
+
+PROFILE="$DEFAULT_PROFILE"
+COMMAND=""
+NO_CACHE="false"
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --profile)
+    if [[ -z "${2:-}" ]]; then
+      echo "ERROR: --profile requires an argument" >&2
+      exit 1
+    fi
+    PROFILE="$2"
+    shift 2
+    ;;
+  --no-cache)
+    NO_CACHE="true"
+    shift
+    ;;
+  --help | -h)
+    show_help
+    ;;
+  build | update)
+    COMMAND="$1"
+    shift
+    ;;
+  -*)
+    echo "ERROR: Unknown option: $1" >&2
+    echo "Usage: piw [--profile <name>] [--help]" >&2
+    exit 1
+    ;;
+  *)
+    POSITIONAL+=("$1")
+    shift
+    ;;
+  esac
+done
+
+case "$COMMAND" in
+build)
+  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE"
+  ;;
+update)
+  cmd_update "${POSITIONAL[0]:-}"
+  ;;
+*)
+  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}"
+  ;;
+esac
