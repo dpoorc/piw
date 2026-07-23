@@ -41,4 +41,8 @@ pi-harness/
 
 - Merge `build` + `install-packages` into a single step
 - Add `--all` flag to `build` (rebuild all variants at once)
+- Populate `skills/ready/` with Tier 1 community skills
+- Test permission system in practice (verify `external_directory` doesn't
+  trigger falsely on skill/config paths)
+- MCP integration (deferred)
 ```
