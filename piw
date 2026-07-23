@@ -4,6 +4,7 @@
 # Usage:
 #   piw                         Launch (default profile, current directory)
 #   piw <path>                  Launch with workspace
+#   piw -r, --resume            Launch with session picker
 #   piw build [profile]         Build a variant (default: core)
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
 #   piw install-packages        Install packages from extensions.txt
@@ -13,6 +14,7 @@
 #
 # Examples:
 #   piw
+#   piw -r
 #   piw --profile devops
 #   piw ~/my-project
 #   piw build
@@ -104,6 +106,7 @@ bootstrap_config() {
 cmd_launch() {
   local profile="$1"
   local workspace="$2"
+  local resume="${3:-false}"
   local variant_dir="$SCRIPT_DIR/variants/$profile"
   local image_tag="${IMAGE_PREFIX}:${profile}"
 
@@ -157,8 +160,12 @@ cmd_launch() {
     fi
   done
 
-  echo "INFO: Launching pi-harness ($profile) in $workspace"
-  # shellcheck disable=SC2086
+  local pi_args=()
+  [[ "$resume" == "true" ]] && pi_args+=(-r)
+  local session_flag=""
+  [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
+
+  echo "INFO: Launching pi-harness ($profile) in $workspace$session_flag"
   exec docker run --rm -it \
     --add-host host.docker.internal:host-gateway \
     --user "$(id -u):$(id -g)" \
@@ -172,7 +179,8 @@ cmd_launch() {
     -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
     -v "$workspace:$workspace:z" \
     -w "$workspace" \
-    "$image_tag"
+    "$image_tag" \
+    pi "${pi_args[@]}"
 }
 
 # ── Command: build a variant image ────────────────────────────────────────────
@@ -279,6 +287,7 @@ load_env
 PROFILE="$DEFAULT_PROFILE"
 COMMAND=""
 NO_CACHE="false"
+RESUME="false"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -295,6 +304,10 @@ while [[ $# -gt 0 ]]; do
     NO_CACHE="true"
     shift
     ;;
+  -r | --resume)
+    RESUME="true"
+    shift
+    ;;
   --help | -h)
     show_help
     ;;
@@ -304,7 +317,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   -*)
     echo "ERROR: Unknown option: $1" >&2
-    echo "Usage: piw [--profile <name>] [--help]" >&2
+    echo "Usage: piw [--profile <name>] [--resume|-r] [--help]" >&2
     exit 1
     ;;
   *)
@@ -325,6 +338,6 @@ install-packages)
   cmd_install_packages "${POSITIONAL[0]:-$PROFILE}"
   ;;
 *)
-  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}"
+  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME"
   ;;
 esac
