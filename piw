@@ -9,6 +9,8 @@
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
 #   piw install-packages        Install packages from extensions.txt
 #   piw update                  Pull harness updates + rebuild
+#   piw --install [dir]         Install piw symlink into PATH
+#   piw --uninstall [dir]       Remove piw symlink from PATH
 #   piw --profile <name>        Launch with a specific variant
 #   piw --help                  Show this help
 #
@@ -21,6 +23,9 @@
 #   piw build --no-cache
 #   piw build devops
 #   piw install-packages
+#   piw --install
+#   piw --install ~/bin
+#   piw --uninstall
 #   piw update
 #
 # Environment:
@@ -38,7 +43,7 @@ DEFAULT_PROFILE="core"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
-  sed -n '2,28p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  sed -n '2,33p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
   exit 0
 }
 
@@ -265,6 +270,80 @@ cmd_install_packages() {
   fi
 }
 
+# ── Command: install piw symlink into PATH ────────────────────────────────────
+cmd_install() {
+  local target_dir="${1:-$HOME/.local/bin}"
+  local link_path="$target_dir/piw"
+  local piw_path="$SCRIPT_DIR/piw"
+
+  mkdir -p "$target_dir"
+
+  if [[ -L "$link_path" ]]; then
+    local current
+    current="$(readlink "$link_path")"
+    if [[ "$current" == "$piw_path" ]]; then
+      echo "✓ piw already installed at $link_path"
+    else
+      ln -sf "$piw_path" "$link_path"
+      echo "✓ Updated symlink: $link_path → $piw_path (was → $current)"
+    fi
+  elif [[ -f "$link_path" ]]; then
+    echo "ERROR: $link_path exists and is not a symlink. Remove it first." >&2
+    exit 1
+  else
+    ln -s "$piw_path" "$link_path"
+    echo "✓ Installed: $link_path → $piw_path"
+  fi
+
+  # Seed configs (same as launch does)
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  bootstrap_config "$config_dir"
+
+  if [[ ":$PATH:" != *":$target_dir:"* ]]; then
+    echo ""
+    echo "NOTE: $target_dir is not on your PATH. Add this to ~/.bashrc / ~/.zshrc:"
+    echo "  export PATH=\"\$PATH:$target_dir\""
+  fi
+
+  echo ""
+  echo "✓ pi-harness installed. Run 'piw' to launch."
+}
+
+# ── Command: remove piw symlink from PATH ────────────────────────────────────
+cmd_uninstall() {
+  local target_dir="${1:-$HOME/.local/bin}"
+  local link_path="$target_dir/piw"
+  local piw_path="$SCRIPT_DIR/piw"
+
+  if [[ ! -L "$link_path" ]] && [[ ! -e "$link_path" ]]; then
+    echo "✓ piw not found at $link_path (nothing to remove)"
+    return
+  fi
+
+  if [[ -L "$link_path" ]]; then
+    local current
+    current="$(readlink "$link_path")"
+    if [[ "$current" != "$piw_path" ]]; then
+      echo "ERROR: $link_path points to $current, not $piw_path. Not removing." >&2
+      exit 1
+    fi
+    rm "$link_path"
+    echo "✓ Removed symlink: $link_path"
+  else
+    echo "ERROR: $link_path is a regular file. Remove manually." >&2
+    exit 1
+  fi
+
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  if [[ -d "$config_dir" ]]; then
+    echo ""
+    echo "NOTE: Config directory still exists at $config_dir"
+    echo "  Remove with: rm -rf $config_dir"
+  fi
+}
+
 # ── Command: update harness and rebuild ───────────────────────────────────────
 cmd_update() {
   local profile="${1:-$DEFAULT_PROFILE}"
@@ -308,16 +387,24 @@ while [[ $# -gt 0 ]]; do
     RESUME="true"
     shift
     ;;
+  --install)
+    COMMAND="install"
+    shift
+    ;;
+  --uninstall)
+    COMMAND="uninstall"
+    shift
+    ;;
   --help | -h)
     show_help
     ;;
-  build | update | install-packages)
+  build | update | install-packages | install | uninstall)
     COMMAND="$1"
     shift
     ;;
   -*)
     echo "ERROR: Unknown option: $1" >&2
-    echo "Usage: piw [--profile <name>] [--resume|-r] [--help]" >&2
+    echo "Usage: piw [--profile <name>] [--resume|-r] [--install|--uninstall] [--help]" >&2
     exit 1
     ;;
   *)
@@ -336,6 +423,12 @@ update)
   ;;
 install-packages)
   cmd_install_packages "${POSITIONAL[0]:-$PROFILE}"
+  ;;
+install)
+  cmd_install "${POSITIONAL[0]:-}"
+  ;;
+uninstall)
+  cmd_uninstall "${POSITIONAL[0]:-}"
   ;;
 *)
   cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME"
