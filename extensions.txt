@@ -7,3 +7,5 @@
 
 npm:pi-web-access@0.13.0
 npm:@gotgenes/pi-permission-system
+git:https://github.com/r3b1s/rtk-pi
+npm:pi-intercom

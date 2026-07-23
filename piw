@@ -180,6 +180,7 @@ cmd_launch() {
     -e HOME=/home/pi \
     -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
     -e npm_config_cache=/tmp/.npm-cache \
+    -e npm_config_ignore_scripts=true \
     "${env_flags[@]}" \
     -v "$config_dir:/home/pi/.pi/agent:z" \
     -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
@@ -259,6 +260,7 @@ cmd_install_packages() {
     if docker run --rm \
       -v "$config_dir:/home/pi/.pi/agent:z" \
       -e npm_config_cache=/tmp/.npm-cache \
+      -e npm_config_ignore_scripts=true \
       "$image_tag" \
       pi install "$pkg" &>/dev/null; then
       echo "done"
