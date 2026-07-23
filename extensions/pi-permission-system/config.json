@@ -1,0 +1,35 @@
+{
+  "permission": {
+    "*": "allow",
+
+    "path": {
+      "*": "allow",
+      ".env": "deny",
+      ".env.*": "deny",
+      ".env.example": "allow",
+      ".env.template": "allow",
+      "*.pem": "deny",
+      "*.key": "deny"
+    },
+
+    "bash": {
+      "*": "allow",
+      "rm -rf *": "ask",
+      "rm -r *": "ask",
+      "sudo *": "ask",
+      "chmod -R *": "ask",
+      "chown -R *": "ask",
+      "dd *": "ask",
+      "mkfs*": "ask",
+      "shutdown*": "ask",
+      "poweroff*": "ask",
+      "reboot*": "ask",
+      "kill *": "ask",
+      "pkill *": "ask"
+    },
+
+    "external_directory": {
+      "*": "ask"
+    }
+  }
+}

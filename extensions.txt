@@ -6,3 +6,4 @@
 #
 
 npm:pi-web-access@0.13.0
+npm:@gotgenes/pi-permission-system
