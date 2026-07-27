@@ -35,15 +35,14 @@ RUN set -eux; \
 # Disable npm install scripts globally (supply chain security)
 RUN npm config set ignore-scripts true
 
-# Create the pi user. UID/GID are remapped at runtime via --user in run.sh.
-# 755 on /home/pi so any UID can traverse into it after remapping.
-# Create the pi user. UID/GID are remapped at runtime via --user in piw.
-# Pre-create writable subdirs so the remapped user (typically `node`, UID 1000)
-# can write npm cache and pi state without owning /home/pi.
-RUN useradd -m pi \
+# Rename the base image's `node` user to `pi`. At runtime, piw remaps
+# the host user's UID into the container via --user, so the name doesn't
+# affect permissions — but the container user should be called `pi`.
+RUN usermod -l pi node \
+    && groupmod -n pi node \
+    && usermod -d /home/pi -m pi \
     && chmod 755 /home/pi \
-    && mkdir -p /home/pi/.pi/agent /home/pi/.npm /home/pi/.cache \
-    && chmod 777 /home/pi/.npm /home/pi/.cache \
-    && chown -R pi:pi /home/pi
+    && mkdir -p /home/pi/.npm /home/pi/.cache \
+    && chmod 777 /home/pi/.npm /home/pi/.cache
 
 CMD ["pi"]
