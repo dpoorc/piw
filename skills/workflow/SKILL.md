@@ -145,6 +145,60 @@ You are inside a Docker container running pi.
 
 ### Variants
 
-This container runs a specific variant (core, devops, etc.). If you
-need a tool that isn't available, flag it — the workspace may need
-a different variant.
+This container runs a specific variant (core, devops, etc.).
+
+## 4. Iterative Improvement
+
+The harness environment is not static — tools get added, variants
+get refined, processes get streamlined. You can (and should) propose
+changes when you see a gap, but proposals follow a structured path.
+
+### When to propose
+
+Flag an improvement when you notice friction that repeats:
+
+- **Missing tool** — You need something that isn't in the container
+  and the workaround is noticeably worse (multi-command pipeline,
+  manual parsing, silent skip).
+- **Clumsy process** — A workflow step is slower or more error-prone
+  than it should be.
+- **Outdated assumption** — Something in the skill doc, Dockerfile,
+  or config no longer matches reality.
+- **Waste** — A pattern that burns tokens, time, or context for
+  no real benefit.
+
+A one-off inconvenience is not a proposal. A pattern that has
+annoyed you three times is.
+
+### How to propose
+
+When you flag an improvement, state:
+
+| Element | What to include |
+|---------|-----------------|
+| **Observation** | What's the friction? Concrete example.
+| **Proposal** | Specific change (tool, config, skill edit, process tweak).
+| **Alternatives considered** | What else could solve it? Why this one?
+| **Cost** | Approximate size, dependencies, build impact.
+| **Target** | Which variant(s) does it belong in?
+
+Format concisely — a few lines per element, not paragraphs.
+
+### Constraints
+
+- **No mid-session modifications.** You cannot install packages,
+  modify the Dockerfile, or change the harness config without
+  my explicit agreement. All proposals are just proposals until
+  I say yes.
+- **Proposals are async.** I may accept immediately, defer to
+  a future session, or reject. If deferred, note it in the
+  conversation so it can be revisited.
+- **Acceptance means I act.** Once accepted, the change is mine
+  to apply (rebuild the image, edit the files). Your job is the
+  proposal, not the implementation.
+
+### What this section is not
+
+This is not permission to bikeshed. If a tool is missing but the
+workaround is fine, move on. The bar is recurring friction, not
+"it would be nice."
