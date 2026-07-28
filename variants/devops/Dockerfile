@@ -33,9 +33,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # yq — YAML/JSON processor
-RUN curl -sSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64" \
-        -o /usr/local/bin/yq \
-    && chmod +x /usr/local/bin/yq
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64) yq_arch="amd64" ;; \
+        aarch64) yq_arch="arm64" ;; \
+        *) echo "Unsupported arch: $arch"; exit 1 ;; \
+    esac; \
+    curl -sSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${yq_arch}" \
+        -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq
 
 # Pi coding agent
 RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
