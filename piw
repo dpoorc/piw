@@ -5,10 +5,17 @@
 #   piw                         Launch (default profile, current directory)
 #   piw <path>                  Launch with workspace
 #   piw -r, --resume            Launch with session picker
-#   piw build [profile]         Build a variant (default: core)
+#   piw build [profile]         Build variant + install packages (default: core)
+#   piw build --all             Build all variants + install packages
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
 #   piw install-packages        Install packages from extensions.txt
-#   piw update                  Pull harness updates + rebuild
+#   piw install-packages --all  Install packages for all variants
+#   piw install-packages --force  Force reinstall (upgrade packages)
+#   piw install-packages --dry-run  Show what would be installed
+#   piw update                  Pull harness updates + rebuild + install
+#   piw update --all            Update all variants
+#   piw update --build-only     Pull + rebuild (skip package install)
+#   piw update --install-only   Pull + install packages (skip build)
 #   piw doctor [profile]        Diagnose harness setup
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
@@ -110,6 +117,128 @@ bootstrap_config() {
   fi
 }
 
+# ── Utility: list non-template variant names ─────────────────────────────────
+variant_names() {
+  for dir in "$SCRIPT_DIR"/variants/*/; do
+    local name
+    name="$(basename "$dir")"
+    [[ "$name" != "template" ]] && echo "$name"
+  done
+}
+
+# ── Utility: ensure Docker image exists for a profile ────────────────────────
+ensure_image() {
+  local profile="$1"
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  if ! docker image inspect "$image_tag" &>/dev/null; then
+    echo "INFO: Image '$image_tag' not found. Building…"
+    docker build -t "$image_tag" "$SCRIPT_DIR/variants/$profile"
+  fi
+}
+
+# ── Utility: install packages for a profile ──────────────────────────────────
+install_packages_for() {
+  local profile="$1"
+  local force="${2:-false}"
+  local dry_run="${3:-false}"
+  local packages_file="$SCRIPT_DIR/extensions.txt"
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+
+  if [[ ! -f "$packages_file" ]]; then
+    echo "INFO: No extensions.txt found. Nothing to install."
+    return
+  fi
+
+  # Read packages, skip blank lines and comments
+  local packages=()
+  while IFS= read -r line; do
+    line="${line/#"${line%%[![:space:]]*}"/}"
+    line="${line/%"${line##*[![:space:]]}"/}"
+    [[ -z "$line" ]] && continue
+    [[ "$line" == \#* ]] && continue
+    packages+=("$line")
+  done < "$packages_file"
+
+  if [[ ${#packages[@]} -eq 0 ]]; then
+    echo "INFO: No packages listed in extensions.txt."
+    return
+  fi
+
+  local settings_file="$config_dir/settings.json"
+
+  # Helper: check if a package is installed in settings.json
+  _pkg_installed() {
+    local pkg="$1"
+    [[ ! -f "$settings_file" ]] && return 1
+    if command -v jq &>/dev/null; then
+      jq -e --arg p "$pkg" '.packages // [] | index($p) | . != null' "$settings_file" &>/dev/null
+    else
+      grep -qF "$pkg" "$settings_file" 2>/dev/null
+    fi
+  }
+
+  # Dry-run: show what would happen without executing
+  if [[ "$dry_run" == "true" ]]; then
+    echo "Would install packages for pi-harness:$profile from extensions.txt:"
+    for pkg in "${packages[@]}"; do
+      if [[ "$force" == "true" ]]; then
+        echo "  → $pkg"
+      elif _pkg_installed "$pkg"; then
+        echo "  ✓ $pkg (already installed)"
+      else
+        echo "  → $pkg"
+      fi
+    done
+    local cmd="piw install-packages${force:+ --force}"
+    echo ""
+    echo "Run '$cmd' to execute."
+    return
+  fi
+
+  # Ensure image exists
+  ensure_image "$profile"
+
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local exit_code=0
+  local installed=0 skipped=0 failed=0
+
+  echo "Installing packages for pi-harness:$profile…"
+  for pkg in "${packages[@]}"; do
+    # Skip if already installed, unless --force is given
+    if [[ "$force" != "true" ]] && _pkg_installed "$pkg"; then
+      echo "  ✓ $pkg (already installed)"
+      skipped+=1
+      continue
+    fi
+
+    printf "  Installing %s… " "$pkg"
+    if docker run --rm \
+      --user "$(id -u):$(id -g)" \
+      -e HOME=/home/pi \
+      -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+      -v "$config_dir:/home/pi/.pi/agent:z" \
+      -e npm_config_cache=/tmp/.npm-cache \
+      -e npm_config_ignore_scripts=true \
+      "$image_tag" \
+      pi install "$pkg"; then
+      echo "done"
+      installed+=1
+    else
+      echo "failed" >&2
+      failed+=1
+      exit_code=1
+    fi
+  done
+
+  echo ""
+  echo "  Summary: $installed installed, $skipped skipped, $failed failed"
+  if [[ "$exit_code" -ne 0 ]]; then
+    echo "WARNING: One or more packages failed to install." >&2
+  fi
+  return "$exit_code"
+}
+
 # ── Command: launch pi in Docker ──────────────────────────────────────────────
 cmd_launch() {
   local profile="$1"
@@ -192,8 +321,8 @@ cmd_launch() {
     pi "${pi_args[@]}"
 }
 
-# ── Command: build a variant image ────────────────────────────────────────────
-cmd_build() {
+# ── Internal: build a single variant image (no package install) ───────────────
+_build_single() {
   local profile="$1"
   local no_cache="$2"
   local variant_dir="$SCRIPT_DIR/variants/$profile"
@@ -211,70 +340,38 @@ cmd_build() {
   echo "INFO: Build complete: $image_tag"
 }
 
+# ── Command: build a variant image + install packages ────────────────────────
+cmd_build() {
+  local profile="${1:-$DEFAULT_PROFILE}"
+  local no_cache="${2:-false}"
+  local do_all="${3:-false}"
+
+  if [[ "$do_all" == "true" ]]; then
+    for p in $(variant_names); do
+      echo "--- $p ---"
+      _build_single "$p" "$no_cache"
+      install_packages_for "$p"
+    done
+  else
+    _build_single "$profile" "$no_cache"
+    install_packages_for "$profile"
+  fi
+}
+
 # ── Command: install packages from extensions.txt ────────────────────────────
 cmd_install_packages() {
-  local profile="$1"
-  local packages_file="$SCRIPT_DIR/extensions.txt"
-  local config_dir
-  config_dir="$(resolve_config_dir)"
+  local profile="${1:-$DEFAULT_PROFILE}"
+  local do_all="${2:-false}"
+  local force="${3:-false}"
+  local dry_run="${4:-false}"
 
-  if [[ ! -f "$packages_file" ]]; then
-    echo "INFO: No extensions.txt found. Nothing to install."
-    return
-  fi
-
-  # Ensure image exists
-  local image_tag="${IMAGE_PREFIX}:${profile}"
-  if ! docker image inspect "$image_tag" &>/dev/null; then
-    echo "INFO: Image '$image_tag' not found. Building…"
-    docker build -t "$image_tag" "$SCRIPT_DIR/variants/$profile"
-  fi
-
-  # Read packages, skip blank lines and comments
-  local packages=()
-  while IFS= read -r line; do
-    line="${line/#"${line%%[![:space:]]*}"/}"   # trim leading whitespace
-    line="${line/%"${line##*[![:space:]]}"/}"   # trim trailing whitespace
-    [[ -z "$line" ]] && continue
-    [[ "$line" == \#* ]] && continue
-    packages+=("$line")
-  done < "$packages_file"
-
-  if [[ ${#packages[@]} -eq 0 ]]; then
-    echo "INFO: No packages listed in extensions.txt."
-    return
-  fi
-
-  local settings_file="$config_dir/settings.json"
-  local exit_code=0
-
-  echo "Installing packages for pi-harness:$profile…"
-  for pkg in "${packages[@]}"; do
-    # Skip if already installed (mentioned in settings.json)
-    if [[ -f "$settings_file" ]] && grep -qF "$pkg" "$settings_file" 2>/dev/null; then
-      echo "  ✓ $pkg (already installed)"
-      continue
-    fi
-
-    printf "  Installing %s… " "$pkg"
-    if docker run --rm \
-      --user "$(id -u):$(id -g)" \
-      -e HOME=/home/pi \
-      -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-      -v "$config_dir:/home/pi/.pi/agent:z" \
-      -e npm_config_cache=/tmp/.npm-cache \
-      -e npm_config_ignore_scripts=true \
-      "$image_tag" \
-      pi install "$pkg" &>/dev/null; then
-      echo "done"
-    else
-      echo "failed" >&2
-      exit_code=1
-    fi
-  done
-
-  if [[ "$exit_code" -ne 0 ]]; then
-    echo "WARNING: One or more packages failed to install." >&2
+  if [[ "$do_all" == "true" ]]; then
+    for p in $(variant_names); do
+      echo "--- $p ---"
+      install_packages_for "$p" "$force" "$dry_run"
+    done
+  else
+    install_packages_for "$profile" "$force" "$dry_run"
   fi
 }
 
@@ -513,30 +610,52 @@ cmd_update() {
   local profile="${1:-$DEFAULT_PROFILE}"
   local no_cache="${2:-false}"
   local do_all="${3:-false}"
+  local build_only="${4:-false}"
+  local install_only="${5:-false}"
 
-  # Pull harness updates
+  # Auto-stash local changes before pull
+  local stashed=false
   if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
+    if ! git -C "$SCRIPT_DIR" diff --quiet 2>/dev/null; then
+      echo "INFO: Stashing local changes…"
+      git -C "$SCRIPT_DIR" stash push -m "piw update auto-stash" 2>/dev/null || true
+      stashed=true
+    fi
+
     echo "INFO: Pulling harness updates from git…"
-    if ! git -C "$SCRIPT_DIR" pull --rebase 2>&1; then
+    if ! git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
       echo "ERROR: Git pull failed. Resolve conflicts and try again." >&2
+      if [[ "$stashed" == "true" ]]; then
+        git -C "$SCRIPT_DIR" stash pop 2>/dev/null || true
+      fi
       return 1
     fi
   else
     echo "INFO: No git remote configured. Skipping pull."
   fi
 
+  # Determine target variant(s)
+  local -a targets=()
   if [[ "$do_all" == "true" ]]; then
-    for variant_dir in "$SCRIPT_DIR"/variants/*/; do
-      local p
-      p="$(basename "$variant_dir")"
-      [[ "$p" == "template" ]] && continue
-      echo "--- $p ---"
-      cmd_build "$p" "$no_cache"
-      cmd_install_packages "$p"
-    done
+    mapfile -t targets < <(variant_names)
   else
-    cmd_build "$profile" "$no_cache"
-    cmd_install_packages "$profile"
+    targets=("$profile")
+  fi
+
+  for p in "${targets[@]}"; do
+    echo "--- $p ---"
+    if [[ "$install_only" != "true" ]]; then
+      _build_single "$p" "$no_cache"
+    fi
+    if [[ "$build_only" != "true" ]]; then
+      install_packages_for "$p"
+    fi
+  done
+
+  # Restore stashed changes
+  if [[ "$stashed" == "true" ]]; then
+    echo "INFO: Restoring stashed changes…"
+    git -C "$SCRIPT_DIR" stash pop 2>/dev/null || echo "WARNING: Could not auto-pop stash. Check 'git stash list'."
   fi
 
   echo ""
@@ -550,7 +669,11 @@ PROFILE="$DEFAULT_PROFILE"
 COMMAND=""
 NO_CACHE="false"
 RESUME="false"
-UPDATE_ALL="false"
+DO_ALL="false"
+FORCE="false"
+DRY_RUN="false"
+BUILD_ONLY="false"
+INSTALL_ONLY="false"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -572,7 +695,23 @@ while [[ $# -gt 0 ]]; do
     shift
     ;;
   --all)
-    UPDATE_ALL="true"
+    DO_ALL="true"
+    shift
+    ;;
+  --force)
+    FORCE="true"
+    shift
+    ;;
+  --dry-run)
+    DRY_RUN="true"
+    shift
+    ;;
+  --build-only)
+    BUILD_ONLY="true"
+    shift
+    ;;
+  --install-only)
+    INSTALL_ONLY="true"
     shift
     ;;
   --install)
@@ -602,15 +741,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Validate flag combinations
+if [[ "$BUILD_ONLY" == "true" && "$INSTALL_ONLY" == "true" ]]; then
+  echo "ERROR: --build-only and --install-only are mutually exclusive" >&2
+  exit 1
+fi
+
 case "$COMMAND" in
 build)
-  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE"
+  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL"
   ;;
 update)
-  cmd_update "${POSITIONAL[0]:-}" "$NO_CACHE" "$UPDATE_ALL"
+  cmd_update "${POSITIONAL[0]:-}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY"
   ;;
 install-packages)
-  cmd_install_packages "${POSITIONAL[0]:-$PROFILE}"
+  cmd_install_packages "${POSITIONAL[0]:-$PROFILE}" "$DO_ALL" "$FORCE" "$DRY_RUN"
   ;;
 install)
   cmd_install "${POSITIONAL[0]:-}"
