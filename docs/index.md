@@ -17,7 +17,7 @@ the tooling you need and no more.
 | See evaluated tools and future options | [research/tools-evaluation.md](research/tools-evaluation.md) |
 | Read the piw CLI reference | [piw.md](piw.md) |
 | Add third-party packages | [extensions.txt.md](extensions.txt.md) |
-| Understand permission rules | [permissions.md](permissions.md) |
+| Understand permission rules and modes | [permissions.md](permissions.md) |
 | Learn about rtk token optimization | [rtk.md](rtk.md) |
 | Understand the state directory layout | [state-directory.md](state-directory.md) |
 
@@ -60,9 +60,15 @@ pi-harness/
   trigger falsely on skill/config paths)
 - Align template variant Dockerfile with core/devops (usermod -l pi node pattern)
 - Fix yq arch detection in devops variant (hardcoded amd64)
-- Add `--build-only`/`--install-only` split to `piw update`
-- Add `--force` flag to `piw install-packages`
-- Add `--dry-run` flag to `piw install-packages`
-- Create docs: piw CLI reference, extensions.txt format, permissions, rtk, state-directory
+- Add `--force` flag to `piw install-packages` (partial: `--dry-run` exists)
+- Add `--mode readonly` network restriction (currently disabled, needs reopen on demand)
 - MCP integration (deferred)
+
+## Known Issues
+
+- **pi-web-access: browser curator crash** — `web_search` tries to open a
+  browser for the curator UI, which fails in the container (no browser
+  installed). The error handler then crashes with `ReferenceError:
+  sendCuratorFallbackUpdate is not defined`. See
+  [research/known-issues.md](research/known-issues.md).
 ```

@@ -44,7 +44,105 @@ The permission config lives at `extensions/pi-permission-system/config.json`:
 }
 ```
 
-### Permission Levels
+## Modes
+
+piw supports three built-in permission modes, selectable via
+`--mode` flag or `PIW_MODE` environment variable:
+
+| Mode | Default policy | Use case |
+|------|---------------|----------|
+| `permissive` | `"*": "allow"` | General development (default) |
+| `restricted` | `"*": "ask"` | Devops / sensitive environments |
+| `readonly` | `"*": "deny"` | Investigation / audit only |
+
+Usage:
+
+```bash
+piw ~/project                          # permissive (default)
+piw --mode restricted ~/prod-project   # restricted
+piw --mode readonly ~/investigation    # read-only
+
+# Via env var:
+export PIW_MODE=restricted
+piw ~/project
+```
+
+### How modes work
+
+Each mode corresponds to a config file alongside the default:
+
+```
+extensions/pi-permission-system/
+├── config.json              # permissive mode
+├── config.restricted.json   # restricted mode
+└── config.readonly.json     # readonly mode
+```
+
+When a non-default mode is active, piw bind-mounts the mode-specific
+config over the default in the container. The permission system reads
+it at the same path — no extension changes needed.
+
+For `readonly` mode, piw also applies Docker-level restrictions:
+- Workspace is mounted read-only (`:ro`)
+- Network access is disabled (`--network none`)
+
+### Mode + project config = layered
+
+Mode configs compose with [project-level overrides](#project-level-overrides):
+
+```
+mode config (e.g. restricted)
+  → project config (.pi/extensions/pi-permission-system/config.json)
+    = effective policy
+```
+
+This means you can use `--mode restricted` as a broad baseline and
+still tighten further per-project — or loosen specific tools in a
+given project while keeping the default restrictive.
+
+### Custom modes
+
+You can define your own mode by creating `config.<name>.json` in
+the same directory and passing `--mode <name>`. The file is
+resolved at `extensions/pi-permission-system/config.<name>.json`.
+
+## Project-Level Overrides
+
+You can override the mode (or the global default) on a per-project
+basis by creating a project-local config file:
+
+```bash
+mkdir -p .pi/extensions/pi-permission-system
+$EDITOR .pi/extensions/pi-permission-system/config.json
+```
+
+This config merges on top of the active mode config, with higher
+precedence. So you can use `--mode permissive` globally but deny
+`write` for a specific project:
+
+```json
+{
+  "permission": {
+    "write": "deny",
+    "edit": "deny"
+  }
+}
+```
+
+Or run `--mode restricted` but allow `terraform plan` without
+prompting in a particular project:
+
+```json
+{
+  "permission": {
+    "bash": {
+      "terraform plan": "allow"
+    }
+  }
+}
+```
+
+## Permission Levels
 
 | Level | Behavior |
 |-------|----------|
