@@ -17,6 +17,8 @@ the tooling you need and no more.
 | See evaluated tools and future options | [research/tools-evaluation.md](research/tools-evaluation.md) |
 | Read the piw CLI reference | [piw.md](piw.md) |
 | Add third-party packages | [extensions.txt.md](extensions.txt.md) |
+| See a design review of the harness | [architecture/design-review.md](architecture/design-review.md) |
+| Read about publishing considerations | [publishing.md](publishing.md) |
 | Understand permission rules and modes | [permissions.md](permissions.md) |
 | Learn about rtk token optimization | [rtk.md](rtk.md) |
 | Understand the state directory layout | [state-directory.md](state-directory.md) |
@@ -50,19 +52,34 @@ pi-harness/
     ├── rtk.md              #   Token optimization
     ├── state-directory.md  #   .pi/ directory layout
     ├── architecture/       #   Architecture docs
+    │   └── design-review.md #     Design retrospective
     ├── workflow/           #   Workflow docs
-    └── research/           #   Research docs
+    ├── research/           #   Research docs
+    ├── publishing.md       #   Public release considerations
+    └── session-file-management.md  #   Session log proposals
 
 ## Planned work
 
-- Populate `skills/ready/` with Tier 1 community skills
-- Test permission system in practice (verify `external_directory` doesn't
-  trigger falsely on skill/config paths)
-- Align template variant Dockerfile with core/devops (usermod -l pi node pattern)
-- Fix yq arch detection in devops variant (hardcoded amd64)
-- Add `--force` flag to `piw install-packages` (partial: `--dry-run` exists)
-- Add `--mode readonly` network restriction (currently disabled, needs reopen on demand)
-- MCP integration (deferred)
+### Done
+
+- Template variant aligned with core/devops (usermod -l pi node pattern)
+- yq arch detection in devops variant (uname -m branching instead of amd64)
+- `--force` flag for `piw install-packages` (npm cache clean on force)
+- `--mode` flag for permission profiles (permissive, restricted, readonly)
+- Permission external_directory allow for config paths
+- STE writing skill (tier 0, auto-read)
+- Handoff skill (tier 1, in skills/ready/)
+
+### Next up
+
+- Populate `skills/ready/` with more Tier 1 community skills (ongoing)
+- Upstream pi-web-access browser curator fix (after other non-deferred items)
+- Discuss `--profile` semantics cleanup
+
+### Deferred
+
+- `--mode readonly` network restriction (needs reopen on demand)
+- MCP integration
 
 ## Known Issues
 

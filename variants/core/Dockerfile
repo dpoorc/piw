@@ -13,9 +13,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bash \
         ca-certificates \
         curl \
+        file \
         git \
         jq \
         openssh-client \
+        rsync \
+        tree \
     && rm -rf /var/lib/apt/lists/*
 
 # Pi coding agent
