@@ -166,6 +166,10 @@ Flag an improvement when you notice friction that repeats:
   or config no longer matches reality.
 - **Waste** — A pattern that burns tokens, time, or context for
   no real benefit.
+- **Permission friction** — A legitimate tool or path was blocked
+  or prompted by the permission mode (restricted/readonly) more
+  than once. Propose an explicit allow rule as narrow as the
+  specific command or path.
 
 A one-off inconvenience is not a proposal. A pattern that has
 annoyed you three times is.
