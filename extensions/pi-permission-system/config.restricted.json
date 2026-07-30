@@ -1,0 +1,64 @@
+{
+  "permission": {
+    "*": "ask",
+
+    "path": {
+      "*": "allow",
+      ".env": "deny",
+      ".env.*": "deny",
+      ".env.example": "allow",
+      ".env.template": "allow",
+      "*.pem": "deny",
+      "*.key": "deny"
+    },
+
+    "read": "allow",
+    "write": "ask",
+    "edit": "ask",
+
+    "bash": {
+      "*": "ask",
+      "ls *": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "grep *": "allow",
+      "find *": "allow",
+      "jq *": "allow",
+      "which *": "allow",
+      "type *": "allow",
+      "pwd": "allow",
+      "cd *": "allow",
+      "echo *": "allow",
+      "git status": "allow",
+      "git diff": "allow",
+      "git log *": "allow",
+      "git show *": "allow",
+      "git *": "ask",
+      "rm -rf *": "deny",
+      "rm -r *": "deny",
+      "sudo *": "deny",
+      "chmod -R *": "ask",
+      "chown -R *": "ask",
+      "dd *": "deny",
+      "mkfs*": "deny",
+      "shutdown*": "deny",
+      "poweroff*": "deny",
+      "reboot*": "deny",
+      "kill *": "ask",
+      "pkill *": "ask",
+      "terraform apply": "deny",
+      "terraform destroy": "deny",
+      "terraform *": "ask",
+      "ansible-playbook *": "ask",
+      "kubectl delete *": "ask",
+      "kubectl drain *": "ask",
+      "helm delete *": "ask"
+    },
+
+    "external_directory": {
+      "*": "ask",
+      "/home/pi/.pi/agent/*": "allow"
+    }
+  }
+}

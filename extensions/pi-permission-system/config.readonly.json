@@ -1,0 +1,54 @@
+{
+  "permission": {
+    "*": "deny",
+
+    "path": {
+      "*": "allow",
+      ".env": "deny",
+      ".env.*": "deny",
+      ".env.example": "allow",
+      ".env.template": "allow",
+      "*.pem": "deny",
+      "*.key": "deny"
+    },
+
+    "read": "allow",
+    "write": "deny",
+    "edit": "deny",
+
+    "bash": {
+      "*": "ask",
+      "ls *": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "grep *": "allow",
+      "find *": "allow",
+      "jq *": "allow",
+      "which *": "allow",
+      "type *": "allow",
+      "git status": "allow",
+      "git diff": "allow",
+      "git log": "allow",
+      "git *": "ask",
+      "mkdir *": "ask",
+      "rm -rf *": "deny",
+      "rm -r *": "deny",
+      "rm *": "deny",
+      "sudo *": "deny",
+      "chmod *": "deny",
+      "chown *": "deny",
+      "dd *": "deny",
+      "mkfs*": "deny",
+      "shutdown*": "deny",
+      "poweroff*": "deny",
+      "reboot*": "deny",
+      "kill *": "deny",
+      "pkill *": "deny"
+    },
+
+    "external_directory": {
+      "*": "deny"
+    }
+  }
+}
