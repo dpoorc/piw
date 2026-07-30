@@ -20,12 +20,15 @@
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
 #   piw --profile <name>        Launch with a specific variant
+#   piw --mode <name>           Launch with a permission mode (default: permissive)
+#                              Available: permissive, restricted, readonly
 #   piw --help                  Show this help
 #
 # Examples:
 #   piw
 #   piw -r
 #   piw --profile devops
+#   piw --mode restricted       Launch with restricted permissions
 #   piw ~/my-project
 #   piw build
 #   piw build --no-cache
@@ -43,6 +46,7 @@
 #   See .env.example for the full list of supported variables.
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
+#   PIW_MODE        Permission mode (permissive, restricted, readonly)
 #
 set -euo pipefail
 
@@ -53,7 +57,7 @@ DEFAULT_PROFILE="core"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
-  sed -n '2,38p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  sed -n '2,40p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
   exit 0
 }
 
@@ -74,6 +78,36 @@ validate_profile() {
     echo "ERROR: Variant '$profile' has no Dockerfile at $dir/Dockerfile" >&2
     exit 1
   fi
+}
+
+# ── Utility: validate mode exists ────────────────────────────────────────────
+validate_mode() {
+  local mode="$1"
+  if [[ "$mode" == "permissive" ]]; then
+    return 0
+  fi
+  local mode_config="$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
+  if [[ ! -f "$mode_config" ]]; then
+    echo "ERROR: Unknown mode '$mode'." >&2
+    echo "  Available modes:" >&2
+    for f in "$SCRIPT_DIR"/extensions/pi-permission-system/config.*.json; do
+      local name
+      name="$(basename "$f" .json)"
+      name="${name#config.}"
+      echo "    - $name" >&2
+    done
+    exit 1
+  fi
+}
+
+# ── Utility: resolve mode config path (empty for permissive) ─────────────────
+resolve_mode_config() {
+  local mode="$1"
+  if [[ "$mode" == "permissive" ]]; then
+    echo ""
+    return
+  fi
+  echo "$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
 }
 
 # ── Utility: resolve pi config directory ─────────────────────────────────────
@@ -204,6 +238,18 @@ install_packages_for() {
   local installed=0 skipped=0 failed=0
 
   echo "Installing packages for pi-harness:$profile…"
+
+  # Nuke npm cache on --force to ensure fresh downloads
+  if [[ "$force" == "true" ]]; then
+    echo "  Clearing npm cache…"
+    docker run --rm \
+      --user "$(id -u):$(id -g)" \
+      -e HOME=/home/pi \
+      -e npm_config_cache=/tmp/.npm-cache \
+      "$image_tag" \
+      npm cache clean --force || true
+  fi
+
   for pkg in "${packages[@]}"; do
     # Skip if already installed, unless --force is given
     if [[ "$force" != "true" ]] && _pkg_installed "$pkg"; then
@@ -244,6 +290,7 @@ cmd_launch() {
   local profile="$1"
   local workspace="$2"
   local resume="${3:-false}"
+  local mode="${4:-permissive}"
   local variant_dir="$SCRIPT_DIR/variants/$profile"
   local image_tag="${IMAGE_PREFIX}:${profile}"
 
@@ -302,7 +349,20 @@ cmd_launch() {
   local session_flag=""
   [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
 
-  echo "INFO: Launching pi-harness ($profile) in $workspace$session_flag"
+  # Validate and resolve mode config
+  validate_mode "$mode"
+  local mode_config
+  mode_config="$(resolve_mode_config "$mode")"
+
+  # Mode-specific Docker restrictions
+  local mode_vol_suffix=""
+  local -a mode_docker_flags=()
+  if [[ "$mode" == "readonly" ]]; then
+    mode_vol_suffix=":ro"
+    mode_docker_flags+=(--network none)
+  fi
+
+  echo "INFO: Launching pi-harness ($profile) in $workspace (mode: $mode)$session_flag"
   exec docker run --rm -it \
     --add-host host.docker.internal:host-gateway \
     --user "$(id -u):$(id -g)" \
@@ -311,11 +371,13 @@ cmd_launch() {
     -e npm_config_cache=/tmp/.npm-cache \
     -e npm_config_ignore_scripts=true \
     "${env_flags[@]}" \
+    "${mode_docker_flags[@]}" \
     -v "$config_dir:/home/pi/.pi/agent:z" \
     -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
     -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
     -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
-    -v "$workspace:$workspace:z" \
+    ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
+    -v "$workspace:$workspace:z${mode_vol_suffix}" \
     -w "$workspace" \
     "$image_tag" \
     pi "${pi_args[@]}"
@@ -674,6 +736,7 @@ FORCE="false"
 DRY_RUN="false"
 BUILD_ONLY="false"
 INSTALL_ONLY="false"
+MODE="${PIW_MODE:-permissive}"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -713,6 +776,14 @@ while [[ $# -gt 0 ]]; do
   --install-only)
     INSTALL_ONLY="true"
     shift
+    ;;
+  --mode)
+    if [[ -z "${2:-}" ]]; then
+      echo "ERROR: --mode requires an argument" >&2
+      exit 1
+    fi
+    MODE="$2"
+    shift 2
     ;;
   --install)
     COMMAND="install"
@@ -767,6 +838,6 @@ doctor)
   cmd_doctor "${POSITIONAL[0]:-$PROFILE}"
   ;;
 *)
-  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME"
+  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"
   ;;
 esac
