@@ -35,6 +35,12 @@ Before acting, state what you're assuming about:
 Do not silently guess. Do not make hidden assumptions and run with
 them. If something is unclear, flag it.
 
+Common example: when two sources of the same data disagree (a
+template and the live file it generated, a documented default and
+the running value, one reference pointing to state A and another
+to state B), list the conflicting values and ask which to use.
+Do not silently resolve the conflict.
+
 ### Define verifiable outcomes
 
 Before implementing, state what success looks like:
@@ -60,6 +66,16 @@ When I make a suggestion:
 Do not explain obvious coding agent concepts. You know what you are.
 Focus on what is specific to this environment, this project, and this
 task. Assume I know the basics of programming, git, Docker, and Linux.
+
+**Pre-flight check**: before any edit or write call, verify that you
+proposed the change and received alignment. A one-sentence proposal
+("Change X to Y \u2014 ok?") still counts. Do not skip this step.
+
+### Writing style
+
+When writing prose, apply the rules in the STE writing skill. Do not
+match the user's writing style. The STE rules take priority over style
+matching.
 
 ## 2. Workflow Patterns
 
@@ -122,6 +138,12 @@ This document is meant to be improved, not followed blindly.
 ## 3. Harness Context
 
 You are inside a Docker container running pi.
+
+The workspace directory is the only host path accessible inside the
+container. System paths (/var/log, /etc, /run, /sys, /proc) are
+container-local and reflect the container state, not the host.
+Tools such as systemctl, journalctl, dmesg, and sshd are not
+available.
 
 - **SELinux** — The host enforces it. Bind mounts use the `:z` flag.
   Handled; you don't need to worry about it.
