@@ -18,7 +18,7 @@
       ]
     },
     "fireworks": {
-      "baseUrl": "https://api.fireworks.ai/inference/v1",
+      "baseUrl": "https://api.fireworks.ai/inference/",
       "api": "openai-completions",
       "apiKey": "$FIREWORKS_API_KEY",
       "models": [

@@ -47,13 +47,14 @@
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
+#   PIW_DEFAULT_PROFILE  Default variant profile (overrides "core")
 #
 set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 IMAGE_PREFIX="pi-harness"
-DEFAULT_PROFILE="core"
+DEFAULT_PROFILE="${PIW_DEFAULT_PROFILE:-core}"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
