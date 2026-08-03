@@ -345,6 +345,18 @@ cmd_launch() {
     fi
   done
 
+  # Git identity — pass host git config into the container
+  local git_name git_email
+  git_name="$(git config user.name 2>/dev/null || true)"
+  git_email="$(git config user.email 2>/dev/null || true)"
+  [[ -n "$git_name" ]] && env_flags+=(-e GIT_AUTHOR_NAME="$git_name")
+  [[ -n "$git_email" ]] && env_flags+=(-e GIT_AUTHOR_EMAIL="$git_email")
+
+  # Git config file mounts (optional, read-only)
+  local -a git_config_volumes=()
+  [[ -f "$HOME/.gitconfig" ]] && git_config_volumes+=(-v "$HOME/.gitconfig:/home/pi/.gitconfig:z,ro")
+  [[ -f "$HOME/.config/git/config" ]] && git_config_volumes+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
+
   local pi_args=()
   [[ "$resume" == "true" ]] && pi_args+=(-r)
   local session_flag=""
@@ -378,6 +390,7 @@ cmd_launch() {
     -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
     -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
     ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
+    "${git_config_volumes[@]}" \
     -v "$workspace:$workspace:z${mode_vol_suffix}" \
     -w "$workspace" \
     "$image_tag" \
