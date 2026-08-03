@@ -29,6 +29,9 @@ calls), request a handoff from the current session before compaction:
 3. Preserve the handoff response for reference after compaction
 4. After compaction or in a new session, use the handoff to
    re-establish context quickly
+5. Process permanent findings into the project documentation.
+   See the doc-writing skill ("Processing a handoff" section) for
+   the section-to-doc mapping.
 
 ## Handoff template
 
@@ -44,3 +47,26 @@ When requesting a handoff from another session, ask for:
 
 Respond with structured sections matching the request. Keep it
 concise. Use tables for comparisons and lists for options.
+
+## After receiving a handoff
+
+After compaction or session transfer, process the handoff into
+the project's permanent documentation. This keeps findings from
+being lost when the handoff is archived.
+
+The doc-writing skill defines the procedure:
+
+```
+~/Projekt/piw/skills/doc-writing/SKILL.md -> Section 10
+```
+
+Quick reference:
+
+| Handoff section | Goes to |
+|---|---|
+| Work done | `roadmap.md` -> Completed |
+| Findings (root cause) | `research/YYYY-MM-DD-topic.md` |
+| Findings (persistent problem) | `known-issues/issue-name.md` |
+| Roadmap suggestions | `roadmap.md` -> Todo |
+| Config changes | `architecture/` or `environment.md` |
+| WIP | Skip (ephemeral) |
