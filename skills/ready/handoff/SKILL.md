@@ -57,7 +57,7 @@ being lost when the handoff is archived.
 The doc-writing skill defines the procedure:
 
 ```
-~/Projekt/piw/skills/doc-writing/SKILL.md -> Section 10
+skills/ready/doc-writing/SKILL.md -> Section 10
 ```
 
 Quick reference:

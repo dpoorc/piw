@@ -11,5 +11,5 @@ every context compaction.
 
 - `workflow/SKILL.md` — interaction model, communication rules,
   environment constraints.
-- `ste-writing/SKILL.md` — prose style. Default: STE-flavored.
+- `ready/ste-writing/SKILL.md` — prose style. Default: STE-flavored.
   Strict mode for procedures, runbooks, safety text.
