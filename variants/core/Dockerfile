@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         file \
         git \
+        gnupg \
         jq \
         openssh-client \
         rsync \
@@ -36,7 +37,7 @@ RUN set -eux; \
         aarch64) rtk_arch="aarch64-unknown-linux-gnu" ;; \
         *) echo "Unsupported arch: $arch"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-${rtk_arch}.tar.gz" \
+    curl -fsSL "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-${rtk_arch}.tar.gz" \
     | tar -xz -C /usr/local/bin/
 
 # Disable npm install scripts globally (supply chain security)
