@@ -357,6 +357,11 @@ cmd_launch() {
   [[ -f "$HOME/.gitconfig" ]] && git_config_volumes+=(-v "$HOME/.gitconfig:/home/pi/.gitconfig:z,ro")
   [[ -f "$HOME/.config/git/config" ]] && git_config_volumes+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
 
+  # Variant-specific skill mount (documents the active variant's toolset)
+  local variant_skill_dir="$SCRIPT_DIR/skills/variants/$profile"
+  local -a variant_skill_volumes=()
+  [[ -d "$variant_skill_dir" ]] && variant_skill_volumes+=(-v "$variant_skill_dir:/home/pi/.pi/agent/skills/variant:z,ro")
+
   local pi_args=()
   [[ "$resume" == "true" ]] && pi_args+=(-r)
   local session_flag=""
@@ -391,6 +396,7 @@ cmd_launch() {
     -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
     ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
     "${git_config_volumes[@]}" \
+    "${variant_skill_volumes[@]}" \
     -v "$workspace:$workspace:z${mode_vol_suffix}" \
     -w "$workspace" \
     "$image_tag" \
