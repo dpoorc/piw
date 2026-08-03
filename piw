@@ -24,23 +24,6 @@
 #                              Available: permissive, restricted, readonly
 #   piw --help                  Show this help
 #
-# Examples:
-#   piw
-#   piw -r
-#   piw --profile devops
-#   piw --mode restricted       Launch with restricted permissions
-#   piw ~/my-project
-#   piw build
-#   piw build --no-cache
-#   piw build devops
-#   piw install-packages
-#   piw doctor
-#   piw doctor devops
-#   piw --install
-#   piw --install ~/bin
-#   piw --uninstall
-#   piw update
-#
 # Environment:
 #   API keys are sourced from .env (if present) or from the host environment.
 #   See .env.example for the full list of supported variables.
@@ -54,11 +37,10 @@ set -euo pipefail
 # ── Constants ─────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 IMAGE_PREFIX="pi-harness"
-DEFAULT_PROFILE="${PIW_DEFAULT_PROFILE:-core}"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
-  sed -n '2,40p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  sed -n '2,34p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
   exit 0
 }
 
@@ -131,8 +113,6 @@ load_env() {
   fi
 }
 
-
-
 # ── Utility: bootstrap pi config on the host ─────────────────────────────────
 bootstrap_config() {
   local config_dir="$1"
@@ -193,7 +173,7 @@ install_packages_for() {
     [[ -z "$line" ]] && continue
     [[ "$line" == \#* ]] && continue
     packages+=("$line")
-  done < "$packages_file"
+  done <"$packages_file"
 
   if [[ ${#packages[@]} -eq 0 ]]; then
     echo "INFO: No packages listed in extensions.txt."
@@ -424,7 +404,7 @@ _build_single() {
 
 # ── Command: build a variant image + install packages ────────────────────────
 cmd_build() {
-  local profile="${1:-$DEFAULT_PROFILE}"
+  local profile="$1"
   local no_cache="${2:-false}"
   local do_all="${3:-false}"
 
@@ -442,7 +422,7 @@ cmd_build() {
 
 # ── Command: install packages from extensions.txt ────────────────────────────
 cmd_install_packages() {
-  local profile="${1:-$DEFAULT_PROFILE}"
+  local profile="$1"
   local do_all="${2:-false}"
   local force="${3:-false}"
   local dry_run="${4:-false}"
@@ -533,7 +513,7 @@ cmd_uninstall() {
 
 # ── Command: diagnose harness setup ──────────────────────────────────────────
 cmd_doctor() {
-  local profile="${1:-$DEFAULT_PROFILE}"
+  local profile="$1"
   local errors=0
 
   echo "pi-harness doctor — diagnosing \"$profile\" profile"
@@ -639,7 +619,7 @@ cmd_doctor() {
         if grep -qF "$line" "$config_dir/settings.json" 2>/dev/null; then
           installed+=1
         fi
-      done < "$SCRIPT_DIR/extensions.txt"
+      done <"$SCRIPT_DIR/extensions.txt"
       echo "  Packages: $installed/$total installed"
       if [[ $installed -lt $total ]]; then
         echo "  ⚠ Run 'piw install-packages' to install missing packages"
@@ -689,7 +669,7 @@ cmd_doctor() {
 
 # ── Command: update harness and rebuild ───────────────────────────────────────
 cmd_update() {
-  local profile="${1:-$DEFAULT_PROFILE}"
+  local profile="$1"
   local no_cache="${2:-false}"
   local do_all="${3:-false}"
   local build_only="${4:-false}"
@@ -747,7 +727,7 @@ cmd_update() {
 # ── Main ──────────────────────────────────────────────────────────────────────
 load_env
 
-PROFILE="$DEFAULT_PROFILE"
+PROFILE="${PIW_DEFAULT_PROFILE:-core}"
 COMMAND=""
 NO_CACHE="false"
 RESUME="false"
@@ -843,7 +823,7 @@ build)
   cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL"
   ;;
 update)
-  cmd_update "${POSITIONAL[0]:-}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY"
+  cmd_update "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY"
   ;;
 install-packages)
   cmd_install_packages "${POSITIONAL[0]:-$PROFILE}" "$DO_ALL" "$FORCE" "$DRY_RUN"
