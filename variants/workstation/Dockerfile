@@ -30,19 +30,36 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         shellcheck \
         tcpdump \
         tshark \
-        rizin \
         yamllint \
         bluez \
+        libpcap-dev \
+        pkg-config \
+        libusb-1.0-0-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# ── Layer 2: Powershell (MS repo, apt-based) ─────────────────────────────────
-RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
-        | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
-    && curl -sSL "https://packages.microsoft.com/config/debian/12/prod.list" \
-        | tee /etc/apt/sources.list.d/microsoft.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends powershell \
-    && rm -rf /var/lib/apt/lists/*
+# ── Layer 2: rizin static binary (not in Debian repos) ───────────────────────
+# The rizin project does not provide a Debian package via apt.
+# Static binaries are published for each GitHub release.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        x86_64) rizin_arch="x86_64" ;; \
+        *) echo "Unsupported arch: $arch"; exit 1 ;; \
+    esac; \
+    curl -fsSL \
+        "https://github.com/rizinorg/rizin/releases/latest/download/rizin-v0.9.1-static-${rizin_arch}.tar.xz" \
+        | tar -xJ -C /usr/local
+
+# ── Layer 2: Powershell (MS repo, apt-based) — COMMENTED OUT ────────────────
+# Microsoft's package repo was unreachable at build time (connection reset).
+# Uncomment when the network issue is resolved.
+#RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc \
+#        | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg \
+#    && curl -sSL "https://packages.microsoft.com/config/debian/12/prod.list" \
+#        | tee /etc/apt/sources.list.d/microsoft.list \
+#    && apt-get update \
+#    && apt-get install -y --no-install-recommends powershell \
+#    && rm -rf /var/lib/apt/lists/*
 
 # ── Layer 3: Go toolchain ────────────────────────────────────────────────────
 RUN set -eux; \
@@ -52,7 +69,7 @@ RUN set -eux; \
         aarch64) go_arch="arm64" ;; \
         *) echo "Unsupported arch: $arch"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://go.dev/dl/go1.24.0.linux-${go_arch}.tar.gz" \
+    curl -fsSL "https://go.dev/dl/go1.26.5.linux-${go_arch}.tar.gz" \
         | tar -xz -C /usr/local \
     && ln -s /usr/local/go/bin/go /usr/local/bin/go
 
@@ -88,7 +105,7 @@ RUN set -eux; \
         aarch64) tofu_arch="arm64" ;; \
         *) echo "Unsupported arch: $arch"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/opentofu/opentofu/releases/latest/download/tofu_1.9.0_linux_${tofu_arch}.tar.gz" \
+    curl -fsSL "https://github.com/opentofu/opentofu/releases/latest/download/tofu_1.12.5_linux_${tofu_arch}.tar.gz" \
         | tar -xz -C /usr/local/bin/ tofu
 
 # packer — Image builder
@@ -99,7 +116,7 @@ RUN set -eux; \
         aarch64) packer_arch="arm64" ;; \
         *) echo "Unsupported arch: $arch"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://releases.hashicorp.com/packer/1.12.0/packer_1.12.0_linux_${packer_arch}.zip" \
+    curl -fsSL "https://releases.hashicorp.com/packer/1.16.0/packer_1.16.0_linux_${packer_arch}.zip" \
         -o /tmp/packer.zip && unzip -o /tmp/packer.zip -d /usr/local/bin/ && rm -f /tmp/packer.zip
 
 # hadolint — Dockerfile linter
@@ -126,7 +143,7 @@ RUN set -eux; \
 
 # ── Layer 4: bettercap (Go-based, needs Go installed) ────────────────────────
 RUN GOPATH=/tmp/gopath /usr/local/go/bin/go install \
-        github.com/bettercap/bettercap@latest \
+        github.com/bettercap/bettercap/v2@latest \
     && mv /tmp/gopath/bin/bettercap /usr/local/bin/ \
     && rm -rf /tmp/gopath
 
@@ -136,10 +153,13 @@ RUN npm install -g \
         eslint \
         prettier
 
-# ── Layer 5: Python tooling (volatile pip) ────────────────────────────────────
-RUN pip3 install --no-cache-dir \
-        flake8 \
-        mypy \
-        pylint
+# ── Layer 6: Python tooling (uv-based) ────────────────────────────────────────
+# uv is a Rust-based Python package manager. `uv tool install` puts each tool
+# into its own isolated environment (like pipx), avoiding PEP 668 conflicts
+# with the system Python.
+RUN curl -fsSL https://astral.sh/uv/install.sh | UV_INSTALL_DIR=/usr/local/bin sh \
+    && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install --no-cache flake8 \
+    && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install --no-cache mypy \
+    && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install --no-cache pylint
 
 CMD ["pi"]
