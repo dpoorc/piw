@@ -23,6 +23,9 @@ Core (inherited):
 | curl | HTTP requests |
 | jq | JSON processing |
 | openssh-client | SSH key management, git over SSH |
+| build-essential | C/C++ toolchain (gcc, g++, make) |
+| clang | C/C++ compiler |
+| unzip | Zip archive extraction |
 
 Devops additions:
 

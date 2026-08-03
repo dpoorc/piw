@@ -1,17 +1,20 @@
 # pi-harness — core variant
 #
 # Minimal coding agent environment: pi + essential CLI tools.
+# Includes build-essential and clang for basic compilation.
 # The container user is `pi` (UID/GID remapped at runtime via --user).
 # Bind-mount ~/.pi/agent and your project workspace at runtime.
 #
 # Build:
 #   docker build -t pi-harness:core .
 #
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         bash \
+        build-essential \
         ca-certificates \
+        clang \
         curl \
         file \
         git \
@@ -19,6 +22,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openssh-client \
         rsync \
         tree \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # Pi coding agent
