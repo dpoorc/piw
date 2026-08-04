@@ -96,7 +96,8 @@ RUN set -eux; \
 # yadm — dotfiles manager (pinned). Installed to libexec and wrapped so it
 # runs against the host's home when launched via piw (YADM_HOME is passed at
 # launch). Without YADM_HOME the wrapper is a no-op (defaults to $HOME).
-RUN curl -fsSL https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm \
+RUN mkdir -p /usr/local/libexec \
+    && curl -fsSL https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm \
         -o /usr/local/libexec/yadm && chmod +x /usr/local/libexec/yadm \
     && printf '#!/bin/sh\nexec env HOME="${YADM_HOME:-$HOME}" /usr/local/libexec/yadm "$@"\n' \
         > /usr/local/bin/yadm && chmod +x /usr/local/bin/yadm
