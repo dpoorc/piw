@@ -104,6 +104,7 @@ Also seeds config directory (settings.json, models.json) if missing.
 | Variable | Description |
 |----------|-------------|
 | `PI_CONFIG_DIR` | Override pi state directory (default: `.pi/agent/`) |
+| `YADM_HOME` | Host home passed into the container at launch. The yadm wrapper uses it so dotfiles resolve to the host's repo/config. Not set on the host-side; it is internal to the container. |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |
 | `GEMINI_API_KEY` | Google Gemini API key |

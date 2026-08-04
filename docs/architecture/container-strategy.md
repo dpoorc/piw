@@ -51,6 +51,29 @@ Pi's `PI_CODING_AGENT_DIR` environment variable is set to
 settings, auth tokens, installed packages) are kept in the harness
 directory, out of version control.
 
+## yadm bridge
+
+The workstation variant ships [yadm](https://yadm.io/), a dotfiles
+manager that treats `$HOME` as its work tree. The container user's
+home is `/home/pi`, but the real dotfiles live under the host home
+(e.g. `/home/<user>`), which is bind-mounted as the workspace.
+
+To make yadm operate on the host's dotfiles, `piw` passes
+`YADM_HOME` at launch (the host's `$HOME`). The installed yadm is a
+small wrapper:
+
+```sh
+#!/bin/sh
+exec env HOME="${YADM_HOME:-$HOME}" /usr/local/libexec/yadm "$@"
+```
+
+It re-exports `HOME` to the host home before running the real yadm
+(at `/usr/local/libexec/yadm`), so config
+(`$HOME/.config/yadm/`), data (`$HOME/.local/share/yadm/`), and
+work tree all resolve to the host. Without `YADM_HOME` (interactive
+shell, other contexts) the wrapper is a no-op and yadm behaves
+normally against the container home.
+
 ## Network
 
 `--add-host host.docker.internal:host-gateway` enables the container
