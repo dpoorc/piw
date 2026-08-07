@@ -36,9 +36,9 @@ pi-harness/
 │   ├── devops/             #   Python + Ansible + infra tools
 │   └── template/           #   Scaffold for new variants
 ├── skills/                 # Agent skills (bind-mounted)
-│   ├── workflow/           #   Harness workflow (always loaded)
-│   ├── ready/              #   Tier 1 skills, auto-discovered
-│   └── index/              #   Tier 2 skills, loaded on demand
+│   ├── system/             #   Built-in harness skills
+│   ├── vendor/             #   External collections (git submodules)
+│   └── catalog.md          #   Unified skill index
 ├── extensions/             # Custom TypeScript extensions (bind-mounted)
 ├── extensions.txt          # Third-party package manifest
 ├── models.json             # Provider/model configuration
@@ -67,12 +67,12 @@ pi-harness/
 - `--force` flag for `piw install-packages` (npm cache clean on force)
 - `--mode` flag for permission profiles (permissive, restricted, readonly)
 - Permission external_directory allow for config paths
-- STE writing skill (tier 0, auto-read)
-- Handoff skill (tier 1, in skills/ready/)
+- STE writing skill (auto-read via APPEND_SYSTEM.md)
+- Handoff skill
 
 ### Next up
 
-- Populate `skills/ready/` with more Tier 1 community skills (ongoing)
+- Expand vendor skills with additional collections (ongoing)
 - Upstream pi-web-access browser curator fix (after other non-deferred items)
 - Discuss `--profile` semantics cleanup
 

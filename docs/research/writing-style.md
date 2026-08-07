@@ -14,9 +14,9 @@ Adapted from [woosal1337/blog](https://github.com/woosal1337/blog/tree/main/vide
 
 ## Skill
 
-**Location:** `~/.pi/agent/skills/ready/ste-writing/SKILL.md` (auto-loaded via APPEND_SYSTEM.md)
+**Location:** `~/.pi/agent/skills/system/ste-writing/SKILL.md` (auto-loaded via APPEND_SYSTEM.md)
 
-**Auto-read:** The project-level `.pi/APPEND_SYSTEM.md` instructs the agent to
+**Auto-read:** The file `~/.pi/agent/APPEND_SYSTEM.md` instructs the agent to
 read this skill before every tool call and after every context compaction.
 
 ## Modes

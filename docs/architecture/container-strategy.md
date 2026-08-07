@@ -2,9 +2,9 @@
 
 ## Base image
 
-All variants use `node:22-bookworm-slim` as their base. This gives us:
+All variants use `node:24-bookworm-slim` as their base. This gives us:
 
-- Node.js v22 (required by pi)
+- Node.js v24 (required by pi)
 - Debian 12 Bookworm (stable, widely used)
 - `slim` variant (smaller attack surface, faster pulls)
 
@@ -38,6 +38,7 @@ and pi is told about it via `PI_CODING_AGENT_DIR`.
 | `.pi/agent/` | `/home/pi/.pi/agent` | Config, sessions, credentials | `rw` |
 | `skills/` | `/home/pi/.pi/agent/skills` | Agent skills | `rw` |
 | `skills/system/workflow/APPEND_SYSTEM.md` | `/home/pi/.pi/agent/APPEND_SYSTEM.md` | System prompt appendage | `ro` |
+| `variants/<profile>/SKILL.md` | `/home/pi/.pi/agent/skills/variant/SKILL.md` | Variant toolset doc | `ro` |
 | Workspace | Same path | Project files | `rw` |
 
 All mounts use the `:z` flag for SELinux relabeling (required on Fedora

@@ -40,5 +40,5 @@ This saves time. Rework costs more than a clarifying question.
 
 Variants, skills, and docs are all designed to be composed. Need
 a variant that has Python AND Kubernetes tools? Create one. Found
-a great community skill? Drop it in `skills/ready/`. The structure
+a great community skill? Drop it in `skills/vendor/` or `skills/system/`. The structure
 supports growth without requiring it.
