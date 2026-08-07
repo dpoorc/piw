@@ -48,6 +48,24 @@ When requesting a handoff from another session, ask for:
 Respond with structured sections matching the request. Keep it
 concise. Use tables for comparisons and lists for options.
 
+## Handoff documents and version control
+
+Handoff documents are working notes, not permanent records.
+They transfer context between sessions. After processing, the
+findings belong in the project's permanent documentation.
+
+Rules:
+
+- **Do not commit handoff documents** unless explicitly told.
+  An exception is cross-workstation transfer (moving work
+  between machines), where a committed handoff acts as a
+  transport mechanism. Delete it after processing.
+- **Store handoff documents at the project root** with the
+  name `piw-handoff-YYYY-MM-DD.md`.
+- **After processing**, delete the file or move it outside
+  the repository. The project's `.gitignore` excludes the
+  `piw-handoff-*.md` pattern.
+
 ## After receiving a handoff
 
 After compaction or session transfer, process the handoff into
@@ -57,7 +75,7 @@ being lost when the handoff is archived.
 The doc-writing skill defines the procedure:
 
 ```
-skills/ready/doc-writing/SKILL.md -> Section 10
+skills/system/doc-writing/SKILL.md -> Section 10
 ```
 
 Quick reference:
