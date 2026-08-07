@@ -17,6 +17,7 @@
 #   piw update --build-only     Pull + rebuild (skip package install)
 #   piw update --install-only   Pull + install packages (skip build)
 #   piw doctor [profile]        Diagnose harness setup
+#   piw generate-catalog        Regenerate skills catalog from SKILL.md files
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
 #   piw --profile <name>        Launch with a specific variant
@@ -419,6 +420,7 @@ cmd_build() {
     _build_single "$profile" "$no_cache"
     install_packages_for "$profile"
   fi
+  cmd_generate_catalog  # refresh catalog, skills may have changed
 }
 
 # ── Command: install packages from extensions.txt ────────────────────────────
@@ -616,9 +618,9 @@ cmd_doctor() {
         line="${line/%"${line##*[![:space:]]}"/}"
         [[ -z "$line" ]] && continue
         [[ "$line" == \#* ]] && continue
-        total+=1
+        total=$((total + 1))
         if grep -qF "$line" "$config_dir/settings.json" 2>/dev/null; then
-          installed+=1
+          installed=$((installed + 1))
         fi
       done <"$SCRIPT_DIR/extensions.txt"
       echo "  Packages: $installed/$total installed"
@@ -645,6 +647,27 @@ cmd_doctor() {
     echo "  ⚠ Cannot check rtk (image not built yet)"
   fi
 
+  # ── Skills catalog freshness ──
+  echo "── Skills catalog ──"
+  local catalog_script="$SCRIPT_DIR/skills/generate-catalog.sh"
+  local catalog_file="$SCRIPT_DIR/skills/catalog.md"
+  if [[ -f "$catalog_script" ]] && [[ -f "$catalog_file" ]]; then
+    local tmp_catalog
+    tmp_catalog="$(mktemp)"
+    bash "$catalog_script" "$tmp_catalog" &>/dev/null
+    if diff -q "$tmp_catalog" "$catalog_file" &>/dev/null; then
+      echo "  ✓ skills/catalog.md is fresh"
+    else
+      echo "  ⚠ skills/catalog.md is stale (run 'piw generate-catalog')"
+      errors+=1
+    fi
+    rm -f "$tmp_catalog"
+  elif [[ ! -f "$catalog_script" ]]; then
+    echo "  ⚠ generate-catalog.sh not found"
+  else
+    echo "  ⚠ skills/catalog.md not found"
+  fi
+
   # ── Repository ──
   echo "── Repository ──"
   if git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
@@ -666,6 +689,17 @@ cmd_doctor() {
     echo "✗ $errors issue(s) found. Review the items above."
     return 1
   fi
+}
+
+# ── Command: regenerate skills catalog ────────────────────────────────────────
+cmd_generate_catalog() {
+  local script="$SCRIPT_DIR/skills/generate-catalog.sh"
+  if [[ ! -f "$script" ]]; then
+    echo "ERROR: generate-catalog.sh not found at $script" >&2
+    exit 1
+  fi
+  echo "Regenerating skills catalog…"
+  bash "$script"
 }
 
 # ── Command: update harness and rebuild ───────────────────────────────────────
@@ -722,6 +756,7 @@ cmd_update() {
   fi
 
   echo ""
+  cmd_generate_catalog  # refresh catalog after git pull may have changed skills
   echo "✓ Update complete. Run 'piw' to launch."
 }
 
@@ -797,7 +832,7 @@ while [[ $# -gt 0 ]]; do
   --help | -h)
     show_help
     ;;
-  build | update | install-packages | install | uninstall | doctor)
+  build | update | install-packages | install | uninstall | doctor | generate-catalog)
     COMMAND="$1"
     shift
     ;;
@@ -837,6 +872,9 @@ uninstall)
   ;;
 doctor)
   cmd_doctor "${POSITIONAL[0]:-$PROFILE}"
+  ;;
+generate-catalog)
+  cmd_generate_catalog
   ;;
 *)
   cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"

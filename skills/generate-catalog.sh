@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./skills/generate-catalog.sh            # regenerate catalog.md
+#   ./skills/generate-catalog.sh <path>      # write to <path> instead
 #
 # Scans skills/system/ and skills/vendor/ for SKILL.md files,
 # extracts frontmatter metadata, and writes a unified catalog.
@@ -11,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CATALOG="$SCRIPT_DIR/catalog.md"
+CATALOG="${1:-$SCRIPT_DIR/catalog.md}"
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
