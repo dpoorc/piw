@@ -9,6 +9,15 @@ extensions/pi-permission-system/logs/*
 # ── Docker ────────────────────────────────────────────────────────────────────
 **/Dockerfile.dockerignore
 
+# ── Working notes ────────────────────────────────────────────────────────────
+piw-handoff-*.md
+
+# ── Docker bind-mount artifacts ──────────────────────────────────────────────
+skills/variant/
+
+# ── Generated artifacts ───────────────────────────────────────────────────────
+skills/catalog.md
+
 # ── OS ────────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
