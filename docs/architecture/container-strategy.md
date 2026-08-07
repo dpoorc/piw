@@ -37,7 +37,7 @@ and pi is told about it via `PI_CODING_AGENT_DIR`.
 |-----------|---------------|---------|------|
 | `.pi/agent/` | `/home/pi/.pi/agent` | Config, sessions, credentials | `rw` |
 | `skills/` | `/home/pi/.pi/agent/skills` | Agent skills | `rw` |
-| `skills/workflow/APPEND_SYSTEM.md` | `/home/pi/.pi/agent/APPEND_SYSTEM.md` | System prompt appendage | `ro` |
+| `skills/system/workflow/APPEND_SYSTEM.md` | `/home/pi/.pi/agent/APPEND_SYSTEM.md` | System prompt appendage | `ro` |
 | Workspace | Same path | Project files | `rw` |
 
 All mounts use the `:z` flag for SELinux relabeling (required on Fedora

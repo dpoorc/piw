@@ -289,7 +289,7 @@ cmd_launch() {
   bootstrap_config "$config_dir"
 
   # Ensure APPEND_SYSTEM.md exists
-  local append_src="$SCRIPT_DIR/skills/workflow/APPEND_SYSTEM.md"
+  local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
   if [[ ! -f "$append_src" ]]; then
     echo "WARNING: $append_src not found. Creating empty placeholder."
     mkdir -p "$(dirname "$append_src")"
@@ -338,9 +338,9 @@ cmd_launch() {
   [[ -f "$HOME/.config/git/config" ]] && git_config_volumes+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
 
   # Variant-specific skill mount (documents the active variant's toolset)
-  local variant_skill_dir="$SCRIPT_DIR/skills/variants/$profile"
+  local variant_skill="$SCRIPT_DIR/variants/$profile/SKILL.md"
   local -a variant_skill_volumes=()
-  [[ -d "$variant_skill_dir" ]] && variant_skill_volumes+=(-v "$variant_skill_dir:/home/pi/.pi/agent/skills/variant:z,ro")
+  [[ -f "$variant_skill" ]] && variant_skill_volumes+=(-v "$variant_skill:/home/pi/.pi/agent/skills/variant/SKILL.md:z,ro")
 
   local pi_args=()
   [[ "$resume" == "true" ]] && pi_args+=(-r)
@@ -595,14 +595,14 @@ cmd_doctor() {
 
   # ── Skills & Extensions ──
   echo "── Skills & Extensions ──"
-  if [[ -d "$SCRIPT_DIR/skills/workflow" ]]; then
-    echo "  ✓ Workflow skill: skills/workflow"
-    [[ -f "$SCRIPT_DIR/skills/workflow/SKILL.md" ]] && echo "  ✓   SKILL.md" || echo "  ⚠   Missing SKILL.md"
-    [[ -f "$SCRIPT_DIR/skills/workflow/APPEND_SYSTEM.md" ]] && echo "  ✓   APPEND_SYSTEM.md" || echo "  ⚠   Missing APPEND_SYSTEM.md"
+  if [[ -d "$SCRIPT_DIR/skills/system/workflow" ]]; then
+    echo "  ✓ Workflow skill: skills/system/workflow"
+    [[ -f "$SCRIPT_DIR/skills/system/workflow/SKILL.md" ]] && echo "  ✓   SKILL.md" || echo "  ⚠   Missing SKILL.md"
+    [[ -f "$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md" ]] && echo "  ✓   APPEND_SYSTEM.md" || echo "  ⚠   Missing APPEND_SYSTEM.md"
   else
-    echo "  ⚠ Workflow skill directory not found: skills/workflow"
+    echo "  ⚠ Workflow skill directory not found: skills/system/workflow"
   fi
-  [[ -d "$SCRIPT_DIR/skills/ready" ]] && echo "  ✓ skills/ready directory" || echo "  ⚠ skills/ready not found (optional)"
+  [[ -d "$SCRIPT_DIR/skills/system" ]] && echo "  ✓ skills/system directory" || echo "  ⚠ skills/system not found (optional)"
   [[ -d "$SCRIPT_DIR/extensions" ]] && echo "  ✓ Extensions directory" || echo "  ⚠ Extensions directory not found"
 
   # ── Packages ──

@@ -9,7 +9,7 @@ reflect container state, not the host.
 Read both skills below in full before the first tool call and after
 every context compaction.
 
-- `workflow/SKILL.md` — interaction model, communication rules,
+- `system/workflow/SKILL.md` — interaction model, communication rules,
   environment constraints.
-- `ready/ste-writing/SKILL.md` — prose style. Default: STE-flavored.
+- `system/ste-writing/SKILL.md` — prose style. Default: STE-flavored.
   Strict mode for procedures, runbooks, safety text.
