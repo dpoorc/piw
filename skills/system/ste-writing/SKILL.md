@@ -26,6 +26,9 @@ and safety-critical text.
 - Give each word one meaning. "fall" means to move down, not to decrease.
 - No marketing adjectives: seamless, robust, powerful, cutting-edge, effortless, world-class, next-generation, revolutionary, game-changing.
 - No AI filler vocabulary: delve, leverage, navigate (metaphorical), realm, landscape, tapestry, seamless, holistic, paradigm, journey,赋能 (just kidding), robust, ecosystem, granular, actionable, deep dive, pivot, scalable (when vague).
+- Use standard keyboard characters. Do not use em-dashes (—), en-dashes (–), non-ASCII bullets (• ‣), or arrows (→ ⇒). If the text needs a dash-like pause, use ` - ` (space hyphen space). Domain-specific characters (Greek letters for math, legal symbols) are acceptable when necessary.
+- No transitional sentence starters: But, However, Moreover, Furthermore, In addition, In other words, Specifically, Note that, Keep in mind, Of course.
+- No hedges or minimizers: essentially, basically, simply, actually, virtually.
 - American spelling.
 
 ### VERBS
@@ -38,7 +41,8 @@ and safety-critical text.
 ### SENTENCES
 - One instruction per sentence. Max 20 words (instruction), max 25 (descriptive).
 - No contractions. Use articles: a, an, the, this, these.
-- No semicolons. Write two sentences.
+- Minimize semicolons. One per paragraph maximum. A period is usually better.
+- No em-dashes. Use ` - ` (space hyphen space) if you need a dash-like pause.
 
 ### STRUCTURE
 - One topic per paragraph, max six sentences.
@@ -63,6 +67,9 @@ and safety-critical text.
 6. Same thing named two ways? Pick one name and stick with it.
 7. Any marketing or AI filler vocabulary? Replace with plain language.
 8. Any preamble or meta-commentary ("Let's look at how...", "In this section, we will...")? Delete it — just say what needs saying.
+9. Any non-keyboard character (em-dash, en-dash, fancy bullets, arrows)? Replace with ASCII equivalent.
+10. Any sentence that starts with "But", "However", "In other words", "Specifically", "Note that", "Keep in mind", or "Of course"? Delete the opener. The point stands without it.
+11. Any hedge or minimizer ("essentially", "basically", "simply", "actually", "virtually")? Delete it.
 
 The mechanical rules above are lintable and are what removes slop. Full STE also needs human judgment (the right technical noun, whether a sentence "makes good sense") — a checker cannot certify that, and slop is not about that. This skill fixes the **form** of slop. It cannot make a hollow paragraph true.
 
