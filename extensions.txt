@@ -9,3 +9,4 @@ npm:pi-web-access
 npm:@gotgenes/pi-permission-system
 git:https://github.com/r3b1s/rtk-pi
 npm:pi-intercom
+npm:pi-time-awareness
