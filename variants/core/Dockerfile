@@ -8,6 +8,11 @@
 # Build:
 #   docker build -t pi-harness:core .
 #
+# ── Build stage: git-issues (local file-based issue tracker) ─────────────────
+FROM golang:latest AS git-issues-builder
+RUN go install github.com/steviee/git-issues@latest
+
+# ── Final stage ─────────────────────────────────────────────────────────────
 FROM node:24-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -39,6 +44,9 @@ RUN set -eux; \
     esac; \
     curl -fsSL "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-${rtk_arch}.tar.gz" \
     | tar -xz -C /usr/local/bin/
+
+# git-issues — local file-based issue tracker
+COPY --from=git-issues-builder /go/bin/git-issues /usr/local/bin/git-issues
 
 # Disable npm install scripts globally (supply chain security)
 RUN npm config set ignore-scripts true
