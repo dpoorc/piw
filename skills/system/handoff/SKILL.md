@@ -1,12 +1,24 @@
 ---
 name: handoff
 description: >
-  Request and receive handoffs from other pi sessions. Use when
-  transitioning between sessions, collecting context, or delegating
-  work. A handoff transfers findings, WIP, and roadmap context.
+  Request and receive handoffs for pi-harness sessions. Use when
+  transitioning between sessions, collecting context before
+  compaction, or delegating work via pi-intercom. A handoff
+  transfers findings, WIP, and roadmap context.
+argument-hint: "What will the next session be used for?"
 ---
 
-# Handoff Skill
+# handoff Skill
+
+## What is a handoff
+
+A handoff is a structured summary of session context. It lets a new
+session continue work without restarting from scratch. The handoff
+captures what was done, what was found, and what should happen next.
+
+A handoff is not a permanent record. After the receiving session
+processes its findings into the project documentation, the handoff
+document is deleted.
 
 ## When to request a handoff
 
@@ -15,56 +27,84 @@ description: >
   context before starting fresh
 - Context is growing rapidly; request a handoff to capture findings
   then continue in a new session or after manual compaction
-- Another session asks you to share your findings
+- Another session asks you to share your findings via intercom
 - A task crosses session boundaries
+- You are about to hand work to a different pi session
+- The user asks you to write a handoff
 
-## Compaction workflow
+## When NOT to request a handoff
 
-When agent context is growing rapidly (long conversation, many tool
-calls), request a handoff from the current session before compaction:
+- The task fits in one session with room to spare
+- The conversation is short and context is still fresh
+- No new findings or decisions need to be preserved
+- The work was exploratory with no actionable outcome
 
-1. Request a handoff from the current working session
-2. The session responds with structured context (findings, WIP,
-   open questions)
-3. Preserve the handoff response for reference after compaction
-4. After compaction or in a new session, use the handoff to
-   re-establish context quickly
-5. Process permanent findings into the project documentation.
-   See the doc-writing skill ("Processing a handoff" section) for
-   the section-to-doc mapping.
+## Producing a handoff from current context
 
-## Handoff template
+This is the primary path. Use it when the session needs to capture
+its state before compaction, session end, or transfer.
 
-When requesting a handoff from another session, ask for:
+1. Review what was done in this session: files changed, commands run,
+   decisions made, findings uncovered.
+2. Write the handoff document using the format below. Save to the
+   project root as `piw-handoff-YYYY-MM-DD.md`.
+3. Check for sensitive information (API keys, credentials, personal
+   data). If the handoff will be committed to version control
+   (cross-machine transfer), redact or exclude sensitive content.
+   If it stays local (temp file, new session on same machine), flag
+   any sensitive content so the receiving agent knows.
+4. Reference existing artifacts (specs, plans, ADRs, commits, issues)
+   by path or URL instead of duplicating their content.
+5. Include a "Suggested skills" section listing skills the receiving
+   session should load. Mention session-specific skills used during
+   this session (e.g., code-review, domain-modeling, diagnosing-bugs).
+   Boilerplate harness skills (workflow, ste-writing, piw-handoff)
+   can be omitted — they are always available.
+6. Process permanent findings into the project documentation after
+   the handoff is complete. See the doc-writing skill ("Processing a
+   handoff" section) for the section-to-doc mapping.
 
-1. **Work done** — What did the session work on?
-2. **Findings** — Bugs, issues, and design decisions discovered
-3. **WIP** — Uncommitted changes or partial work
-4. **Roadmap suggestions** — What should happen next?
-5. **Other context** — Anything else relevant
+## Requesting a handoff from another session via intercom
 
-## Handoff response format
+Use this path when delegating work to another running pi session.
+The pi-intercom skill defines the protocol for cross-session
+coordination.
 
-Respond with structured sections matching the request. Keep it
+The intercom workflow is different from producing from current
+context:
+
+- Send a structured ask via `intercom({ action: "ask", ... })`
+- The other session responds with findings or results
+- No file is written to disk
+- The handoff format below applies to the message body
+
+## Handoff format
+
+Write the handoff using the sections below as a guide. Keep it
 concise. Use tables for comparisons and lists for options.
 
-## Handoff documents and version control
+1. **Work done** — What was worked on? File paths, commands run,
+   outputs produced.
+2. **Findings** — Bugs, root causes, design decisions, things
+   discovered.
+3. **WIP** — Uncommitted changes, partial work, what is left
+   unfinished.
+4. **Suggested skills** — Skills the receiving session should load.
+5. **Roadmap** — What should happen next, priorities, open
+   questions.
+6. **Other context** — Anything else relevant.
 
-Handoff documents are working notes, not permanent records.
-They transfer context between sessions. After processing, the
-findings belong in the project's permanent documentation.
+### Storage rules
 
-Rules:
-
-- **Do not commit handoff documents** unless explicitly told.
+- Store handoff documents at the project root with the
+  name `piw-handoff-YYYY-MM-DD.md`.
+- Do not commit handoff documents unless explicitly told.
   An exception is cross-workstation transfer (moving work
   between machines), where a committed handoff acts as a
   transport mechanism. Delete it after processing.
-- **Store handoff documents at the project root** with the
-  name `piw-handoff-YYYY-MM-DD.md`.
-- **After processing**, delete the file or move it outside
-  the repository. The project's `.gitignore` excludes the
-  `piw-handoff-*.md` pattern.
+- After processing, delete the file or move it outside
+  the repository. The project's `.gitignore` should exclude the
+  `piw-handoff-*.md` pattern. Escalate if this is not the case.
 
 ## After receiving a handoff
 
@@ -85,6 +125,6 @@ Quick reference:
 | Work done | `roadmap.md` -> Completed |
 | Findings (root cause) | `research/YYYY-MM-DD-topic.md` |
 | Findings (persistent problem) | `known-issues/issue-name.md` |
-| Roadmap suggestions | `roadmap.md` -> Todo |
+| Roadmap | `roadmap.md` -> Todo |
 | Config changes | `architecture/` or `environment.md` |
 | WIP | Skip (ephemeral) |
