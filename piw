@@ -236,7 +236,7 @@ install_packages_for() {
     # Skip if already installed, unless --force is given
     if [[ "$force" != "true" ]] && _pkg_installed "$pkg"; then
       echo "  ✓ $pkg (already installed)"
-      skipped+=1
+      ((skipped+=1))
       continue
     fi
 
@@ -251,10 +251,10 @@ install_packages_for() {
       "$image_tag" \
       pi install "$pkg"; then
       echo "done"
-      installed+=1
+      ((installed+=1))
     else
       echo "failed" >&2
-      failed+=1
+      ((failed+=1))
       exit_code=1
     fi
   done
@@ -530,11 +530,11 @@ cmd_doctor() {
       echo "  ✓ Docker daemon is running"
     else
       echo "  ✗ Docker daemon is not running (or permission denied)"
-      errors+=1
+      ((errors+=1))
     fi
   else
     echo "  ✗ docker not found on PATH"
-    errors+=1
+    ((errors+=1))
   fi
 
   # ── Variant ──
@@ -546,11 +546,11 @@ cmd_doctor() {
       echo "  ✓ Dockerfile exists"
     else
       echo "  ✗ No Dockerfile in $variant_dir"
-      errors+=1
+      ((errors+=1))
     fi
   else
     echo "  ✗ Variant directory not found: $variant_dir"
-    errors+=1
+    ((errors+=1))
   fi
 
   # ── Docker image ──
@@ -576,7 +576,7 @@ cmd_doctor() {
   for var in ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY FIREWORKS_API_KEY; do
     if [[ -n "${!var:-}" ]]; then
       echo "  ✓ $var is set"
-      found_keys+=1
+      ((found_keys+=1))
     fi
   done
   if [[ $found_keys -eq 0 ]]; then
@@ -659,7 +659,7 @@ cmd_doctor() {
       echo "  ✓ skills/catalog.md is fresh"
     else
       echo "  ⚠ skills/catalog.md is stale (run 'piw generate-catalog')"
-      errors+=1
+      ((errors+=1))
     fi
     rm -f "$tmp_catalog"
   elif [[ ! -f "$catalog_script" ]]; then
