@@ -6,7 +6,7 @@ priority: high
 labels:
     - wayfinder:map
 created: "2026-08-08"
-updated: "2026-08-09"
+updated: "2026-08-10"
 ---
 
 ## Destination
@@ -56,19 +56,38 @@ A production-ready `documentation` skill that defines universal principles for p
   See [research/2026-08-08-documentation-versioning.md](docs/research/2026-08-08-documentation-versioning.md).
 
 - [Research: Universal truths of documentation](.issues/0002-research-universal-truths-of-documentati.md) —
-  Resolved. Established 6 invariants (rots, multiple audiences, maintenance
-  cost, changes over time, must reach audience, conveys information), 4
-  values (findable, navigable, teaches, version-aware), and 11 derived
-  principles (keep fresh, refresh, audience-aware structure, one topic per
-  page, taxonomy, cross-linking discipline, named ownership, lifecycle
-  stages, temporal context, purpose-driven format, change governance).
+  Resolved. Established 6 invariants, then refined after a fresh-context
+  critical evaluation ("roast") to 5 invariants (conveys information, rots,
+  multiple audiences, can fail, changes over time), 4 values (findable,
+  navigable, teaches, version-aware), and ~15 derived principles (purpose-
+  driven format, omission discipline, tone/voice, visual communication,
+  maintenance (keep fresh + restore + verify), audience-aware structure,
+  discoverability infrastructure, one topic per page, taxonomy, cross-
+  linking discipline, accessibility, feedback loops, temporal context,
+  lifecycle management, change governance, accountability). Structural
+  issues fixed: merged redundant invariants (rot IS unpaid maintenance
+  cost), rephrased "must reach" to "can fail", promoted "conveys
+  information" from #6 to #1 as a boundary-setter.
   See [research/2026-08-09-documentation-skill-framework.md](docs/research/2026-08-09-documentation-skill-framework.md).
+
+- [Grilling: Structure discovery procedure](.issues/0006-grilling-structure-discovery-procedure.md) —
+  Claimed, in progress. Procedure skeleton designed through grilling:
+  3 phases (Triage → Discovery → Design), 6 free-form triage questions
+  routing to branches (small/medium/large), audience/artifact/constraint/
+  failure-mode mapping in discovery phase, structure/taxonomy/navigation/
+  lifecycle/load-bearing design in design phase. Key decisions: init
+  includes triage (discovery is a separate module, confirmed Option C),
+  stateful via docs/meta/ with pause/resume, omission ladder (high-churn →
+  ruthless, stable → document freely, uncertain → skip), brown-field flag
+  with phased approach, parallel work via issue tracker for large projects.
+  See [research/2026-08-09-structure-discovery-procedure.md](docs/research/2026-08-09-structure-discovery-procedure.md).
 
 ## Not yet specified
 
 - **Knowledge merging mechanism** — how does the "evolves" invariant work when large sums of new knowledge arrive? (Depends on structure discovery procedure.)
 - **Taxonomy/tag convention** — how are tags expressed? Frontmatter? Separate index file? (Depends on structure discovery procedure.)
 - **EOL procedure specifics** — what exactly happens at end-of-life? Archive? Redirect? Delete? (Depends on lifecycle stages definition.)
+- **Known-good default for small projects** — the procedure can route small/simple projects to a known-good default instead of running full discovery→design. Shape not yet defined.
 
 ## Graduated from fog to ticket (new)
 

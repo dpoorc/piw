@@ -4,12 +4,15 @@
 
 ### High priority
 
-- **Documentation architecture full design** — The doc-writing skill
-  (marked WIP) needs a full redesign via wayfinder. The new design
-  should encompass issue tracking (`.issues/`), known issues
-  (`docs/known-issues/`), research notes (`docs/research/`),
-  architecture docs (`docs/architecture/`), cross-system doc linking,
-  and community standards (AGENTS.md, CLAUDE.md, .agent.md).
+- **Documentation skill full design** — The doc-writing skill (marked
+  WIP) needs a full redesign. Wayfinder process in progress:
+  - ✅ Framework refined: 5 invariants, 4 values, ~15 principles
+  - ✅ Structure discovery procedure skeleton designed (ticket #6 WIP)
+  - ✅ Research: examples (15 domains), best practices (21 requirements),
+    versioning (8-level taxonomy)
+  - ⬜ Details: discovery questions, design mechanics (ticket #6)
+  - ⬜ Init module design (ticket #7, unblocked)
+  - ⬜ Brown-field migration strategy (ticket #8, blocked by #6)
 
 - **Setup command / setup skill** — Implement `piw setup` and a
   companion setup skill. The command gathers facts, builds at least
