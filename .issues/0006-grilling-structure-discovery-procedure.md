@@ -13,7 +13,7 @@ relations:
     depends-on:
         - 2
 created: "2026-08-08"
-updated: "2026-08-10"
+updated: "2026-08-11"
 ---
 
 ## Question
@@ -40,8 +40,64 @@ Procedure skeleton designed through grilling session (2026-08-09):
 
 See [research/2026-08-09-structure-discovery-procedure.md](docs/research/2026-08-09-structure-discovery-procedure.md).
 
+### Progress this session (2026-08-11)
+
+**Full stage contracts document written** (604 lines):
+
+See [research/2026-08-10-contracts-discovery-procedure.md](docs/research/2026-08-10-contracts-discovery-procedure.md)
+
+**Init (triage):** 9 questions defined covering:
+- Project description, docs status, domain (free-form),
+  audience groups + cognitive distance + notes,
+  existing artifacts/inventory, maintenance model + patterns (11 patterns),
+  budget + timeline, documentation culture (core→hostile),
+  churn/volatility (stable→churn)
+
+**Discovery:** Multi-axis audience model, scale-aware branching,
+  fog + conservative default for unknowns, constraints as structured
+  fields (regulatory, versioning, distribution, language/i18n,
+  accessibility, tooling).
+
+**Design:** Authoring/retrieval separation (organization model),
+  6 arrangement types, taxonomy type (4 types), lifecycle model
+  (state machine + alternatives), template governance tiers (0-3),
+  cross-references (3 models), verification tables connecting stages.
+
+**Research sources integrated:**
+- Industry practices (military, libraries, construction, pharma,
+  aviation) — multi-axis audience, numbering-as-locator,
+  state machine lifecycle
+- Generic organization methods (IA, faceted, topic maps,
+  records management, SKOS, S1000D, FRBR, OAIS, DITA) —
+  authoring/retrieval separation, arrangement primitives, CSP model
+
+**Two pi-intercom reviews completed** on final contracts:
+- Minion-1: Taxonomy should parent cross_cutting. 5 missing
+  verification table dependencies. Delivery medium is biggest gap.
+  Lifecycle over-engineered (15+ fields).
+- Minion-2: Effectivity/applicability scope is #1 missing.
+  Lifecycle biggest over-engineering offender. Numbering scheme
+  dual role needs cleanup.
+
 ### Remaining
 
-- Detail the discovery phase questions and output format
-- Detail the design phase mechanics (requirements → structure mapping)
-- Define the known-good default for small/simple projects
+- **Fix lifecycle over-engineering** — make state machine fields
+  conditional on `model: state_machine`. Most projects use continuous
+  or ad_hoc and don't need states/transitions/gatekeepers.
+- **Resolve taxonomy/cross_cutting boundary** — faceting belongs in
+  taxonomy. Authority control and metadata_filtering placement still
+  debated (minion-1 vs minion-2).
+- **Trim cross-references** — keep model only (first_class, inline,
+  none). Defer relationship types to implementation.
+- **Add effectivity/applicability scope** — which product versions/
+  configurations does a doc apply to? Distinguish from versioning
+  and lifecycle.
+- **Add delivery medium bridge** — Presentation layer in CSP model.
+  How structure connects to PDF, web, paper, in-product.
+- **Clean up numbering scheme dual role** — define once at
+  organization level, reference from both authoring and retrieval.
+- **Fix verification table dependencies** — 5 missing cross-stage
+  connections from minion-1 review.
+- **Authoring model options** — missing sequence and network types
+- **Retrieval views** — missing network and matrix in enum
+- **Define known-good default for small/simple projects** — still fog

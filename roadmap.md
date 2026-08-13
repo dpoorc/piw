@@ -7,10 +7,19 @@
 - **Documentation skill full design** — The doc-writing skill (marked
   WIP) needs a full redesign. Wayfinder process in progress:
   - ✅ Framework refined: 5 invariants, 4 values, ~15 principles
-  - ✅ Structure discovery procedure skeleton designed (ticket #6 WIP)
   - ✅ Research: examples (15 domains), best practices (21 requirements),
-    versioning (8-level taxonomy)
-  - ⬜ Details: discovery questions, design mechanics (ticket #6)
+    versioning (8-level taxonomy), industry practices (5 industries),
+    generic organization methods (IA, faceted, S1000D, FRBR, OAIS, DITA)
+  - ✅ Structure discovery procedure skeleton designed (ticket #6 WIP)
+  - ✅ Stage contracts document written (Init + Discovery + Design, 604 lines)
+  - ✅ Exploration items 1-6 resolved (see ticket #6)
+  - ⬜ Fix cross-stage verification table dependencies (5 missing)
+  - ⬜ Resolve taxonomy/cross_cutting boundary
+  - ⬜ Fix lifecycle over-engineering (conditional state machine)
+  - ⬜ Trim cross-references (model only, defer relationship types)
+  - ⬜ Add effectivity/applicability scope model
+  - ⬜ Add delivery medium bridge (Presentation layer)
+  - ⬜ Clean up numbering scheme dual role
   - ⬜ Init module design (ticket #7, unblocked)
   - ⬜ Brown-field migration strategy (ticket #8, blocked by #6)
 
@@ -77,6 +86,31 @@
   for the full checklist (README polish, friction points, naming).
 
 ## Completed
+
+### 2026-08-11 session
+
+- **Contracts document written and iterated** —
+  `docs/research/2026-08-10-contracts-discovery-procedure.md` grew
+  to 604 lines across 3 major revisions. 9 triage questions, multi-axis
+  audience model, scale-aware discovery depth, organization model
+  (authoring/retrieval separation), taxonomy types, lifecycle state
+  machine, template governance tiers, cross-references, verification tables.
+
+- **Two pi-intercom reviews completed** — documentation-minion-1
+  (roast + second review) and documentation-minion-2 (industry practices + 
+  organization methods research). Both reviewed final contracts.
+  Consensus: lifecycle over-engineered, faceting belongs in taxonomy,
+  delivery medium and effectivity are missing.
+
+- **Exploration items 1-6 resolved** — Multi-axis audience, I-don't-know
+  fallbacks, configuration coupling, lifecycle phases, number-as-locator
+  all integrated into contracts. Items 7-8 (delivery medium, domain-aware
+  routing) remain as fog.
+
+- **Research saved** — Industry practices (53 KB, 5 industries) and
+  generic organization methods (41 KB, 10 methods) saved to
+  `docs/research/2026-08-10-industry-documentation-practices.md` and
+  `docs/research/2026-08-11-documentation-organization-methods.md`.
 
 ### 2026-08-08 session
 

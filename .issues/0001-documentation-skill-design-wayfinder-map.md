@@ -6,7 +6,7 @@ priority: high
 labels:
     - wayfinder:map
 created: "2026-08-08"
-updated: "2026-08-10"
+updated: "2026-08-11"
 ---
 
 ## Destination
@@ -82,12 +82,24 @@ A production-ready `documentation` skill that defines universal principles for p
   with phased approach, parallel work via issue tracker for large projects.
   See [research/2026-08-09-structure-discovery-procedure.md](docs/research/2026-08-09-structure-discovery-procedure.md).
 
+- [Contracts document: Stage contracts for structure discovery procedure](.issues/0006-grilling-structure-discovery-procedure.md) —
+  In progress. A full 604-line contracts document has been written covering
+  Init (9 triage questions with output schema), Discovery (multi-axis audience
+  model, scale-aware depth, fog fallbacks), and Design (organization model
+  with authoring/retrieval separation, taxonomy types, lifecycle state machine,
+  template governance tiers, cross-references, verification tables).
+  See [research/2026-08-10-contracts-discovery-procedure.md](docs/research/2026-08-10-contracts-discovery-procedure.md).
+  Open findings from pi-intercom reviews: lifecycle over-engineered, faceting
+  belongs in taxonomy, delivery medium and effectivity scope are missing.
+
 ## Not yet specified
 
-- **Knowledge merging mechanism** — how does the "evolves" invariant work when large sums of new knowledge arrive? (Depends on structure discovery procedure.)
-- **Taxonomy/tag convention** — how are tags expressed? Frontmatter? Separate index file? (Depends on structure discovery procedure.)
-- **EOL procedure specifics** — what exactly happens at end-of-life? Archive? Redirect? Delete? (Depends on lifecycle stages definition.)
-- **Known-good default for small projects** — the procedure can route small/simple projects to a known-good default instead of running full discovery→design. Shape not yet defined.
+- **Knowledge merging mechanism** — how does the "evolves" invariant work when large sums of new knowledge arrive? (Depends on structure discovery procedure.) Still fog.
+- **Taxonomy/tag convention** — partially addressed: taxonomy.type now explicit (hierarchical, faceted, thesaurus, flat_controlled). Exact frontmatter/separate_index convention still fog.
+- **EOL procedure specifics** — what exactly happens at end-of-life? Archive? Redirect? Delete? Still fog.
+- **Known-good default for small projects** — the procedure can route small/simple projects to a known-good default instead of running full discovery→design. Shape still not defined. Fog.
+- **Delivery medium bridge** — how structure maps to PDF, web, paper, or in-product delivery. CSP Presentation layer. Fog.
+- **Domain-aware routing** — whether the procedure adapts behavior per domain (construction vs software vs medical). Fog.
 
 ## Graduated from fog to ticket (new)
 
