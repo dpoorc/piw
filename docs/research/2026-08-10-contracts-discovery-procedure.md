@@ -655,13 +655,17 @@ fog item.
 | `failure_modes[].priority` | Informs load-bearing check priorities | ✅ Direct |
 | `constraints.effectivity.needed` | Drives `organization.effectivity.model` (needed=true → inline or separate; needed=false → none) | ✅ New — direct |
 | `constraints.effectivity.axes` | Drives `organization.effectivity.axes` | ✅ New — direct |
+| `audiences[].axes[]` | Hints `taxonomy.scheme.type` (multi-axis → faceted; single-axis → hierarchical) | ⚠️ Indirect — add decision rule |
+| `constraints.regulatory` | Drives `taxonomy.assignment.governance` (regulated → enforced) | ⚠️ Missing — add |
+| `constraints.regulatory` | Drives `lifecycle.effective_dating.supported` (regulated → true) | ⚠️ Missing — add |
+| `constraints.regulatory` | Drives `lifecycle.audit_trail.supported` (regulated → full or transitions) | ⚠️ Missing — add |
 | `unknowns` | Becomes fog items for the project | ✅ Direct |
 
 ### Init → Design
 
 | Init field | Design use | Status |
 |-----------|-----------|--------|
-| `scale` | Complexity of file tree | ✅ Direct |
+| `scale` | Complexity of file tree + drives `authoring.model` (small → flat; large → file_tree) | ⚠️ Partially missing — add authoring.model rule |
 | `maintenance.pattern` | Load-bearing check | ✅ Direct |
 | `maintenance.project_size` | Load-bearing check | ✅ Direct |
 | `route` | Whether to run full design or offer known-good default | ✅ Direct |
@@ -670,6 +674,8 @@ fog item.
 | `culture.priority` | Influences load-bearing check (afterthought = trim scope) | ✅ Direct |
 | `volatility.pace` | Influences architecture choice (high churn = modular) | ✅ Direct |
 | `volatility.pace` | Influences organization arrangement types (high churn → hierarchy + search, stable → numbering_scheme) | ✅ Direct |
+| `volatility.pace` | Drives `lifecycle.model` (churn → continuous; stable → state_machine) | ⚠️ Missing — add |
+| `culture.priority` | Drives `template_governance.tier` (hostile/afterthought → Tier 0; core → budget-dependent) | ⚠️ Missing — add |
 
 ---
 
