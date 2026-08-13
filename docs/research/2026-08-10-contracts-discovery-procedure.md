@@ -311,6 +311,22 @@ notes:
 architecture: diataxis | module_based | audience_path | single_page | hybrid
 rationale: "why this architecture fits this project"
 
+# ── Delivery ──
+# How the documentation reaches its readers.
+# Medium constrains structural choices — arrangement types, depth,
+# cross-reference format. When multiple media are equally primary,
+# the most restrictive medium constrains shared design choices.
+# The enum is illustrative — the skill adapts to project-specific
+# media and constraints not listed here (use the note field).
+delivery:
+  media:  # array — no primary/additional distinction
+    - medium: web | pdf | print | in_product | regulated_submission | obsidian_vault
+      constraints:
+        max_depth: none | 1 | 2 | 3 | 4 | 5
+        hyperlinks: true | false
+        template_governed: true | false  # only relevant for regulated_submission
+  note: "free-form on medium-specific constraints, navigation strategies per medium"
+
 # ── Organization ──
 # How documents are organized and retrieved.
 # Separates authoring (maintenance) from retrieval (finding).
@@ -559,6 +575,12 @@ notes:
   codes. Different publications filter by effectivity to include only
   applicable modules. Simpler projects use inline frontmatter. The
   principle is the same at every scale: author once, apply to many.
+- **Medium constrains arrangement type choices.** Web supports all
+  arrangement types. Print restricts to sequence, numbering_scheme,
+  and shallow hierarchy (≤3 levels). Regulated submissions are
+  template-governed — the skill skips most discovery questions.
+  When multiple media are equally primary, the most restrictive medium
+  constrains the shared design.
 
 ### Fog items
 
@@ -573,8 +595,9 @@ notes:
 - Numbering scheme integration — how numbering schemes coexist with
   other arrangement types (now partially addressed by
   `organization.authoring.numbering_scheme`)
-- Delivery medium bridge — how structure maps to PDF, web, paper, or
-  in-product delivery (the CSP model's Presentation layer)
+- Delivery medium rendering details — `delivery` section captures
+  structural constraints; navigation UI, rendering, and layout are
+  design or implementation concerns, not contract schema
 - Handover packaging — how documentation structure changes when
   delivered across organizational boundaries
 
@@ -611,7 +634,7 @@ fog item.
 | `constraints.regulatory` | Forces lifecycle stages + archival rules | ✅ Direct |
 | `constraints.regulatory` | Drives template governance tier (regulated = Tier 3) | ✅ Direct |
 | `constraints.versioning` | Informs lifecycle and organization authoring model | ✅ Direct |
-| `constraints.distribution` | Informs delivery medium bridge | ⚠️ Presentation layer not yet defined — fog item |
+| `constraints.distribution[]` | Each entry becomes a `delivery.media[]` item, expanded with structural constraints | ✅ Direct — now defined via `delivery` section |
 | `failure_modes[].priority` | Informs load-bearing check priorities | ✅ Direct |
 | `constraints.effectivity.needed` | Drives `organization.effectivity.model` (needed=true → inline or separate; needed=false → none) | ✅ New — direct |
 | `constraints.effectivity.axes` | Drives `organization.effectivity.axes` | ✅ New — direct |
@@ -647,7 +670,8 @@ Universal fog items (apply to all projects, may never resolve):
 - Numbering scheme integration (now partially addressed by
   `organization.authoring.numbering_scheme` but coexistence with
   other types is not fully resolved)
-- Delivery medium bridge (the Presentation layer in CSP model)
+- Delivery medium rendering details — `delivery` section captures
+  structural constraints; rendering is downstream
 - Handover packaging model (structure across organizational boundaries)
 
 ## Universal overrides
