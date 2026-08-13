@@ -329,37 +329,39 @@ delivery:
 
 # ── Organization ──
 # How documents are organized and retrieved.
-# Separates authoring (maintenance) from retrieval (finding).
-# Supports six arrangement types: hierarchy, sequence, network,
-# flat_set, matrix, numbering_scheme.
+# Supports shared models (used by both authoring and retrieval),
+# authoring models (maintainer storage), and retrieval models
+# (reader views). Six arrangement primitives: hierarchy, sequence,
+# network, flat_set, matrix, numbering_scheme.
+# Enums are illustrative — projects adapt (use the description field).
 organization:
   arrangement_types: ["hierarchy"]
   # Which structural primitives this project uses
   
+  shared:  # models used identically by both authoring and retrieval
+    - model: numbering_scheme | etc
+      description: "free-form — pattern, allocation, any specifics"
+    note: "free-form on shared models, edge cases"
+  
   authoring:  # how maintainers organize documents
-    model: file_tree | numbering_scheme | flat
-    # model = file_tree:
-    tree:
-      - docs/
-        - index.md
-        - tutorials/
-        - how-tos/
-        - reference/
-        - explanation/
-        - <domain-specific-sections>/
-        - changelog.md
-    # model = numbering_scheme:
-    numbering_scheme:
-      pattern: "encoding logic (e.g., ATA chapter, MasterFormat, TM number)"
-      allocation: "how numbers are assigned and tracked"
-    # model = flat:
-    flat_description: "all documents in a single pool, organized by tags"
-    note: "free-form on authoring workflow, version control"
+    - model: file_tree
+      tree:
+        - docs/
+          - index.md
+          - tutorials/
+          - how-tos/
+          - reference/
+          - explanation/
+          - <domain-specific-sections>/
+          - changelog.md
+    - model: numbering_scheme | flat | sequence | network | etc
+      description: "free-form — storage structure, ordering logic"
+    note: "free-form on authoring workflow, version control, edge cases"
   
   retrieval:  # how users find documents
     views:
       - audience: <audience-id>
-        arrangement: hierarchy | sequence | numbering | flat
+        arrangement: hierarchy | sequence | numbering | flat | network | matrix | etc
         entry: "where this audience enters"
         path: ["ordered documents or sections"]
     search: true | false
@@ -514,10 +516,12 @@ notes:
 
 - **Architecture is a recommendation, not a rule.** Diátaxis is the
   default, but the skill explains alternatives and the project chooses.
-- **Organization separates authoring from retrieval.** How maintainers
-  organize documents (authoring) may differ from how readers find them
-  (retrieval). Both must be described. The old `file_tree` is now one
-  sub-field of `organization.authoring.model`.
+- **Organization supports shared, authoring, and retrieval model groups.**
+  Models used identically by both sides go in `shared`. Models specific
+  to maintainer storage go in `authoring` (array — supports multiple
+  models per project). Models specific to reader discovery go in
+  `retrieval`. Each group is defined independently, avoiding duplication
+  while allowing divergence when needed.
 - **Organization supports six arrangement types.** Hierarchy, sequence,
   network, flat_set, matrix, and numbering_scheme. A project may use
   one or more. The skill discovers which types apply during discovery.
