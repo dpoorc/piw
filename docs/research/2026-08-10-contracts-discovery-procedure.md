@@ -430,19 +430,15 @@ navigation:
     note: "free-form on navigation patterns, search integration"
 
 # ── Cross-references ──
-# Structured relationships between documents.
+# How documents reference each other.
+# The design stage only decides the model. Relationship types
+# (depends_on, see_also, supersedes, describes, referenced_by)
+# are defined during implementation when model = first_class.
 cross_references:
   model: first_class | inline | none
-  # first_class = structured data with relationship types, queriable
+  # first_class = structured cross-references with typed relationships
   # inline = within-text hyperlinks only
   # none = no cross-referencing convention
-  relationship_types:
-    - depends_on       # Document A requires Document B
-    - see_also         # Related but not required
-    - supersedes       # Document A replaces Document B
-    - superseded_by    # Document A is replaced by Document B
-    - describes        # Document A describes Component X
-    - referenced_by    # Document A is referenced in Document B
   note: "how cross-references are maintained, verified, and reported"
 
 # ── Lifecycle ──
@@ -546,10 +542,13 @@ notes:
 - **Template governance tiers prevent schema fatigue.** Regulated
   projects need enforced templates (Tier 3). Personal notes need none
   (Tier 0). The same contract schema supports all tiers.
-- **Cross-references are first-class data, not just hyperlinks.**
-  Structured relationship types (depends_on, supersedes, describes)
-  enable impact analysis: "if document A changes, which documents must
-  be updated?"
+- **Cross-reference relationship types are an implementation detail.**
+  The design stage decides only the model (inline, first_class, none).
+  If `first_class`, relationship types (depends_on, see_also, supersedes,
+  describes, referenced_by) are defined during implementation based on
+  actual document relationships. The old schema listed 6 typed
+  relationships in the contract — this was over-engineered for the
+  design phase and has been trimmed.
 - **Effective dating separates approval from activation.** A document
   can be approved but not yet in effect. This handles scheduled
   deployments and regulatory transition periods.
