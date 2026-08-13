@@ -450,21 +450,33 @@ cross_references:
 # A state machine is the default implementation, but not a requirement.
 # Projects may use continuous updates, event-driven revisions,
 # ad-hoc maintenance, or no formal lifecycle at all.
+# Lifecycle fields are conditional on the model — see grouping below.
 lifecycle:
+  # ── Core fields (always present) ──
   model: state_machine | continuous | event_driven | ad_hoc | none
   # state_machine = staged progression (draft → review → current → archived)
   # continuous = live editing with no formal stages
   # event_driven = updates triggered by specific events (release, audit)
   # ad_hoc = updates happen when someone has time
   # none = no lifecycle management (not recommended)
-  default_states:  # applies when model = state_machine
+  review_cadence: quarterly | monthly | per_release | event_driven | none
+  accountability:
+    model: named_owner | team_ownership | codeowners | distributed
+    note: "how accountability is assigned and enforced"
+  note: "free-form on review workflow, exceptions, alternative models"
+
+  # ── State machine fields ──
+  # Only populated when model = state_machine.
+  # Projects using continuous, event_driven, ad_hoc, or none skip these.
+  # The defaults below are a reference — projects may customize.
+  states:
     - draft       # being written, not yet reviewed
     - review      # under review by designated gatekeepers
     - approved    # reviewed and approved, awaiting effective date
     - current     # effective, published, in active use
     - deprecated  # still usable but superseded by newer content
     - archived    # historical record, no longer recommended
-  transitions:  # applies when model = state_machine
+  transitions:
     draft → review:       submit_for_review
     review → draft:       request_changes
     review → approved:    approve (gatekeeper required)
@@ -472,7 +484,7 @@ lifecycle:
     current → deprecated: supersede
     current → archived:   eol_direct
     deprecated → archived: retire
-  gatekeepers:  # applies when model = state_machine
+  gatekeepers:
     review: ["editor", "subject_matter_expert"]
     approve: ["document_owner", "compliance_officer (if regulatory)"]
     note: "free-form on gatekeeper roles, review boards, exceptions"
@@ -486,13 +498,8 @@ lifecycle:
     # transitions = major transitions (approve, activate, retire) logged
     # none = no logging required
     note: "who logs what, retention requirements, tool support"
-  review_cadence: quarterly | monthly | per_release | event_driven | none
   expiry: "every page carries a review-by date | no expiry"
   supersession: "obsolete documents retain supersession links to their replacement"
-  note: "free-form on review workflow, exceptions, alternative models"
-  accountability:
-    model: named_owner | team_ownership | codeowners | distributed
-    note: "how accountability is assigned and enforced"
 
 # ── Load-bearing check ──
 # Can the team maintain this structure?
@@ -581,6 +588,13 @@ notes:
   template-governed — the skill skips most discovery questions.
   When multiple media are equally primary, the most restrictive medium
   constrains the shared design.
+- **Lifecycle fields are conditional on model.** Projects using
+  `continuous`, `ad_hoc`, or `event_driven` fill only the core
+  fields (model, review_cadence, accountability, note). State machine
+  fields (states, transitions, gatekeepers, effective_dating,
+  audit_trail, expiry, supersession) only apply when `model:
+  state_machine`. The schema shows defaults as a reference — projects
+  customize them as needed.
 
 ### Fog items
 
