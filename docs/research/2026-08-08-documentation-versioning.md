@@ -3,6 +3,18 @@
 Research note for wayfinder ticket #5 (Versioning mechanism for project
 documentation). Findings from research by documentation-intercom-3.
 
+> **Boundary note (added 2026-08-13):** This document covers **document
+> revision mechanisms** — how documentation files are versioned,
+> snapshotted, and maintained over time (Levels 0-7). It does NOT cover
+> **product effectivity** — which product version or configuration a
+> document describes (e.g., "this page describes API v2.1, not v1.0").
+> Effectivity and document versioning are orthogonal concerns:
+> a document at revision 4 may describe product v1, and a document
+> at revision 1 may describe product v3. For effectivity modeling,
+> see the contracts document at
+> `docs/research/2026-08-10-contracts-discovery-procedure.md` (Design
+> stage — `organization.effectivity`).
+
 ---
 
 ## Taxonomy of Approaches (Level 0–7)
@@ -243,6 +255,14 @@ releases.
 
 ### Universal Invariant
 
-Every page must be able to answer "what version/date range does this apply
-to?" — either by git tag (implicit), frontmatter (explicit), or hosting version
-selector (UI).
+Every page must be able to answer:
+
+1. **Document revision**: "What revision of this document am I viewing?"
+   — answered by git tag, frontmatter version field, or hosting UI.
+2. **Product effectivity**: "Which product version or configuration does
+   this document describe?" — answered by effectivity markers (see the
+   contracts document for the effectivity model).
+
+These are separate questions. A document at revision 4 may describe
+product v1. A document at revision 1 may describe product v3. Do not
+conflate them.
