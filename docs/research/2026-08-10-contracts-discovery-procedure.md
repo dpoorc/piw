@@ -347,15 +347,10 @@ organization:
         entry: "where this audience enters"
         path: ["ordered documents or sections"]
     search: true | false
+    interface:  # how users narrow results
+      metadata_filtering: true | false  # filter by doc properties (date, author, status)
+      authority_resolution: free | suggested | enforced  # entity name standardization in search/filter
     note: "free-form on retrieval behavior, search limitations"
-  
-  cross_cutting:  # modifiers that apply across arrangements
-    tagging: true | false
-    faceting: true | false
-    facet_dimensions: ["audience", "component", "status"]
-    metadata_filtering: true | false
-    authority_control: true | false
-    note: "how cross-cutting modifiers are implemented"
   
   effectivity:  # which product versions/configurations docs apply to
     model: inline | separate | none
@@ -371,12 +366,32 @@ organization:
 
 # ── Taxonomy ──
 # Classification scheme for documents.
-# Type determines how categories relate to each other.
+# Separate from retrieval: classification is about categories,
+# retrieval is about finding. A project may have rich classification
+# with simple retrieval, or the reverse.
 taxonomy:
-  type: hierarchical | faceted | thesaurus | flat_controlled
-  tags: ["tag1", "tag2", "tag3"]
-  convention: frontmatter | separate_index | sidebar
-  note: "free-form on taxonomy design, hierarchy, naming conventions"
+  scheme:  # the classification structure itself
+    type: hierarchical | faceted | thesaurus | flat_controlled | none
+    # none = no classification scheme (search-only retrieval)
+    facets:  # only when type = faceted
+      dimensions: ["audience", "component", "status"]
+    convention: frontmatter | separate_index | sidebar | database
+    note: "free-form on taxonomy structure, naming conventions"
+  tags: ["tag1", "tag2", "tag3"]  # the actual classification terms
+  assignment:  # how terms are assigned to documents
+    model: manual | automatic | hybrid
+    # manual = authors assign tags explicitly
+    # automatic = tags derived from document content or structure
+    # hybrid = manual assignment supplemented by automation
+    governance: free | recommended | enforced
+    # free = anyone can assign any tag
+    # recommended = guidelines exist but are not enforced
+    # enforced = only authorized roles can assign tags
+    note: "free-form on tag assignment workflow"
+  management:  # who creates, modifies, or deprecates taxonomy terms
+    who: any_author | doc_owner | controller_only
+    review_required: true | false
+    note: "how taxonomy terms are governed"
 
 # ── Template governance ──
 # How document structure is enforced.
@@ -487,14 +502,18 @@ notes:
 - **Organization supports six arrangement types.** Hierarchy, sequence,
   network, flat_set, matrix, and numbering_scheme. A project may use
   one or more. The skill discovers which types apply during discovery.
-- **Cross-cutting modifiers (tags, facets, search, metadata filtering,
-  authority control) apply across all arrangement types.** They are not
-  arrangements themselves but modifiers that enhance any primary
-  structure.
+- **Cross-cutting concerns belong under taxonomy or retrieval, not a
+  separate section.** Tagging, faceting, and term governance are
+  classification concerns — they belong under `taxonomy`. Metadata
+  filtering and entity name resolution are retrieval interface concerns
+  — they belong under `organization.retrieval.interface`. The old
+  `cross_cutting` section was eliminated because it duplicated fields
+  and created contradictory configurations (e.g., `taxonomy.type:
+  faceted` vs `cross_cutting.faceting: false` was possible).
 - **Taxonomy type distinguishes how categories relate.** Hierarchical,
   faceted (orthogonal dimensions), thesaurus (associative relationships),
-  and flat controlled vocabularies (no hierarchy) have different
-  properties and require different discovery questions.
+  flat controlled vocabularies (no hierarchy), and `none` (search-only)
+  have different properties and require different discovery questions.
 - **Lifecycle management is the principle; stages are one implementation.**
   The skill offers a state machine as default (draft → review → approved →
   current → deprecated → archived) but accepts alternatives: continuous
@@ -547,7 +566,8 @@ notes:
   redirect, delete) — `archived` is in the state machine but the
   exact procedure (retention period, format migration) is not defined
 - Taxonomy/tag convention details (how tags are expressed —
-  frontmatter, separate index, sidebar)
+  frontmatter, separate index, sidebar) — the `taxonomy.scheme.convention`
+  field exists but implementation patterns are not catalogued
 - How to handle multiple architectures in one project (e.g., Diátaxis
   for user docs, module-based for internal API docs)
 - Numbering scheme integration — how numbering schemes coexist with
