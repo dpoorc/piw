@@ -6,7 +6,7 @@ priority: high
 labels:
     - wayfinder:map
 created: "2026-08-08"
-updated: "2026-08-11"
+updated: "2026-08-14"
 ---
 
 ## Destination
@@ -83,23 +83,45 @@ A production-ready `documentation` skill that defines universal principles for p
   See [research/2026-08-09-structure-discovery-procedure.md](docs/research/2026-08-09-structure-discovery-procedure.md).
 
 - [Contracts document: Stage contracts for structure discovery procedure](.issues/0006-grilling-structure-discovery-procedure.md) —
-  In progress. A full 604-line contracts document has been written covering
-  Init (9 triage questions with output schema), Discovery (multi-axis audience
-  model, scale-aware depth, fog fallbacks), and Design (organization model
-  with authoring/retrieval separation, taxonomy types, lifecycle state machine,
-  template governance tiers, cross-references, verification tables).
+  Resolved. The contracts document at ~690 lines now covers all stages
+  (Init, Discovery, Design) with all sections filled and all cross-stage
+  dependencies verified.
   See [research/2026-08-10-contracts-discovery-procedure.md](docs/research/2026-08-10-contracts-discovery-procedure.md).
-  Open findings from pi-intercom reviews: lifecycle over-engineered, faceting
-  belongs in taxonomy, delivery medium and effectivity scope are missing.
+  All 9 gaps from pi-intercom reviews resolved (see below).
 
-## Not yet specified
+- [Tier 1 resolution: Three new model concepts](.issues/0006-grilling-structure-discovery-procedure.md)
+  — Effectivity/applicability scope (product version/document scope
+  separation), taxonomy/cross_cutting boundary elimination (faceting
+  absorbed into taxonomy, metadata/authority into retrieval.interface),
+  and delivery medium bridge (Presentation layer, media[] with structural
+  constraints).
 
-- **Knowledge merging mechanism** — how does the "evolves" invariant work when large sums of new knowledge arrive? (Depends on structure discovery procedure.) Still fog.
-- **Taxonomy/tag convention** — partially addressed: taxonomy.type now explicit (hierarchical, faceted, thesaurus, flat_controlled). Exact frontmatter/separate_index convention still fog.
-- **EOL procedure specifics** — what exactly happens at end-of-life? Archive? Redirect? Delete? Still fog.
-- **Known-good default for small projects** — the procedure can route small/simple projects to a known-good default instead of running full discovery→design. Shape still not defined. Fog.
-- **Delivery medium bridge** — how structure maps to PDF, web, paper, or in-product delivery. CSP Presentation layer. Fog.
-- **Domain-aware routing** — whether the procedure adapts behavior per domain (construction vs software vs medical). Fog.
+- [Tier 2 resolution: Schema simplifications](.issues/0006-grilling-structure-discovery-procedure.md)
+  — Lifecycle restructured to conditional model (core fields always
+  present, state machine fields only when `model: state_machine`).
+  Cross-references trimmed to model-only (inline, first_class, none).
+
+- [Tier 3 resolution: Enum/field fixes](.issues/0006-grilling-structure-discovery-procedure.md)
+  — Organization restructured with shared/authoring/retrieval groups
+  (no single numbering_scheme field). Authoring enums expanded with
+  sequence, network, etc. Retrieval arrangement expanded with network,
+  matrix, etc. Verification tables filled (7 missing entries added).
+
+## Not yet specified (fog)
+
+- **Known-good default for small projects** — the procedure can route
+  small/simple projects to a known-good default instead of running full
+  discovery→design. Shape still not defined. Highest impact remaining fog.
+- **Knowledge merging mechanism** — how does the "evolves" invariant work
+  when large sums of new knowledge arrive? Still fog.
+- **EOL procedure specifics** — what exactly happens at end-of-life?
+  Archive? Redirect? Delete? Still fog.
+- **Handover packaging** — structure across organizational boundaries.
+  Still fog.
+- **Domain-aware routing** — whether the procedure adapts behavior per
+  domain (construction vs software vs medical). Still fog.
+- **Regulatory sub-module interaction** — does discovery ask compliance
+  questions, or is it a separate module? Still fog.
 
 ## Graduated from fog to ticket (new)
 

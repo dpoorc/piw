@@ -6,11 +6,9 @@ priority: medium
 labels:
     - wayfinder:grilling
     - docs
-relations:
-    depends-on:
-        - 6
+relations: []
 created: "2026-08-08"
-updated: "2026-08-08"
+updated: "2026-08-14"
 ---
 
 ## Question

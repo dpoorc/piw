@@ -13,15 +13,15 @@
   - ✅ Structure discovery procedure skeleton designed (ticket #6 WIP)
   - ✅ Stage contracts document written (Init + Discovery + Design, 604 lines)
   - ✅ Exploration items 1-6 resolved (see ticket #6)
-  - ⬜ Fix cross-stage verification table dependencies (5 missing)
-  - ⬜ Resolve taxonomy/cross_cutting boundary
-  - ⬜ Fix lifecycle over-engineering (conditional state machine)
-  - ⬜ Trim cross-references (model only, defer relationship types)
-  - ⬜ Add effectivity/applicability scope model
-  - ⬜ Add delivery medium bridge (Presentation layer)
-  - ⬜ Clean up numbering scheme dual role
+  - ✅ Fix cross-stage verification table dependencies (9 gaps — see contracts doc)
+  - ✅ Resolve taxonomy/cross_cutting boundary (eliminated cross_cutting section)
+  - ✅ Fix lifecycle over-engineering (conditional state machine fields)
+  - ✅ Trim cross-references (model only, defer relationship types)
+  - ✅ Add effectivity/applicability scope model
+  - ✅ Add delivery medium bridge (Presentation layer)
+  - ✅ Clean up numbering scheme dual role (organization shared/authoring/retrieval groups)
   - ⬜ Init module design (ticket #7, unblocked)
-  - ⬜ Brown-field migration strategy (ticket #8, blocked by #6)
+  - ⬜ Brown-field migration strategy (ticket #8, unblocked)
 
 - **Setup command / setup skill** — Implement `piw setup` and a
   companion setup skill. The command gathers facts, builds at least
@@ -86,6 +86,21 @@
   for the full checklist (README polish, friction points, naming).
 
 ## Completed
+
+### 2026-08-13 session
+
+- **All 9 Tier 1-3 gaps resolved.** The contracts document
+  (`docs/research/2026-08-10-contracts-discovery-procedure.md`) received
+  6 commits, growing to ~690 lines. All minion-review findings integrated:
+  effectivity scope, taxonomy/cross_cutting boundary, delivery medium
+  bridge, lifecycle conditional structure, cross-references trimming,
+  organization shared/authoring/retrieval groups, authoring/retrieval
+  enum expansions, and 7 missing verification table entries.
+- **Contracts document structurally complete.** All sections are filled,
+  all cross-stage dependencies verified. Estimated 85-90% complete.
+  Remaining: 6 universal fog items (small-project default is highest
+  priority).
+- **Tickets #7 and #8 unblocked.** Both are ready to claim.
 
 ### 2026-08-11 session
 

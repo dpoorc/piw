@@ -7,13 +7,10 @@ labels:
     - wayfinder:grilling
     - docs
 relations:
-    blocks:
-        - 7
-        - 8
     depends-on:
         - 2
 created: "2026-08-08"
-updated: "2026-08-11"
+updated: "2026-08-14"
 ---
 
 ## Question
@@ -79,25 +76,61 @@ See [research/2026-08-10-contracts-discovery-procedure.md](docs/research/2026-08
   Lifecycle biggest over-engineering offender. Numbering scheme
   dual role needs cleanup.
 
-### Remaining
+### Progress this session (2026-08-13)
 
-- **Fix lifecycle over-engineering** — make state machine fields
-  conditional on `model: state_machine`. Most projects use continuous
-  or ad_hoc and don't need states/transitions/gatekeepers.
-- **Resolve taxonomy/cross_cutting boundary** — faceting belongs in
-  taxonomy. Authority control and metadata_filtering placement still
-  debated (minion-1 vs minion-2).
-- **Trim cross-references** — keep model only (first_class, inline,
-  none). Defer relationship types to implementation.
-- **Add effectivity/applicability scope** — which product versions/
-  configurations does a doc apply to? Distinguish from versioning
-  and lifecycle.
-- **Add delivery medium bridge** — Presentation layer in CSP model.
-  How structure connects to PDF, web, paper, in-product.
-- **Clean up numbering scheme dual role** — define once at
-  organization level, reference from both authoring and retrieval.
-- **Fix verification table dependencies** — 5 missing cross-stage
-  connections from minion-1 review.
-- **Authoring model options** — missing sequence and network types
-- **Retrieval views** — missing network and matrix in enum
-- **Define known-good default for small/simple projects** — still fog
+**All 9 gaps resolved — 6 commits to contracts document.**
+
+| Tier | Items | Status |
+|------|-------|--------|
+| 1 (New concepts) | Effectivity, taxonomy boundary, delivery medium | ✅ |
+| 2 (Simplifications) | Lifecycle conditional, cross-refs trimming | ✅ |
+| 3 (Enum/field fixes) | Org groups, enums, verification tables | ✅ |
+
+**Key structural changes to contracts:**
+- Organization restructured: shared/authoring/retrieval groups
+  (no single numbering_scheme field)
+- Delivery section added between Architecture and Organization
+- Lifecycle split into core + conditional state-machine fields
+- Cross_cutting section eliminated, fields absorbed into taxonomy
+  and retrieval.interface
+- 7 missing verification table entries added
+- Enums expanded with `etc` + `description: freeform`
+
+**Contracts document now ~690 lines, ~85-90% complete.**
+All sections filled, all cross-stage dependencies verified.
+Remaining fog items captured below.
+
+### Resolved
+
+- ✅ **Fix lifecycle over-engineering** — state machine fields now
+  conditional on `model: state_machine`. Core fields always present.
+- ✅ **Resolve taxonomy/cross_cutting boundary** — eliminated
+  `cross_cutting` section. Faceting → taxonomy, metadata_filtering →
+  retrieval.interface, authority_resolution → retrieval.interface.
+- ✅ **Trim cross-references** — model only (first_class, inline,
+  none). Relationship types deferred to implementation.
+- ✅ **Add effectivity/applicability scope** — added `effectivity`
+  section to design output: model (inline/separate/none), axes,
+  default. Added `constraints.effectivity` to discovery.
+- ✅ **Add delivery medium bridge** — new `delivery` section between
+  Architecture and Organization: `delivery.media[]` array with
+  structural constraints.
+- ✅ **Clean up numbering scheme dual role** — organization now uses
+  shared/authoring/retrieval groups. Numbering scheme defined per
+  group, not as a separate field.
+- ✅ **Fix verification table dependencies** — 7 missing entries
+  added across Discovery→Design and Init→Design tables.
+- ✅ **Authoring model options** — expanded enum with sequence,
+  network, and `etc` + `description: freeform`.
+- ✅ **Retrieval views** — expanded arrangement enum with network,
+  matrix, and `etc`.
+- ⬜ **Define known-good default for small/simple projects** — still fog
+
+### Remaining fog items
+
+- Known-good default for small/simple projects
+- Knowledge merging mechanism (reconciling contradictory artifacts)
+- EOL procedure specifics (archive/redirect/delete)
+- Handover packaging (structure across org boundaries)
+- Domain-aware routing
+- Regulatory sub-module interaction (separate module or part of discovery?)
