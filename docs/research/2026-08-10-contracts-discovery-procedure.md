@@ -39,6 +39,8 @@ User answers to 9 free-form triage questions, guided by the skill:
 6. Are there regulatory or compliance requirements?
 7. What is your timeline and budget for documentation?
    (tools, people, external help, deadline)
+   The skill also probes whether budget approval is a concern (is
+   there a decision-maker who must approve budget or scope?).
 8. What is your team's relationship with documentation?
    (core practice, necessary task, afterthought, or hostile)
 9. How often does this project change direction?
@@ -54,6 +56,9 @@ the conversation.
 description: "free-form project description - sets ambient context"
 scale: small | medium | large            # derived by the skill
 route: known_good | full_cycle | extended  # derived from scale + flags
+    # known_good = light discovery (2-4 probes) + human-scale
+    #   3-action presentation; shape selected from fallback
+    #   variants by delivery medium and user skill level
 
 brownfield:
   exists: true | false | partial
@@ -147,7 +152,8 @@ notes:
 
 ### Fog items (universal, not project-specific)
 
-- Known-good default for small/simple projects (shape not yet defined)
+- Known-good default for small/simple projects (shape seeded v0.1 from
+  prototype case A; fallback variants per delivery medium to be refined)
 - How to handle "unknown unknowns" in triage (user doesn't know their
   own audience or regulatory requirements yet)
 - How the budget/timeline field interacts with the known-good default
@@ -167,6 +173,20 @@ initial classification, audience sketch, and constraints.
 An extended structured conversation. For each area, the skill asks
 free-form questions, interprets the answers, and writes the
 requirements map.
+
+**Authority discovery.** When the domain is externally governed
+(regulatory, standards, industry requirements), the skill identifies
+the governing documents, locates their authoritative source text, and
+distills per project what they require of documentation. The skill
+pre-bakes only the gist of straightforward, widely-known requirements,
+always marked imperfect; serious compliance work uses the actual
+regulation or standard text. Discovery records the sources and the
+extract in `governing_requirements`.
+
+**Known-good route.** When triage routed `known_good`, discovery runs
+light: 2-4 targeted probes (delivery medium, user skill level, existing
+docs). Shape selection keys on delivery medium and user. If light
+discovery surfaces ambiguity, escalate to full discovery.
 
 **Handling "I don't know."** When the user cannot answer a question,
 the skill records it as fog with a conservative default assumption.
@@ -239,6 +259,18 @@ constraints:
   tooling: ["required platforms - Jira, SharePoint, DocuSign, etc."]
   note: "free-form on integration pain points, mandatory workflows"
 
+# ── Governing requirements ──
+# External requirements the documentation must satisfy, distilled
+# from authoritative sources. Populated only when externally governed.
+# See authority discovery in the process section.
+governing_requirements:
+  - standard: "name of the governing document"
+    source: "reference or link to the authoritative text"
+    extract: "what it requires of documentation (quoted or paraphrased)"
+    gist: true | false
+    # true = pre-baked imperfect summary (marked as such)
+    # false = distilled from the actual source text
+
 # ── Failure modes ──
 # Where can documentation fail, and what is the impact?
 failure_modes:
@@ -289,8 +321,11 @@ notes:
 - How to handle discovery when the user cannot articulate audience
   needs (common in early-stage projects) — "I don't know" is fog,
   handled via the same fog mechanism as wayfinder
-- How discovery interacts with regulatory modules (should discovery
-  ask regulatory-specific questions, or leave that to a separate module?)
+- How discovery interacts with regulatory modules — flow control
+  (authority discovery is part of the Discovery stage, see process)
+  is separate from file architecture (which module file houses the
+  logic — a SKILL.md implementation concern, not a contract field).
+  Flow control is resolved; file architecture stays open.
 - Knowledge merging mechanism — how does discovery reconcile
   contradictory artifacts or conflicting audience needs?
 
@@ -507,6 +542,21 @@ load_bearing:
   mitigation: "what can be trimmed or deferred"
   note: "free-form on structural risk"
 
+# ── Success criteria ──
+# The user's own success metric, captured in their words.
+# Set at design; the skill checks against it after implementation.
+success_criteria: "week two, I'm productive"
+note: "free-form on how success is verified, what would prove the structure works"
+
+# ── Governing requirements (cited) ──
+# External requirements carried from discovery, with sources.
+# Present only when externally governed; mirrors requirements.md.
+governing_requirements:
+  - standard: "name of the governing document"
+    source: "reference or link"
+    extract: "what it requires of documentation"
+    gist: true | false
+
 # ── Free-form overrides ──
 notes:
   - "anything that does not fit the above"
@@ -514,6 +564,25 @@ notes:
 
 ### Key design decisions
 
+- **The skill is a wayfinder, not a lexicon.** The skill helps a
+  project find its way to documentation that works. It does not carry
+  domain knowledge. For externally governed domains, authority
+  discovery finds the governing documents, distills what they require
+  per project, and cites the sources. Pre-baked knowledge is limited to
+  the gist of straightforward requirements, always marked imperfect;
+  serious compliance uses the actual regulation or standard text.
+- **Known-good runs light discovery.** The known-good route does not
+  skip discovery: it runs 2-4 targeted probes (delivery medium, user
+  skill level, existing docs), selects among fallback shapes, and
+  presents a human-scale three-action plan. Small projects can need
+  different shapes: a recipe collection in folders on Windows differs
+  from a maker project living on GitHub. On ambiguity, escalate to
+  full discovery.
+- **Success criteria are captured.** The design records the user's own
+  success metric, in their words, so the skill can verify later.
+- **Budget approval is probed, not priced.** The budget probe asks
+  whether a decision-maker must approve budget or scope. The skill
+  does not run value-pricing techniques.
 - **Architecture is a recommendation, not a rule.** Diátaxis is the
   default, but the skill explains alternatives and the project chooses.
 - **Organization supports shared, authoring, and retrieval model groups.**
@@ -631,15 +700,17 @@ notes:
 | `audiences.groups` | Starting point for deep-dive | ✅ Discovery expands these |
 | `audiences.cognitive_distance` | Suggests depth of audience separation in design | ✅ Indirect (via design) |
 | `maintenance.pattern` | Not directly used by discovery | ⚠️ Discovery doesn't need this; design does |
-| `regulatory.active` | Activates regulatory discovery questions | ❓ Does discovery ask regulatory questions, or does a separate module? |
+| `regulatory.active` | Activates authority discovery (governing docs + source extraction) | ✅ Resolved — authority discovery is part of the Discovery process |
 | `budget.timeline` | Informs discovery scope (tight deadline = skip optional questions) | ✅ Direct |
 | `culture.priority` | Informs discovery depth (hostile culture → minimal recommendations) | ✅ Direct |
 | `volatility.pace` | Informs discovery focus (fast churn → emphasize modularity) | ✅ Direct |
 
-**Open question:** should discovery have its own regulatory sub-module
-that asks compliance-specific questions, or does discovery note the
-regulatory flag and the compliance module runs separately? This is a
-fog item.
+**Flow control vs file architecture (resolved 2026-08-15).** Authority
+discovery runs inside the Discovery stage process (see process section).
+This is flow control only. Which module file houses the logic
+(modules/discovery.md, modules/compliance.md, inline in SKILL.md) is
+file architecture — independent of flow control, decided when writing
+the SKILL.md, not a contract concern.
 
 ### Discovery → Design
 
@@ -686,10 +757,13 @@ recorded in the respective contract files and persist across sessions.
 
 Universal fog items (apply to all projects, may never resolve):
 
-- Known-good default for small/simple projects
+- Known-good default (seeded v0.1 from prototype case A; fallback
+  variants per delivery medium to be refined)
 - Knowledge merging mechanism (reconciling contradictory artifacts)
-- Regulatory sub-module interaction (does discovery ask compliance
-  questions, or is it a separate module?)
+- Regulatory interaction — flow control (authority discovery is part
+  of the Discovery process) is resolved 2026-08-15; file architecture
+  (which module file houses the logic) stays open, it is a SKILL.md
+  implementation concern. Pre-baked gist only, always marked imperfect
 - Numbering scheme integration (now partially addressed by
   `organization.authoring.numbering_scheme` but coexistence with
   other types is not fully resolved)
