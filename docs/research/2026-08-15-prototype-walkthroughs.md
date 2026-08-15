@@ -359,13 +359,154 @@ whether the process holds or whether the personas held it up.
 
 ---
 
+## Review round 1 (post-prototype, 2026-08-15)
+
+Two independent reviews: a breadth-coverage analysis (minion-1, verified
+by grep against the contracts) and a third-perspective report review
+(minion-2). Both read the walkthrough report with fresh context and did
+not run the role-play.
+
+### Breadth analysis (minion-1)
+
+All 6 report defects verified against the contracts by grep. Key
+corrections: "prior" exists in the contracts only as an example Init fog
+item, never operationalized as a question. The 13 divergences map 1:1 to
+the report tables.
+
+**Dead-field candidates** (no case touched them, nothing hints they
+matter):
+
+- taxonomy.assignment.model, taxonomy.management.who,
+  management.review_required
+- navigation.conventions.next_page, breadcrumbs
+- delivery.media[].constraints.max_depth, hyperlinks
+- organization.retrieval.search, interface.metadata_filtering
+- lifecycle.expiry
+- taxonomy.scheme.convention (frontmatter|separate_index|sidebar|database)
+
+**Untested-but-load-bearing** (exercise gap; the SKILL.md writer must
+test these):
+
+- artifacts[].owner — field exists, but the bench probe never ran
+- constraints.effectivity.axes — Case C is a CGM manufacturer; lot-level
+  DHR retrieval (820.180) is exactly effectivity by serial/lot; zero
+  probes ran
+- organization.retrieval.interface.authority_resolution — Case C's
+  broken-naming electronic files are precisely this problem
+- organization.authoring[].file_tree.tree — no case produced an actual
+  tree (A by design; B/C got action lists)
+- taxonomy.scheme.type: faceted + facets — B/C multi-axis audiences hint
+  at faceted; never confirmed
+- cross_references.model: first_class — Case C's traceability matrix is
+  exactly first-class typed relationships; never named
+- maintenance.pattern — only 4 of 11 values exercised (zero, ad_hoc,
+  dedicated, passionate_volunteer); ghost/distributed/rotational/
+  community/institutional/project_is_docs/outsourced untested
+- failure_modes[].likelihood/impact — the gut question (B2) replaced the
+  structured assessment entirely
+- **The whole file pipeline — no case wrote triage.md, requirements.md,
+  or structure.md. Conversation→summary only. The docs/meta state
+  machine is 100% unvalidated.**
+
+**Defects the report missed:** (1) zero contract FILES produced — A4
+covers presentation scale, not persistence; the state machine never ran.
+(2) Section-level silence — taxonomy, navigation, cross_references never
+fired in any case. (3) Success criteria never promoted to the defect
+list; no contract field exists for the user's success metric. (4) No
+value-pricing technique — the 12 engineer-weeks win was never priced.
+
+**Decision-rule verdict: partially consistent, needs contract changes.**
+"Small scale + no regulatory + culture not hostile" is consistent with
+the contracts' route derivation. But: (a) "low stakes" is a new input
+with no field — add it; (b) "skip full discovery" mildly contradicts
+scale-aware depth — rewrite as: known_good → light discovery (~4 probes)
++ human-scale three-action presentation, structure.md still written as a
+minimal record; (c) the rule resolves the contracts' longest-open fog
+and belongs IN the route derivation, not beside it.
+
+### Third-perspective review (minion-2)
+
+**Story integrity:** the cases read scripted-to-converge. Tells: Zara
+rejects the index "before I could" — the exact finding the framework
+needed demonstrated; Marcus's crisis/risk/tax arrives in proposal order
+with a tidy 25% trim; Case C's clause citations all come from the client,
+so the walkthroughs validated the interaction protocol, not the domain
+knowledge the skill is supposed to carry. No case failed.
+
+**Known-good default v0.1: credible for Zara, overfit to her.** (a) It
+assumes the pain is finding, not maintaining — a maintenance-pain user
+gets nothing. (b) It assumes a solo owner — for a team of 3, staleness
+becomes conflict (who owns the index?). (c) It is device-shaped — naming
+rule + top-of-folder index assume files and folders; a physical
+collection does not translate. (d) It presupposes the user knows the 15
+— a structure-seeking user wants the whole archive navigable. The
+"structure fixes finding, not data quality" boundary is honest but
+quietly concedes the default cannot help the real problem at that scale.
+
+**Divergence log reclassified:** real defects are C1, B3, defect #4
+(prior-attempt). Observations, not schema defects: A1 (probe-and-merge),
+A3 (stage-boundary blur), B4 (invite trimming), B5 (adoption prediction)
+— process truths, unactionable as schema changes. Style preferences: A4
+(schema-as-model vs artifact), B2 (gut-first ordering). Missing from the
+log: success criteria — finding B calls for it, no contract field
+exists, no defect logged.
+
+**Debrief verdict: proceed with a gate.** The debrief recommends
+prototyping hostile/disengaged clients before finalizing, but the next
+steps only "decide," then proceed to #7/#8. The untested modes are
+exactly those that determine Init quality: refusal handling, stop
+conditions, zero capacity. Verdict: proceed on the happy path, but gate
+the Init module's abort/refusal/handoff behavior on at least one hostile
+and one zero-budget probe.
+
+**Top 5 open questions for SKILL.md:**
+
+1. Stop conditions — hostile, disengaged, zero-budget, firing user:
+   abort? minimal plan? defer? No evidence, no contract field.
+2. Session state — "probe-and-merge" needs a mechanism (a running
+   answer-state map maintained between probes); the report never says
+   what the skill tracks.
+3. Mode detection — "detect pushback quality and switch modes" is a
+   hand-wave; what observable signals trigger exacting-domain mode?
+4. Known-good thresholds — concrete committed boundaries (item count,
+   audience count, timeline) do not exist; the SKILL.md writer cannot
+   write the branch condition.
+5. Domain knowledge location — C3 concludes the skill must pre-bake
+   regulatory knowledge, then offers it as an unverified premise
+   ("specialized wayfinder"). SKILL.md must decide: embedded regulated
+   modules, or routing to another skill? The report's strongest finding
+   is its most unsettled.
+
+### Synthesis (executor)
+
+Both reviews converge on four results:
+
+1. The file pipeline / state machine is the biggest unvalidated surface.
+   No walkthrough ever wrote triage.md, requirements.md, or structure.md.
+2. The known-good default works for the solo-finding user but needs
+   committed thresholds and a boundaries table (ownership, medium,
+   pain-type) to stop being Zara-shaped.
+3. Hostile/disengaged/zero-budget probes are required before Init is
+   final; minion-2 states it as a gate.
+4. Domain knowledge location (embedded vs routed) is the strongest
+   finding and the most unsettled design decision.
+
+Differing emphasis: minion-1 tags divergences by contract coverage
+(verified by grep); minion-2 judges by actionability (some divergences
+are process truths, not schema changes). Both are correct for their
+purpose — the SKILL.md writer needs both views: what to change (minion-1)
+and what will or will not change the schema (minion-2).
+
+---
+
 ## Next steps
 
-1. Static analysis pass: check the three cases + the divergence log
-   against the full contracts for breadth coverage (fields never
-   exercised, exercises never covered by fields)
-2. Minion-1 review of this report (third perspective) — now that its
-   context is compacted clean
-3. Decide the hostile/disengaged-client follow-up experiments
+1. ~~Static analysis pass~~ — done (review round above)
+2. ~~Minion-1 review of this report~~ — done, plus minion-2 third-
+   perspective review
+3. Decide the hostile/disengaged-client follow-up experiments (open
+   discussion with user)
 4. Then: #7 (Init module) and #8 (brown-field) on validated ground
-5. Also: fix the contract defects list above in the contracts doc
+5. Fix the contract defects (add stakes input, known-good rule into
+   route derivation, add missing probes, promote success criteria,
+   decide dead-field candidates)
