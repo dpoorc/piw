@@ -45,7 +45,11 @@ See [research/2026-08-15-assumption-review.md](docs/research/2026-08-15-assumpti
   budget-approval concern
 - Flow control (authority discovery in Discovery) independent from file
   architecture (which module file houses logic — stays open)
-- Open: A8 unpacking of divergence log into concrete contract changes
+- A8: divergence unpacking in progress — batch 1 (6 contract changes)
+  resolved and applied. See
+  [research/2026-08-16-divergence-unpacking.md](docs/research/2026-08-16-divergence-unpacking.md).
+  Batches 2-5 pending (interaction protocol, presentation, A2 scope,
+  quick confirms).
 
 Procedure skeleton designed through grilling session (2026-08-09):
 
