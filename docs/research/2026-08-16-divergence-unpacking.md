@@ -34,13 +34,13 @@ All items are classified by what a change targets:
 | def2: no single-point-of-failure probe | defect + debrief | Presentation | SKILL.md notice-and-flag rule | ✅ Batch 1 (i4) |
 | def4: prior-attempt fog never a question | defect + review | Contract | discovery prior-history probe | ✅ Batch 1 (i5) |
 | debrief: the bench (who executes) | debrief + minion-1 | Contract | discovery bench probe | ✅ Batch 1 (i6) |
-| A1: answer overflow → probe-and-merge | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| A3: stage boundary visible | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| B1: discovery depth non-negotiable | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| B4: no trim invitation | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| B5: adoption failure not surfaced | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| C2: expert-user sequence attack missing | divergence | SKILL.md rule | interaction protocol | Pending batch 2 |
-| def3: no attribution check | defect + debrief | SKILL.md rule | interaction protocol | Pending batch 2 |
+| A1: answer overflow → probe-and-merge | divergence | SKILL.md rule + contract | interaction protocol + route trigger | ✅ Batch 2 |
+| A3: stage boundary visible | divergence | Non-rule (rejected) | natural flow is the model's job | ✅ Batch 2 |
+| B1: discovery depth non-negotiable | divergence | SKILL.md rule | soft ceiling, both directions | ✅ Batch 2 |
+| B4: no trim invitation | divergence | SKILL.md rule | ambience-driven calibration (trim OR add) | ✅ Batch 2 |
+| B5: adoption failure not surfaced | divergence | SKILL.md rule | surface the adoption question | ✅ Batch 2 |
+| C2: expert-user sequence attack missing | divergence | SKILL.md rule | option-offering with consent | ✅ Batch 2 |
+| def3: no attribution check | defect + debrief | SKILL.md rule | root-cause digging on pain claims | ✅ Batch 2 |
 | def5: scale-aware phrasing | defect + debrief | Presentation | presentation rules | Pending batch 3 |
 | A4: schema-as-artifact | divergence | Presentation | presentation rules | Pending batch 3 |
 | B2: gut-first ordering | divergence | Presentation | presentation rules | Pending batch 3 |
@@ -130,16 +130,50 @@ handover). Fills `artifacts[].owner` with executors, not titles.
 
 ## Pending batches
 
-### Batch 2 — Interaction protocol rules (SKILL.md)
+### Batch 2 — Interaction protocol rules (resolved 2026-08-16)
 
-Seven items, all process truths from the prototype:
-1. A1: probe-and-merge with a running answer-state map
-2. A3: stages are a model, never shown to the user
-3. B1: scale table is a ceiling, not a mandate; negotiate depth
-4. B4: design presentation MUST invite trimming
-5. B5: surface "what survives THIS team?" directly
-6. C2: interaction mode detection (cooperative vs exacting-domain)
-7. def3: attribution check when the user blames docs
+Seven items, all decided by the user. Key rulings:
+
+1. **A1 probe-and-merge — works, plus collision-escalation.** The
+   skill maintains a running answer-state map: whatever the user
+   volunteers is recorded, later probes only ask what is missing.
+   NEW TRIGGER: if something in the user's story collides
+   (contradictory facts, unstable answers), that is a signal to go to
+   discovery or light discovery anyway — even on a would-be straight
+   known-good route. Applied to the contracts' known-good route.
+2. **A3 stage invisibility — REJECTED as a rule.** The conversation
+   should flow naturally, but that is the responsibility of the
+   agent/model, not a skill mandate. The skill defines what; the agent
+   handles how it feels. Consistent with the flow-control vs
+   file-architecture principle.
+3. **B1 depth is a soft ceiling in BOTH directions.** Depth follows
+   the user's wishes: accommodate a user who wants more depth than
+   necessary; pace to fit thirty minutes. Applied to the contracts'
+   scale-aware depth section.
+4. **B4 trim invitation → ambience-driven calibration.** Not a
+   mandate to offer trimming. Infer from conversation ambience
+   whether to offer cut, add, or neither. If the project is more
+   ambitious than the planned docs (has the finances, manpower, etc.),
+   raise that. Offer to cut when it feels right; offer to add when it
+   feels right. Moderation and balance.
+5. **B5 adoption question — confirmed.** Ties into #4: the skill
+   surfaces "what would survive THIS team?" as part of the
+   calibration conversation.
+6. **C2 mode detection → option-offering with consent.** NOT
+   detect-and-switch. The skill offers the user the interaction mode,
+   framed by what it knows: "You told me you're not very technically
+   inclined; do you want me to guide you through the questions one by
+   one?" or "This feels medium scale with a team of engineers; would
+   you rather answer explorative questions in a batch, be guided one
+   by one, or should I propose and you push back and we negotiate?"
+   The user chooses. Refines batch 4: signals inform what options to
+   offer, not what to auto-switch to.
+7. **def3 attribution check — root-cause digging.** The skill treats
+   a pain claim as a hypothesis, not a diagnosis. "Onboarding is slow
+   because docs are bad" gets one probe: what did the affected people
+   say the blocker was? Framing must never dismiss the user's pain:
+   it is "let's check what the hires told you," not "are you sure it's
+   the docs?"
 
 ### Batch 3 — Presentation rules (SKILL.md)
 
@@ -152,7 +186,8 @@ success criteria elicitation.
 
 Four items, the gated SKILL.md questions plus the test gaps:
 1. Stop conditions (top5-Q1) — hostile/disengaged/zero-budget/firing
-2. Mode detection signals (top5-Q3)
+2. Mode-offering signals (top5-Q3, reframed by batch 2 #6): what the
+   skill observes to frame the options it offers, not auto-switch
 3. Known-good thresholds (top5-Q4)
 4. TG-1 persistence test + TG-6 silent sections + TG-2..5 experiments
 

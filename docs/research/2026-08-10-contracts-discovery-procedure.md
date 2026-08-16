@@ -189,7 +189,10 @@ extract in `governing_requirements`.
 **Known-good route.** When triage routed `known_good`, discovery runs
 light: 2-4 targeted probes (delivery medium, user skill level, existing
 docs). Shape selection keys on delivery medium and user. If light
-discovery surfaces ambiguity, escalate to full discovery.
+discovery surfaces ambiguity, escalate to full discovery. A collision
+in the user's story (contradictory facts, unstable answers) is also an
+escalation trigger: it signals the project may not fit the simple
+shape, even on an otherwise known-good route.
 
 **Prior history probe.** The skill asks what was tried before: previous
 attempts to organize or reorganize the documentation, and what
@@ -210,7 +213,12 @@ the answer. Non-critical gaps (exact audience count, precise
 maintenance capacity) stay as fog and the procedure continues.
 The conversation naturally distinguishes the two.
 
-**Scale-aware depth.** The depth of discovery adapts to triage scale:
+**Scale-aware depth.** The depth of discovery adapts to triage scale.
+The scale table is a soft ceiling, not a mandate. Depth follows the
+user's wishes in both directions: a user who wants more depth than the
+table allows is accommodated; a user with thirty minutes gets paced
+questioning that fits. The skill negotiates actual depth early in the
+conversation.
 
 - **Small** — 1-2 questions per area, minimal audience deep-dive,
   quick constraint scan, no failure mode assessment.
