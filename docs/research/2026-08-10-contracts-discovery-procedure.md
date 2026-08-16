@@ -109,7 +109,10 @@ culture:
 
 volatility:
   pace: stable | slow | moderate | fast | chaotic
-  note: "how often the project changes direction or releases"
+  # pace is the central, dominant pace. Multi-speed projects (a slow
+  # core, fast edges - "wine and milk") record per-layer paces in the
+  # note; no extra field.
+  note: "how often the project changes direction or releases; per-area paces if multi-speed"
 
 # ── Fog items ──
 # Things we know we don't know about this project
@@ -188,6 +191,17 @@ light: 2-4 targeted probes (delivery medium, user skill level, existing
 docs). Shape selection keys on delivery medium and user. If light
 discovery surfaces ambiguity, escalate to full discovery.
 
+**Prior history probe.** The skill asks what was tried before: previous
+attempts to organize or reorganize the documentation, and what
+happened. This operationalizes the Init fog example "has there been a
+previous attempt to reorganize?" into a real question. Answers inform
+the design (what not to repeat) and the load-bearing check.
+
+**The bench probe.** The skill asks who actually executes the work:
+who owns the paper binders, who walks the floor, who will do the
+handover. This fills `artifacts[].owner` with executors, not titles.
+It is a discovery question, not a triage question.
+
 **Handling "I don't know."** When the user cannot answer a question,
 the skill records it as fog with a conservative default assumption.
 Critical gaps (brownfield status, regulatory applicability) require
@@ -257,6 +271,19 @@ constraints:
     note: "which configurations the project distinguishes and how they are identified"
   access: ["who can see what - public, internal, NDA, classified"]
   tooling: ["required platforms - Jira, SharePoint, DocuSign, etc."]
+  # Per-tool validation record. Relevant when regulatory.active or an
+  # externally-governed domain. The skill pre-knows (gist, marked
+  # imperfect) that tools performing governed work may require
+  # validation; it probes and records the project's state.
+  # An "no" answer with a validation requirement is a hoisted risk:
+  # it has unbounded outcome (a validation project, not a checklist
+  # item) and is flagged in design as potential work-item-zero.
+  tool_validation:
+    - tool: "platform name"
+      validated: unknown | yes | no | n/a
+      required: true | false   # do governing requirements demand validation?
+      priority: low | medium | high | critical  # flag when no + required
+      note: "validation record reference, scope of validation"
   note: "free-form on integration pain points, mandatory workflows"
 
 # ── Governing requirements ──
@@ -625,6 +652,13 @@ notes:
 - **Effective dating separates approval from activation.** A document
   can be approved but not yet in effect. This handles scheduled
   deployments and regulatory transition periods.
+- **Migrations declare a transition effective date.** A brown-field
+  migration names the date after which records are born under the new
+  controls; records before it are legacy. This is distinct from
+  per-document effective dating (project-wide process change vs
+  document activation) and the two must not drift apart - "two dates
+  must be one date." The principle is universal; the mechanism belongs
+  to the brown-field strategy.
 - **Audit trails are a structural requirement for regulated projects.**
   State transitions must be logged with actor, action type, and timestamp.
 - **Retirement never means deletion.** Obsolete documents retain
