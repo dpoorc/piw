@@ -232,7 +232,44 @@ Five items, all confirmed with one refinement:
    design (executor/persona allocation, parallel or serial) is under
    discussion — see next session.
 
-### Batch 5 — Quick confirms (already-resolved)
+### Batch 5 — Run 1 contract gaps (from A2 experiment, pending 2026-08-16)
+
+Run 1 (persistence + silent sections, see handoff) surfaced five real
+contract gaps. Extracted from the Run 1 evidence; decision-ready for
+next session:
+
+1. **Point-of-use distribution task missing from lifecycle.** In a
+   controlled environment, activating a revision requires someone to
+   swap the physical card at the point of use. The lifecycle schema
+   has states and transitions but no distribution task. The run made
+   the swap the load-bearing mechanism (card register + recorded
+   swap + owner). Candidate: lifecycle field or principle.
+2. **"Training recorded" activation precondition missing.** The run
+   added: activate is blocked until training evidence exists for
+   affected operators (train-before-effective gate). Candidate:
+   lifecycle transition precondition.
+3. **Honest-late timestamped ticks (no backfill).** Contemporaneity
+   as a principle (FSMA 117.160): records are created at the moment of
+   the event, never backfilled. Candidate: design principle or
+   lifecycle/retrieval field.
+4. **review_cadence needs a combined value.** The enum has no
+   event_driven + annual combination; the run needed both and recorded
+   free text. Candidate: allow combined values or add a note.
+5. **Print/no-terminal floor constraints.** The delivery bridge covers
+   medium constraints, but "no terminals at the line" mandated
+   laminated cards as controlled documents (binder/card duality,
+   max_depth 2, no links). The contracts anticipate medium constraints;
+   physical point-of-use as a first-class delivery mode may need
+   explicit handling.
+
+Still-never-exercised fields (future test candidates): taxonomy.scheme
+conventions other than frontmatter; taxonomy.assignment.model
+automatic/hybrid; delivery media in_product/obsidian_vault; lifecycle
+model continuous/event_driven/ad_hoc/none; navigation breadcrumbs
+non-none; retrieval.search=false.
+
+### Batch 6 — Quick confirms (already-resolved; optional pass)
 
 Five items, all already settled by earlier rulings. A read-only
-confirmation pass.
+confirmation pass. Treated as skippable — the traceability table marks
+them resolved.
