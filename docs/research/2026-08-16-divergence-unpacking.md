@@ -45,12 +45,12 @@ All items are classified by what a change targets:
 | A4: schema-as-artifact | divergence | Presentation | presentation rules (raw schema only if user asks) | ✅ Batch 3 |
 | B2: gut-first ordering | divergence | Presentation | presentation rules | ✅ Batch 3 |
 | debrief: trust killers (applause loop, recap deck, choreographed pushback) | debrief | Presentation | presentation rules + subtle pushback invite | ✅ Batch 3 |
-| top5-Q1: stop conditions | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
-| top5-Q3: mode detection signals | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
-| top5-Q4: known-good thresholds | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
-| TG-1: zero contract files written | review | Test gap | A2 persistence test | Pending batch 4 |
-| TG-2..5: hostile/disengaged/zero-budget/firing | debrief + review | Test gap | A2 experiments | Pending batch 4 |
-| TG-6: silent sections (taxonomy/nav/cross_refs) | review | Test gap | A2 experiment scope | Pending batch 4 |
+| top5-Q1: stop conditions | review | SKILL.md | save-and-exit protocol | ✅ Batch 4 |
+| top5-Q3: mode detection signals | review | SKILL.md | light routing guidelines | ✅ Batch 4 |
+| top5-Q4: known-good thresholds | review | SKILL.md | Option D: default-or-escalate + fast-forward flags | ✅ Batch 4 |
+| TG-1: zero contract files written | review | Test gap | A2 persistence test (split design in discussion) | ✅ Batch 4 (runs pending) |
+| TG-2..5: hostile/disengaged/zero-budget/firing | debrief + review | Test gap | A2 experiments (split design in discussion) | ✅ Batch 4 (runs pending) |
+| TG-6: silent sections (taxonomy/nav/cross_refs) | review | Test gap | A2 experiment scope (split design in discussion) | ✅ Batch 4 (runs pending) |
 | A2: known-good default fog | divergence | Resolved | seed v0.1 + A5 (light discovery + fallback shapes) | ✅ Resolved |
 | C3: pre-bake domain knowledge | divergence | Resolved | A3 reframe (wayfinder-not-lexicon, authority discovery) | ✅ Resolved |
 | rev4: value-pricing never priced | review | Resolved | A10-2 ruling (budget-approval probe, no pricing) | ✅ Resolved |
@@ -200,14 +200,37 @@ Five items, all confirmed with one refinement:
    translate into consultant language. Standard prompt: "what would
    prove this worked for you?"
 
-### Batch 4 — A2 test scope
+### Batch 4 — A2 test scope (resolved 2026-08-16)
 
-Four items, the gated SKILL.md questions plus the test gaps:
-1. Stop conditions (top5-Q1) — hostile/disengaged/zero-budget/firing
-2. Mode-offering signals (top5-Q3, reframed by batch 2 #6): what the
-   skill observes to frame the options it offers, not auto-switch
-3. Known-good thresholds (top5-Q4)
-4. TG-1 persistence test + TG-6 silent sections + TG-2..5 experiments
+1. **Stop conditions — save-and-exit protocol.** The skill is not a
+   therapist. On hostility or termination: save what was learned, offer
+   the partial record, stop, no persuasion. Distinctions:
+   - Hostile (angry, aggressive) → save and exit immediately, no
+     re-engagement attempt
+   - Disengaged (passive, low energy) → ONE re-engagement offer via
+     the mode options (batch 2 #6); then save and exit if it fails
+   - Zero-budget is a CONSTRAINT, not a stop condition (handled by the
+     budget probe, A10)
+   - The partial record is a resume point: an aborted run still writes
+     its state. Ties to TG-1 (persistence test).
+2. **Mode-offering — light routing guidelines, not rules.** Signals
+   that inform the offered options: domain, the user's own project
+   description, stated tech comfort, early pushback quality,
+   vocabulary. If unsure, ask and suggest. The interaction model is
+   NOT fixed per session — if engagement shifts (casual → regulatory
+   hammer), re-offer.
+3. **Known-good thresholds — Option D: default-or-escalate with
+   fast-forward flags.** No input thresholds. Known-good is how the
+   conversation STARTS (2-4 light probes); escalation is event-driven
+   (collision, ambiguity, revealed complexity, user wanting more).
+   Fast-forward trigger words route straight to full discovery:
+   regulatory/audit/QMS/compliance, "we have a wiki/Confluence,"
+   "500 pages," "legacy," "enterprise," "team of N." Triggers are
+   heuristics, applied with judgment.
+4. **Experiment composition — confirmed.** Persistence test + silent
+   sections + hostile/disengaged/zero-budget/firing personas. Split
+   design (executor/persona allocation, parallel or serial) is under
+   discussion — see next session.
 
 ### Batch 5 — Quick confirms (already-resolved)
 
