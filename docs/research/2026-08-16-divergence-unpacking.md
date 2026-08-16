@@ -41,10 +41,10 @@ All items are classified by what a change targets:
 | B5: adoption failure not surfaced | divergence | SKILL.md rule | surface the adoption question | ✅ Batch 2 |
 | C2: expert-user sequence attack missing | divergence | SKILL.md rule | option-offering with consent | ✅ Batch 2 |
 | def3: no attribution check | defect + debrief | SKILL.md rule | root-cause digging on pain claims | ✅ Batch 2 |
-| def5: scale-aware phrasing | defect + debrief | Presentation | presentation rules | Pending batch 3 |
-| A4: schema-as-artifact | divergence | Presentation | presentation rules | Pending batch 3 |
-| B2: gut-first ordering | divergence | Presentation | presentation rules | Pending batch 3 |
-| debrief: trust killers (applause loop, recap deck, choreographed pushback) | debrief | Presentation | presentation rules | Pending batch 3 |
+| def5: scale-aware phrasing | defect + debrief | Presentation | presentation rules | ✅ Batch 3 |
+| A4: schema-as-artifact | divergence | Presentation | presentation rules (raw schema only if user asks) | ✅ Batch 3 |
+| B2: gut-first ordering | divergence | Presentation | presentation rules | ✅ Batch 3 |
+| debrief: trust killers (applause loop, recap deck, choreographed pushback) | debrief | Presentation | presentation rules + subtle pushback invite | ✅ Batch 3 |
 | top5-Q1: stop conditions | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
 | top5-Q3: mode detection signals | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
 | top5-Q4: known-good thresholds | review | Test gap / SKILL.md | A2 then SKILL.md | Pending batch 4 |
@@ -175,12 +175,30 @@ Seven items, all decided by the user. Key rulings:
    it is "let's check what the hires told you," not "are you sure it's
    the docs?"
 
-### Batch 3 — Presentation rules (SKILL.md)
+### Batch 3 — Presentation rules (resolved 2026-08-16)
 
-Five items: def5 (scale-aware phrasing), A4 (schema is the model,
-presentation scales down), B2 (gut-first ordering), debrief trust
-killers (no applause loop, no recap deck, no choreographed pushback),
-success criteria elicitation.
+Five items, all confirmed with one refinement:
+
+1. **Scale-aware phrasing — confirmed.** The intent stays constant;
+   the wording scales with the user's world. What reads canned at one
+   scale is a real question at another.
+2. **Schema-as-model — confirmed, unless the user asks for it.** The
+   contract schema is the working model; presentation scales down.
+   If the user explicitly wants the raw schema, show it.
+3. **Gut-first ordering — confirmed.** User's gut ordering first,
+   structure second. Tables become confirmation, not a form.
+4. **Trust killers — confirmed with refinement.** No applause-loop
+   callbacks, no recap-deck closings, no CHOREOGRAPHED pushback
+   (never assign the client a role in a drama: "now push back, you
+   know the auditor better than I do"). REFINEMENT: the skill SHOULD
+   invite pushback in a subtle, natural form — "let me know if we
+   need to change something," "does this plan look correct to you?"
+   The anti-pattern is the decreed permission-slip, not the gentle
+   invite.
+5. **Success criteria elicitation — confirmed.** Ask what being done
+   or successful would feel like; capture the user's words; never
+   translate into consultant language. Standard prompt: "what would
+   prove this worked for you?"
 
 ### Batch 4 — A2 test scope
 
