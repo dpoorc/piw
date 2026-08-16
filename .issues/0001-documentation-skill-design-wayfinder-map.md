@@ -6,7 +6,7 @@ priority: high
 labels:
     - wayfinder:map
 created: "2026-08-08"
-updated: "2026-08-14"
+updated: "2026-08-15"
 ---
 
 ## Destination
@@ -27,6 +27,23 @@ A production-ready `documentation` skill that defines universal principles for p
 - May become a standalone vendor skill project outside piw
 
 ## Decisions so far
+
+- [Prototype walkthroughs](docs/research/2026-08-15-prototype-walkthroughs.md) —
+  Resolved. 3 live role-play cases (Zara small greenfield, Marcus medium
+  brown-field, Dr. Rivera regulated) executed per the contracts against
+  naive-user personas. Known-good default seeded (v0.1), 13 divergences,
+  6 contract defects, debrief findings.
+
+- [Assumption review](docs/research/2026-08-15-assumption-review.md) —
+  Resolved. A1 accepted (personas ~60-70% coverage, v1 is an iteration);
+  A2/A7 deferred (more tests, timing open); A3 the skill is a wayfinder
+  not a lexicon (authority discovery, gist-with-caveat); A4 contracts
+  stay mutable; A5 known-good = light discovery + fallback shapes;
+  A6 fields left as-is; A8 divergence unpacking in progress; A9 skill
+  gains standalone harness-agnostic repo; A10 success criteria +
+  budget-approval probe added. Flow control vs file architecture
+  clarified: contracts describe WHAT/WHEN, never HOW the skill is
+  packaged.
 
 - [Research: Finding great documentation examples](.issues/0003-research-finding-great-documentation-exa.md) —
   Resolved. Found 15 excellent examples across 15 domains (Stripe, Rails,

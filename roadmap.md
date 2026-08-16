@@ -11,8 +11,15 @@
     versioning (8-level taxonomy), industry practices (5 industries),
     generic organization methods (IA, faceted, S1000D, FRBR, OAIS, DITA)
   - ✅ Structure discovery procedure skeleton designed (ticket #6 WIP)
-  - ✅ Stage contracts document written (Init + Discovery + Design, 604 lines)
-  - ✅ Exploration items 1-6 resolved (see ticket #6)
+  - ✅ Stage contracts document written (Init + Discovery + Design,
+    now 760+ lines after authority discovery + known-good route + success criteria)
+  - ✅ Prototype walkthroughs (3 live role-play cases) + review round
+    (see docs/research/2026-08-15-prototype-walkthroughs.md)
+  - ✅ Assumption review — A1-A10 rulings recorded
+    (see docs/research/2026-08-15-assumption-review.md)
+  - ⬜ A8: unpack the divergence log into concrete contract changes
+    (requirements basis for #7/#8)
+  - ⬜ Exploration items 1-6 resolved (see ticket #6)
   - ✅ Fix cross-stage verification table dependencies (9 gaps — see contracts doc)
   - ✅ Resolve taxonomy/cross_cutting boundary (eliminated cross_cutting section)
   - ✅ Fix lifecycle over-engineering (conditional state machine fields)

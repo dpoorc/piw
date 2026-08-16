@@ -19,6 +19,34 @@ What is the procedure to arrive at a good documentation structure for any projec
 
 ## Progress
 
+### Progress this session (2026-08-15)
+
+**Prototype walkthroughs + review round:**
+
+See [research/2026-08-15-prototype-walkthroughs.md](docs/research/2026-08-15-prototype-walkthroughs.md)
+
+- 3 live role-play cases executed per the contracts (Zara, Marcus, Rivera)
+- Known-good default seeded v0.1 (3-action shape + boundaries)
+- 13 divergences logged; 6 contract defects found + 4 more from review
+- Breadth analysis: 12 dead-field candidates, 8 untested-but-load-bearing
+- Docs/meta file pipeline never exercised — state machine unvalidated
+- Triggered the assumption review (below)
+
+**Assumption review applied (A3/A5/A10):**
+
+See [research/2026-08-15-assumption-review.md](docs/research/2026-08-15-assumption-review.md)
+
+- A3: Discovery gains authority discovery (governing docs, source text,
+  per-project distillation, gist-with-caveat), design output gains
+  governing_requirements
+- A5: known-good route runs light discovery (2-4 probes) + fallback
+  shapes by delivery medium; escalate on ambiguity
+- A10: success_criteria added to design output; budget probe extends to
+  budget-approval concern
+- Flow control (authority discovery in Discovery) independent from file
+  architecture (which module file houses logic — stays open)
+- Open: A8 unpacking of divergence log into concrete contract changes
+
 Procedure skeleton designed through grilling session (2026-08-09):
 
 - **Phase 0 — Triage:** 6 free-form questions (describe project, docs
