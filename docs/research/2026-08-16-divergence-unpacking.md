@@ -273,3 +273,35 @@ non-none; retrieval.search=false.
 Five items, all already settled by earlier rulings. A read-only
 confirmation pass. Treated as skippable — the traceability table marks
 them resolved.
+
+### Batch 5 — Decisions applied (2026-08-17)
+
+All five Run-1 gaps decided and applied to the contracts
+(commit ca22cb6):
+
+1. **Point-of-use distribution** → `lifecycle.distribution`
+   (none | tracked), generalized from the swap mechanics; +
+   verification mapping (print/physical → tracked). User pushed
+   back on specificity → reshaped to general form; swap/register
+   demoted to mechanism notes.
+2. **Activation precondition** → `lifecycle.activation_preconditions`
+   (none | evidence), generalized; training_recorded demoted to
+   example. The person-gate vs evidence-gate distinction named.
+3. **Honest-late / no backfill** → principle: records are
+   contemporaneous, never backfilled.
+4. **Combined review_cadence** → single enum → array.
+5. **Print/no-terminal floor** → delivery `template_governed`
+   extends to print/physical; principle: physical point-of-use is
+   first-class. Disambiguated triage-level distribution (channels)
+   vs lifecycle-level distribution (replica sync).
+
+### Batch B — Run 2 protocol findings (RESOLVED 2026-08-17)
+
+Applied (commit b24ec63): B5 verification-mechanism principle; B8
+entry_points + question-surface penetration (retrieval); B9(b)
+known-good state record (docs/meta/known-good.md); B6 in-session
+delivery default with deferral explicitly agent-discretion.
+
+Recorded as SKILL.md interaction rules (no schema change): B1 hostile
+tone ≠ stop, B2 one re-offer, B3 accept/save/exit, B4 zero-budget =
+constraint not stop. B7 dropped (n/a).
