@@ -194,6 +194,12 @@ in the user's story (contradictory facts, unstable answers) is also an
 escalation trigger: it signals the project may not fit the simple
 shape, even on an otherwise known-good route.
 
+**Known-good state record.** The known-good route writes one minimal
+state file, `docs/meta/known-good.md`: date, deliverable path, and the
+client's stated condition/test (resume-point + continuity). No triage
+pipeline — the record IS the state. Escalations to full discovery
+proceed as normal from there.
+
 **Prior history probe.** The skill asks what was tried before: previous
 attempts to organize or reorganize the documentation, and what
 happened. This operationalizes the Init fog example "has there been a
@@ -441,7 +447,16 @@ organization:
     interface:  # how users narrow results
       metadata_filtering: true | false  # filter by doc properties (date, author, status)
       authority_resolution: free | suggested | enforced  # entity name standardization in search/filter
+    entry_points:  # where users first arrive (A2 run 2, Tomás)
+      - "README, welcome page, or landing surface"
+      - "the question surface — where users ASK when they don't find
+        it (issue form, support ticket, chat). Place the pointer
+        there too: 'before you ask, check X'"
     note: "free-form on retrieval behavior, search limitations"
+    note2: "question-surface penetration: the question surface is where
+      a doc gap becomes visible. A pointer there both answers the ask
+      and feeds the doc — each question either reinforces it or
+      reveals a new gap."
   
   effectivity:  # which product versions/configurations docs apply to
     model: inline | separate | none
@@ -702,6 +717,12 @@ notes:
 - **Load-bearing check is mandatory.** Every design must assess
   whether the team can maintain it. High-churn content gets trimmed
   ruthlessly.
+- **The client's stated test is the artifact's verification
+  mechanism.** When the client states a condition, requirement, or
+  test, the artifact itself carries it — as a structural element
+  (a box, a step, a field), not a promise about future behavior.
+  Their exact objection becomes a literal check they can perform
+  (A2 run 2, Dan: the VERIFIED box).
 - **Effectivity is distinct from document versioning.** Document
   versioning tracks revision history of the document itself (Levels 0-7
   in the versioning research). Effectivity tracks which product version
@@ -845,6 +866,11 @@ Universal fog items (apply to all projects, may never resolve):
 - Delivery medium rendering details — `delivery` section captures
   structural constraints; rendering is downstream
 - Handover packaging model (structure across organizational boundaries)
+
+- **In-session delivery is the default.** The skill begins the work
+  in the same session as the agreement — seizing the moment of
+  commitment. Offering to defer is at the agent's/model's discretion,
+  not skill behavior (A2 run 2; the skill does not prescribe it).
 
 ## Universal overrides
 
