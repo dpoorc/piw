@@ -232,7 +232,7 @@ Five items, all confirmed with one refinement:
    design (executor/persona allocation, parallel or serial) is under
    discussion — see next session.
 
-### Batch 5 — Run 1 contract gaps (from A2 experiment, pending 2026-08-16)
+### Batch 5 — Run 1 contract gaps (RESOLVED 2026-08-17)
 
 Run 1 (persistence + silent sections, see handoff) surfaced five real
 contract gaps. Extracted from the Run 1 evidence; decision-ready for
