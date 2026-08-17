@@ -18,9 +18,17 @@
       ]
     },
     "fireworks": {
-      "baseUrl": "https://api.fireworks.ai/inference/",
+      "baseUrl": "https://api.fireworks.ai/inference",
       "api": "openai-completions",
       "apiKey": "$FIREWORKS_API_KEY",
+      "modelOverrides": {
+        "accounts/fireworks/models/deepseek-v4-flash": {
+          "contextWindow": 210000
+        },
+        "accounts/fireworks/models/deepseek-v4-flash-0731": {
+          "contextWindow": 210000
+        }
+      },
       "models": [
         {
           "id": "accounts/fireworks/models/deepseek-v4",
