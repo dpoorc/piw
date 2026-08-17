@@ -272,6 +272,9 @@ artifacts:
 constraints:
   regulatory: ["list of regulatory requirements that apply"]
   distribution: ["how docs must be delivered - web, PDF, paper, in-product"]
+  # triage-level distribution = delivery channels (constraints)
+  # lifecycle-level distribution (see lifecycle section) = replica
+  # sync at a physical point of use — different concern, same name
   versioning: ["how docs must be versioned - single, branch-per-version, snapshot, regulated"]
   effectivity:  # product/configuration scope of documentation
     needed: true | false
@@ -394,7 +397,7 @@ delivery:
       constraints:
         max_depth: none | 1 | 2 | 3 | 4 | 5
         hyperlinks: true | false
-        template_governed: true | false  # only relevant for regulated_submission
+        template_governed: true | false  # regulated_submission, and print/physical point-of-use (the printed artifact is the controlled document — same ID, same revision)
   note: "free-form on medium-specific constraints, navigation strategies per medium"
 
 # ── Organization ──
@@ -527,7 +530,9 @@ lifecycle:
   # event_driven = updates triggered by specific events (release, audit)
   # ad_hoc = updates happen when someone has time
   # none = no lifecycle management (not recommended)
-  review_cadence: quarterly | monthly | per_release | event_driven | none
+  review_cadence: [quarterly | monthly | per_release | event_driven | none]
+  # array — a project may combine (e.g., event_driven + annual)
+  # original single-value enum was too narrow; A2 run needed both
   accountability:
     model: named_owner | team_ownership | codeowners | distributed
     note: "how accountability is assigned and enforced"
@@ -568,6 +573,21 @@ lifecycle:
     note: "who logs what, retention requirements, tool support"
   expiry: "every page carries a review-by date | no expiry"
   supersession: "obsolete documents retain supersession links to their replacement"
+  distribution:
+    none | tracked
+    # none = no physical or replicated point of use
+    # tracked = replicas at known points of use are kept in sync with
+    # the canonical copy. Mechanism is project-defined: register +
+    # recorded swap on activate, reconciliation rounds, expiry stamps.
+    note: "physical point of use is first-class (A2 run 1). When set,
+           activate pairs with a recorded distribution task."
+  activation_preconditions:
+    none | evidence
+    # none = approval is sufficient, activate on effective date
+    # evidence = a recorded artifact must exist before activate
+    # (e.g., training records, sign-offs, inspection/test results) —
+    # a readiness gate distinct from person-gatekeepers.
+    note: "the gate is a fact, not a person. train-before-effective."
 
 # ── Load-bearing check ──
 # Can the team maintain this structure?
@@ -672,6 +692,13 @@ notes:
 - **Retirement never means deletion.** Obsolete documents retain
   supersession links to their replacement. Historical preservation
   is the default.
+- **Physical point-of-use is a first-class delivery mode.** When a
+  floor, line, or field has no terminal, the printed artifact at the
+  point of use is a controlled document — same ID, same revision as
+  the system copy, distributed by the same controlled mechanism.
+- **Records are contemporaneous.** A record of an event is made at
+  the moment of the event, never backfilled. A late but honest
+  record is worth more than a fake timely one.
 - **Load-bearing check is mandatory.** Every design must assess
   whether the team can maintain it. High-churn content gets trimmed
   ruthlessly.
@@ -726,6 +753,9 @@ notes:
 - Delivery medium rendering details — `delivery` section captures
   structural constraints; navigation UI, rendering, and layout are
   design or implementation concerns, not contract schema
+- Point-of-use distribution / replica sync — RESOLVED (A1):
+  `lifecycle.distribution` (none | tracked). Physical point-of-use
+  is first-class (A5 principle).
 - Handover packaging — how documentation structure changes when
   delivered across organizational boundaries
 
@@ -746,6 +776,9 @@ notes:
 | `budget.timeline` | Informs discovery scope (tight deadline = skip optional questions) | ✅ Direct |
 | `culture.priority` | Informs discovery depth (hostile culture → minimal recommendations) | ✅ Direct |
 | `volatility.pace` | Informs discovery focus (fast churn → emphasize modularity) | ✅ Direct |
+| `delivery.media contains print/physical` | Forces `lifecycle.distribution` = tracked (replica sync at point of use) | ✅ Direct — A1 mapping |
+| `delivery.media contains print/physical` | Forces `template_governed: true` on the physical artifact | ✅ Direct — A5 mapping |
+| `constraints.regulatory` | May force `lifecycle.activation_preconditions` = evidence (readiness gate) | ⚠️ Conditional — A2 mapping |
 
 **Flow control vs file architecture (resolved 2026-08-15).** Authority
 discovery runs inside the Discovery stage process (see process section).
