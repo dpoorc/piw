@@ -376,6 +376,7 @@ cmd_launch() {
     -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
     -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
     -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
+    -v "$SCRIPT_DIR/agents:/home/pi/.pi/agent/agents:z" \
     ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
     "${git_config_volumes[@]}" \
     "${variant_skill_volumes[@]}" \
