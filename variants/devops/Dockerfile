@@ -7,6 +7,9 @@
 # Dependencies: pi-harness:core must be built first.
 #   piw build core && piw build devops
 #   or: piw build --all
+# Build context is the repo root (build/archives provides the yq artifact);
+# piw handles this automatically:
+#   docker build -f variants/devops/Dockerfile -t pi-harness:devops .
 #
 FROM pi-harness:core
 
@@ -23,15 +26,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         yamllint \
     && rm -rf /var/lib/apt/lists/*
 
-# yq — YAML/JSON processor
+# yq — YAML/JSON processor (from build/archives)
+COPY build/archives/yq_linux_amd64.tar.gz /tmp/yq.tar.gz
 RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-        x86_64) yq_arch="amd64" ;; \
-        aarch64) yq_arch="arm64" ;; \
-        *) echo "Unsupported arch: $arch"; exit 1 ;; \
-    esac; \
-    curl -sSL "https://github.com/mikefarah/yq/releases/latest/download/yq_linux_${yq_arch}" \
-        -o /usr/local/bin/yq && chmod +x /usr/local/bin/yq
+    tar -xzf /tmp/yq.tar.gz -C /tmp; \
+    install -m755 /tmp/yq_linux_amd64 /usr/local/bin/yq; \
+    rm -f /tmp/yq.tar.gz /tmp/yq_linux_amd64 /tmp/yq.1 /tmp/install-man-page.sh
 
 CMD ["pi"]

@@ -1,21 +1,26 @@
 #!/usr/bin/env bash
 # piw — pi-harness: launch the pi coding agent in Docker
 #
+# Model:
+#   The Docker image is tooling + isolation only. pi lives in its own
+#   app mount (~/.pihub); extensions live in the config mount (.pi/agent/).
+#   Both update without image rebuilds. `piw update` is the one command
+#   that brings everything (repo, images, pi, extensions) current.
+#
 # Usage:
 #   piw                         Launch (default profile, current directory)
 #   piw <path>                  Launch with workspace
 #   piw -r, --resume            Launch with session picker
-#   piw build [profile]         Build variant + install packages (default: core)
-#   piw build --all             Build all variants + install packages
+#   piw build [profile]         Build tooling image + provision mount (default: core)
+#   piw build --all             Build all variants + provision mount
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
-#   piw install-packages        Install packages from extensions.txt
-#   piw install-packages --all  Install packages for all variants
-#   piw install-packages --force  Force reinstall (upgrade packages)
-#   piw install-packages --dry-run  Show what would be installed
-#   piw update                  Pull harness updates + rebuild + install
+#   piw build --offline         Build from build/archives only, no downloads
+#   piw update                  Pull + rebuild + upgrade pi + sync extensions
 #   piw update --all            Update all variants
-#   piw update --build-only     Pull + rebuild (skip package install)
-#   piw update --install-only   Pull + install packages (skip build)
+#   piw update --build-only     Pull + rebuild (skip pi/extensions)
+#   piw update --install-only   Pull + sync pi/extensions (skip build)
+#   piw update --force          Reinstall all extensions
+#   piw update --dry-run        Show what would change (no executions)
 #   piw doctor [profile]        Diagnose harness setup
 #   piw generate-catalog        Regenerate skills catalog from SKILL.md files
 #   piw --install [dir]         Install piw symlink into PATH
@@ -30,6 +35,7 @@
 #   See .env.example for the full list of supported variables.
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
+#   PI_PI_DIR       Override the pi app directory (default: .pi/app)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
 #   PIW_DEFAULT_PROFILE  Default variant profile (overrides "core")
 #
@@ -41,7 +47,19 @@ IMAGE_PREFIX="pi-harness"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
-  sed -n '2,34p' "$0" | sed 's/^# //; s/^#$//; s|^#||'
+  # Print the header comment block dynamically (lines from after the
+  # shebang up to the first non-comment line), so the help text can
+  # grow without renumbering a hardcoded range.
+  awk '
+    NR == 1 { next }
+    /^#/ {
+      line = $0
+      sub(/^# ?/, "", line)
+      print line
+      next
+    }
+    { exit }
+  ' "$0"
   exit 0
 }
 
@@ -120,15 +138,15 @@ bootstrap_config() {
   mkdir -p "$config_dir"
 
   # Seed models.json
-  if [[ ! -f "$config_dir/models.json" ]] && [[ -f "$SCRIPT_DIR/models.json" ]]; then
-    cp "$SCRIPT_DIR/models.json" "$config_dir/models.json"
+  if [[ ! -f "$config_dir/models.json" ]] && [[ -f "$SCRIPT_DIR/config-seeds/models.json" ]]; then
+    cp "$SCRIPT_DIR/config-seeds/models.json" "$config_dir/models.json"
     echo "INFO: Seeded $config_dir/models.json from harness defaults."
     echo "      Edit it there to tweak models or add providers."
   fi
 
   # Seed settings.json
-  if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/settings.json" ]]; then
-    cp "$SCRIPT_DIR/settings.json" "$config_dir/settings.json"
+  if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/config-seeds/settings.json" ]]; then
+    cp "$SCRIPT_DIR/config-seeds/settings.json" "$config_dir/settings.json"
     echo "INFO: Seeded $config_dir/settings.json from harness defaults."
   fi
 }
@@ -142,32 +160,305 @@ variant_names() {
   done
 }
 
+# ── Utility: archives required by a profile ─────────────────────────────────
+_profile_archives() {
+  case "$1" in
+  devops)
+    echo "yq_linux_amd64.tar.gz"
+    ;;
+  workstation)
+    cat <<'EOF'
+go1.27.1.linux-amd64.tar.gz
+rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz
+rust-1.98.1-x86_64-unknown-linux-musl.tar.xz
+rizin-v0.9.1-static-x86_64.tar.xz
+yq_linux_amd64.tar.gz
+yadm-3.5.0
+tofu_1.12.6_linux_amd64.tar.gz
+packer_1.16.0_linux_amd64.zip
+hadolint-linux-x86_64
+tflint_linux_amd64.zip
+uv-x86_64-unknown-linux-gnu.tar.gz
+EOF
+    ;;
+  esac
+}
+
+# ── Utility: per-archive download URL (mirrors build/README.md) ─────────────
+_archive_url() {
+  case "$1" in
+  go1.27.1.linux-amd64.tar.gz) echo "https://go.dev/dl/$1" ;;
+  rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz) echo "https://static.rust-lang.org/dist/$1" ;;
+  rizin-v0.9.1-static-x86_64.tar.xz) echo "https://github.com/rizinorg/rizin/releases/download/v0.9.1/$1" ;;
+  yq_linux_amd64.tar.gz) echo "https://github.com/mikefarah/yq/releases/latest/download/$1" ;;
+  yadm-3.5.0) echo "https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm" ;;
+  tofu_1.12.6_linux_amd64.tar.gz) echo "https://github.com/opentofu/opentofu/releases/download/v1.12.6/$1" ;;
+  packer_1.16.0_linux_amd64.zip) echo "https://releases.hashicorp.com/packer/1.16.0/$1" ;;
+  hadolint-linux-x86_64) echo "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" ;;
+  tflint_linux_amd64.zip) echo "https://github.com/terraform-linters/tflint/releases/latest/download/$1" ;;
+  uv-x86_64-unknown-linux-gnu.tar.gz) echo "https://github.com/astral-sh/uv/releases/download/0.12.13/$1" ;;
+  esac
+}
+
+# ── Utility: ensure required archives exist before an image build ───────────
+ensure_archives() {
+  local profile="$1"
+  local offline="${2:-false}"
+  local archive_dir="$SCRIPT_DIR/build/archives"
+
+  # Archives are published for amd64; refuse to build elsewhere rather than
+  # ship a silent runtime breakage (image says amd64, binaries are not).
+  # See build/README.md for the manual aarch64 archive swap.
+  if [[ "$(uname -m)" != "x86_64" ]]; then
+    echo "ERROR: build/archives are amd64-only; this host is $(uname -m)." >&2
+    echo "  See build/README.md for how to swap in aarch64 archives manually." >&2
+    exit 1
+  fi
+  local -a missing=()
+  local file
+
+  mkdir -p "$archive_dir"
+  for file in $(_profile_archives "$profile"); do
+    [[ -f "$archive_dir/$file" ]] || missing+=("$file")
+  done
+
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "WARNING: Missing archives for profile '$profile':" >&2
+  if [[ "$offline" == "true" ]]; then
+    for file in "${missing[@]}"; do
+      echo "  - $file" >&2
+    done
+    echo "Fetch them manually. Source URLs are in build/README.md." >&2
+    exit 1
+  fi
+
+  for file in "${missing[@]}"; do
+    local url
+    url="$(_archive_url "$file")"
+    echo "  Downloading $file…" >&2
+    if ! curl -fsSL --create-dirs -o "$archive_dir/$file" "$url"; then
+      echo "ERROR: Could not download $file from $url" >&2
+      echo "  Fetch it manually and place it in $archive_dir." >&2
+      exit 1
+    fi
+  done
+}
+
 # ── Utility: ensure Docker image exists for a profile ────────────────────────
 ensure_image() {
   local profile="$1"
+  local dry_run="${2:-false}"
   local image_tag="${IMAGE_PREFIX}:${profile}"
   if ! docker image inspect "$image_tag" &>/dev/null; then
+    if [[ "$dry_run" == "true" ]]; then
+      echo "INFO: (dry-run) Image '$image_tag' is missing — would build."
+      return 0
+    fi
     echo "INFO: Image '$image_tag' not found. Building…"
-    docker build -t "$image_tag" "$SCRIPT_DIR/variants/$profile"
+    ensure_archives "$profile"
+    docker build -f "$SCRIPT_DIR/variants/$profile/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
   fi
 }
 
-# ── Utility: install packages for a profile ──────────────────────────────────
-install_packages_for() {
+# ── Utility: pi app dir (host side) ─────────────────────────────────────────
+PI_MOUNT_PREFIX="/opt/pi"
+PI_NPM_PKG="@earendil-works/pi-coding-agent"
+
+resolve_pi_host_dir() {
+  # Mirror resolve_config_dir: an absolute PI_PI_DIR wins; otherwise the
+  # harness owns everything under its own .pi/ (state: .pi/agent, app: .pi/app).
+  if [[ "${PI_PI_DIR:-}" = /* ]]; then
+    echo "$PI_PI_DIR"
+  else
+    echo "$SCRIPT_DIR/${PI_PI_DIR:-.pi/app}"
+  fi
+}
+
+# ── Utility: installed pi version (host-side read from the app dir) ─────────
+_pi_installed_version() {
+  local pi_host="$1"
+  local pkg_json="$pi_host/node_modules/@earendil-works/pi-coding-agent/package.json"
+  if [[ ! -f "$pkg_json" ]]; then
+    echo ""
+    return
+  fi
+  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg_json" | head -1
+}
+
+# ── Utility: latest version from npm (host npm, else container npm) ──────────
+_npm_latest_version() {
+  local spec="$1"
+  if command -v npm &>/dev/null 2>&1; then
+    npm view "$spec" version 2>/dev/null | tail -1 || true
+  else
+    docker run --rm \
+      --user "$(id -u):$(id -g)" \
+      -e HOME=/home/pi \
+      -e npm_config_cache=/tmp/.npm-cache \
+      "${IMAGE_PREFIX}:core" \
+      npm view "$spec" version 2>/dev/null | tail -1 || true
+  fi
+}
+
+# ── Utility: ensure pi is present in the config mount ────────────────────────
+# mode: require  — install if missing; never touch an installed copy
+#       upgrade  — bring to latest when npm is reachable, keep otherwise
+ensure_pi() {
+  local profile="$1"
+  local mode="${2:-require}"
+  local dry_run="${3:-false}"
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local installed latest pi_host
+
+  ensure_image "$profile" "$dry_run"
+
+  pi_host="$(resolve_pi_host_dir)"
+  mkdir -p "$pi_host"
+
+  installed="$(_pi_installed_version "$pi_host")"
+  latest="$(_npm_latest_version "$PI_NPM_PKG")"
+
+  if [[ -n "$installed" && -z "$latest" ]]; then
+    echo "INFO: pi $installed present (offline — cannot check npm)."
+    return 0
+  fi
+  if [[ "$mode" == "require" && -n "$installed" && ( -z "$latest" || "$installed" == "$latest" ) ]]; then
+    echo "INFO: pi $installed present (latest: ${latest:-unknown})."
+    return 0
+  fi
+  if [[ "$mode" == "upgrade" && -n "$installed" && "$installed" == "$latest" ]]; then
+    echo "INFO: pi $installed is current."
+    return 0
+  fi
+  if [[ -z "$installed" && -z "$latest" ]]; then
+    echo "ERROR: pi is not installed and npm is unreachable (offline?)." >&2
+    echo "  Run 'piw update' with network access to install pi." >&2
+    exit 1
+  fi
+  # enforce the guard: this branch requires pi to EXIST (require mode never
+  # upgrades, but a missing pi must fall through to the install path below)
+  if [[ -n "$installed" && -n "$latest" && "$installed" != "$latest" && "$mode" == "require" ]]; then
+    echo "INFO: pi $installed present — update available ($latest); run 'piw update'."
+    return 0
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "(dry-run) Would install pi ${latest:-latest} (was: ${installed:-none})."
+    return 0
+  fi
+
+  echo "INFO: Installing pi ${latest:-latest} (was: ${installed:-none}) into app mount…"
+  if ! docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/pi \
+    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+    -e npm_config_cache=/tmp/.npm-cache \
+    -e npm_config_ignore_scripts=true \
+    -v "$config_dir:/home/pi/.pi/agent:z" \
+    -v "$pi_host:/opt/pi:z" \
+    "$image_tag" \
+    sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@${latest:-latest}'"; then
+    echo "ERROR: npm install of pi failed (see output above)." >&2
+    exit 1
+  fi
+
+  # Verify the installed CLI actually runs from the mount
+  if ! docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/pi \
+    -v "$pi_host:/opt/pi:z" \
+    "$image_tag" \
+    /opt/pi/node_modules/.bin/pi --version; then
+    echo "ERROR: installed pi does not run from /opt/pi (broken mount or install)." >&2
+    exit 1
+  fi
+}
+
+# ── Utility: mount directory for an extension source ─────────────────────────
+#   npm:<name>        → $config_dir/npm/node_modules/<name>
+#   git:<host>/<path> → $config_dir/git/<host>/<path> (@tag suffix stripped)
+_pkg_mount_dir() {
+  local config_dir="$1"
+  local pkg="$2"
+  case "$pkg" in
+  npm:*) echo "$config_dir/npm/node_modules/${pkg#npm:}" ;;
+  git:*)
+    local path="${pkg#git:}"
+    path="${path#https://}"
+    path="${path#git@}"
+    path="${path%%@*}"
+    path="${path//:/}"
+    echo "$config_dir/git/$path"
+    ;;
+  *) echo "" ;;
+  esac
+}
+
+# ── Utility: installed extension version (host-side read; git: → "") ────────
+_pkg_installed_version() {
+  local dir="$1"
+  local pkg_json="$dir/package.json"
+  if [[ ! -f "$pkg_json" ]]; then
+    echo ""
+    return
+  fi
+  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg_json" | head -1
+}
+
+# ── Utility: install one extension via pi install (throwaway container) ──────
+_pi_install_one() {
+  local image_tag="$1"
+  local config_dir="$2"
+  local pkg="$3"
+  local pi_host
+  pi_host="$(resolve_pi_host_dir)"
+
+  # Deterministic preflight: the mounted CLI must exist before we spawn a
+  # container that would otherwise fail with an opaque exec error.
+  if [[ ! -x "$pi_host/node_modules/.bin/pi" ]]; then
+    echo "ERROR: pi is not installed in the app mount ($pi_host)." >&2
+    echo "  Run 'piw update' or 'piw build' first (ensure_pi installs it)." >&2
+    return 1
+  fi
+
+  # Invoke via absolute path — never depends on PATH resolution inside the
+  # container (the /opt/pi node_modules/.bin entry would be found only
+  # when the mount is populated, which the preflight just guaranteed).
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/pi \
+    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+    -v "$config_dir:/home/pi/.pi/agent:z" \
+    -v "$pi_host:/opt/pi:z" \
+    -e npm_config_cache=/tmp/.npm-cache \
+    -e npm_config_ignore_scripts=true \
+    "$image_tag" \
+    /opt/pi/node_modules/.bin/pi install "$pkg"
+}
+
+# ── Utility: sync extensions from extensions.txt into the config mount ──────
+# force=false — install missing, upgrade outdated npm extensions
+# force=true  — reinstall every listed extension
+sync_extensions_for() {
   local profile="$1"
   local force="${2:-false}"
   local dry_run="${3:-false}"
-  local packages_file="$SCRIPT_DIR/extensions.txt"
+  local packages_file="$SCRIPT_DIR/config-seeds/extensions.txt"
   local config_dir
   config_dir="$(resolve_config_dir)"
 
   if [[ ! -f "$packages_file" ]]; then
-    echo "INFO: No extensions.txt found. Nothing to install."
+    echo "INFO: No extensions.txt found. Nothing to sync."
     return
   fi
 
-  # Read packages, skip blank lines and comments
-  local packages=()
+  # Read extensions, skip blank lines and comments
+  local -a packages=()
   while IFS= read -r line; do
     line="${line/#"${line%%[![:space:]]*}"/}"
     line="${line/%"${line##*[![:space:]]}"/}"
@@ -177,92 +468,85 @@ install_packages_for() {
   done <"$packages_file"
 
   if [[ ${#packages[@]} -eq 0 ]]; then
-    echo "INFO: No packages listed in extensions.txt."
+    echo "INFO: No extensions listed in extensions.txt."
     return
   fi
 
-  local settings_file="$config_dir/settings.json"
-
-  # Helper: check if a package is installed in settings.json
-  _pkg_installed() {
-    local pkg="$1"
-    [[ ! -f "$settings_file" ]] && return 1
-    if command -v jq &>/dev/null; then
-      jq -e --arg p "$pkg" '.packages // [] | index($p) | . != null' "$settings_file" &>/dev/null
-    else
-      grep -qF "$pkg" "$settings_file" 2>/dev/null
-    fi
-  }
-
-  # Dry-run: show what would happen without executing
-  if [[ "$dry_run" == "true" ]]; then
-    echo "Would install packages for pi-harness:$profile from extensions.txt:"
-    for pkg in "${packages[@]}"; do
-      if [[ "$force" == "true" ]]; then
-        echo "  → $pkg"
-      elif _pkg_installed "$pkg"; then
-        echo "  ✓ $pkg (already installed)"
-      else
-        echo "  → $pkg"
-      fi
-    done
-    local cmd="piw install-packages${force:+ --force}"
-    echo ""
-    echo "Run '$cmd' to execute."
-    return
-  fi
-
-  # Ensure image exists
-  ensure_image "$profile"
+  ensure_image "$profile" "$dry_run"
+  ensure_pi "$profile" require "$dry_run"
 
   local image_tag="${IMAGE_PREFIX}:${profile}"
-  local exit_code=0
-  local installed=0 skipped=0 failed=0
+  local exit_code=0 installed=0 upgraded=0 skipped=0 failed=0
 
-  echo "Installing packages for pi-harness:$profile…"
-
-  # Nuke npm cache on --force to ensure fresh downloads
-  if [[ "$force" == "true" ]]; then
-    echo "  Clearing npm cache…"
-    docker run --rm \
-      --user "$(id -u):$(id -g)" \
-      -e HOME=/home/pi \
-      -e npm_config_cache=/tmp/.npm-cache \
-      "$image_tag" \
-      npm cache clean --force || true
-  fi
+  echo "Syncing extensions for pi-harness:$profile…"
 
   for pkg in "${packages[@]}"; do
-    # Skip if already installed, unless --force is given
-    if [[ "$force" != "true" ]] && _pkg_installed "$pkg"; then
-      echo "  ✓ $pkg (already installed)"
-      ((skipped+=1))
-      continue
+    local dir ver latest verb
+    dir="$(_pkg_mount_dir "$config_dir" "$pkg")"
+
+    if [[ "$force" == "true" ]]; then
+      verb="reinstall"
+    elif [[ "$pkg" == npm:* ]]; then
+      ver="$(_pkg_installed_version "$dir")"
+      latest="$(_npm_latest_version "${pkg#npm:}")"  # strip pi's npm: URI scheme
+      if [[ -z "$ver" ]]; then
+        verb="install"
+      elif [[ -n "$latest" && "$ver" != "$latest" ]]; then
+        verb="upgrade ($ver → $latest)"
+      else
+        verb="current ($ver)"
+      fi
+    elif [[ -d "$dir" ]]; then
+      verb="present (git)"
+    else
+      verb="install"
     fi
 
-    printf "  Installing %s… " "$pkg"
-    if docker run --rm \
-      --user "$(id -u):$(id -g)" \
-      -e HOME=/home/pi \
-      -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-      -v "$config_dir:/home/pi/.pi/agent:z" \
-      -e npm_config_cache=/tmp/.npm-cache \
-      -e npm_config_ignore_scripts=true \
-      "$image_tag" \
-      pi install "$pkg"; then
-      echo "done"
-      ((installed+=1))
-    else
-      echo "failed" >&2
-      ((failed+=1))
-      exit_code=1
-    fi
+    case "$verb" in
+    current*|present*)
+      echo "  ✓ $pkg ($verb)"
+      ((skipped+=1))
+      ;;
+    install)
+      if [[ "$dry_run" == "true" ]]; then
+        echo "  → $pkg (would install)"
+        ((installed+=1))
+        continue
+      fi
+      printf "  Installing %s… " "$pkg"
+      if _pi_install_one "$image_tag" "$config_dir" "$pkg"; then
+        echo "done"
+        ((installed+=1))
+      else
+        echo "failed" >&2
+        ((failed+=1))
+        exit_code=1
+      fi
+      ;;
+    *)
+      # upgrade/ reinstall buckets
+      if [[ "$dry_run" == "true" ]]; then
+        echo "  → $pkg ($verb — would run)"
+        ((upgraded+=1))
+        continue
+      fi
+      printf "  %s %s… " "$( [[ "$verb" == "reinstall" ]] && echo Reinstalling || echo Upgrading)" "$pkg"
+      if _pi_install_one "$image_tag" "$config_dir" "$pkg"; then
+        echo "done"
+        ((upgraded+=1))
+      else
+        echo "failed" >&2
+        ((failed+=1))
+        exit_code=1
+      fi
+      ;;
+    esac
   done
 
   echo ""
-  echo "  Summary: $installed installed, $skipped skipped, $failed failed"
+  echo "  Summary: $installed installed, $upgraded upgraded, $skipped current, $failed failed"
   if [[ "$exit_code" -ne 0 ]]; then
-    echo "WARNING: One or more packages failed to install." >&2
+    echo "WARNING: One or more extensions failed to sync." >&2
   fi
   return "$exit_code"
 }
@@ -300,7 +584,22 @@ cmd_launch() {
   # Build image if missing
   if ! docker image inspect "$image_tag" &>/dev/null; then
     echo "INFO: Image '$image_tag' not found. Building…"
-    docker build -t "$image_tag" "$variant_dir"
+    ensure_archives "$profile"
+    docker build -f "$variant_dir/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
+  fi
+
+  # pi itself lives in the config mount — ensure it before launching
+  ensure_pi "$profile" require
+
+  # Cheap pre-exec guard: a corrupted/empty app mount that still passes the
+  # version read would otherwise die inside the container with an opaque
+  # exec error. Fail here with an actionable message instead.
+  local pi_host
+  pi_host="$(resolve_pi_host_dir)"
+  if [[ ! -x "$pi_host/node_modules/.bin/pi" ]]; then
+    echo "ERROR: pi CLI missing in app mount ($pi_host)." >&2
+    echo "  Run 'piw update' (or delete .pi/app and retry) to repair." >&2
+    exit 1
   fi
 
   # Build Docker env-var flags from known API keys
@@ -343,6 +642,12 @@ cmd_launch() {
   local -a variant_skill_volumes=()
   [[ -f "$variant_skill" ]] && variant_skill_volumes+=(-v "$variant_skill:/home/pi/.pi/agent/skills/variant/SKILL.md:z,ro")
 
+  # Pi app mount (ensure_pi created it moments ago; guard anyway)
+  local pi_host
+  pi_host="$(resolve_pi_host_dir)"
+  local -a pi_volumes=()
+  [[ -d "$pi_host" ]] && pi_volumes+=(-v "$pi_host:/opt/pi:z")
+
   local pi_args=()
   [[ "$resume" == "true" ]] && pi_args+=(-r)
   local session_flag=""
@@ -380,6 +685,7 @@ cmd_launch() {
     ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
     "${git_config_volumes[@]}" \
     "${variant_skill_volumes[@]}" \
+    "${pi_volumes[@]}" \
     -v "$workspace:$workspace:z${mode_vol_suffix}" \
     -w "$workspace" \
     "$image_tag" \
@@ -390,55 +696,50 @@ cmd_launch() {
 _build_single() {
   local profile="$1"
   local no_cache="$2"
+  local offline="$3"
   local variant_dir="$SCRIPT_DIR/variants/$profile"
   local image_tag="${IMAGE_PREFIX}:${profile}"
 
   validate_profile "$profile"
+  ensure_archives "$profile" "$offline"
 
-  local build_args=("$variant_dir")
+  local -a build_args=(-f "$variant_dir/Dockerfile" -t "$image_tag" "$SCRIPT_DIR")
   if [[ "$no_cache" == "true" ]]; then
     build_args=("--no-cache" "${build_args[@]}")
   fi
 
   echo "INFO: Building pi-harness:$profile…"
-  docker build -t "$image_tag" "${build_args[@]}"
+  docker build "${build_args[@]}"
   echo "INFO: Build complete: $image_tag"
 }
 
-# ── Command: build a variant image + install packages ────────────────────────
+# ── Command: build variant images + provision the config mount ───────────────
 cmd_build() {
   local profile="$1"
   local no_cache="${2:-false}"
   local do_all="${3:-false}"
+  local offline="${4:-false}"
 
+  local -a targets=()
   if [[ "$do_all" == "true" ]]; then
-    for p in $(variant_names); do
-      echo "--- $p ---"
-      _build_single "$p" "$no_cache"
-      install_packages_for "$p"
-    done
+    mapfile -t targets < <(variant_names)
   else
-    _build_single "$profile" "$no_cache"
-    install_packages_for "$profile"
+    targets=("$profile")
   fi
+
+  for p in "${targets[@]}"; do
+    echo "--- $p ---"
+    _build_single "$p" "$no_cache" "$offline"
+  done
+
+  # pi is mount-level: provision once, then sync extensions per variant
+  ensure_pi "${targets[0]}" require
+  for p in "${targets[@]}"; do
+    echo "--- $p ---"
+    sync_extensions_for "$p"
+  done
+
   cmd_generate_catalog  # refresh catalog, skills may have changed
-}
-
-# ── Command: install packages from extensions.txt ────────────────────────────
-cmd_install_packages() {
-  local profile="$1"
-  local do_all="${2:-false}"
-  local force="${3:-false}"
-  local dry_run="${4:-false}"
-
-  if [[ "$do_all" == "true" ]]; then
-    for p in $(variant_names); do
-      echo "--- $p ---"
-      install_packages_for "$p" "$force" "$dry_run"
-    done
-  else
-    install_packages_for "$profile" "$force" "$dry_run"
-  fi
 }
 
 # ── Command: install piw symlink into PATH ────────────────────────────────────
@@ -608,44 +909,81 @@ cmd_doctor() {
   [[ -d "$SCRIPT_DIR/skills/system" ]] && echo "  ✓ skills/system directory" || echo "  ⚠ skills/system not found (optional)"
   [[ -d "$SCRIPT_DIR/extensions" ]] && echo "  ✓ Extensions directory" || echo "  ⚠ Extensions directory not found"
 
-  # ── Packages ──
-  echo "── Packages ──"
-  if [[ -f "$SCRIPT_DIR/extensions.txt" ]]; then
-    echo "  ✓ extensions.txt found"
-    if [[ -f "$config_dir/settings.json" ]]; then
-      local total=0 installed=0
-      while IFS= read -r line; do
-        line="${line/#"${line%%[![:space:]]*}"/}"
-        line="${line/%"${line##*[![:space:]]}"/}"
-        [[ -z "$line" ]] && continue
-        [[ "$line" == \#* ]] && continue
-        total=$((total + 1))
-        if grep -qF "$line" "$config_dir/settings.json" 2>/dev/null; then
-          installed=$((installed + 1))
-        fi
-      done <"$SCRIPT_DIR/extensions.txt"
-      echo "  Packages: $installed/$total installed"
-      if [[ $installed -lt $total ]]; then
-        echo "  ⚠ Run 'piw install-packages' to install missing packages"
-      fi
+  # ── Pi (app mount) ──
+  echo "── Pi (app mount .pi/app) ──"
+  local pi_installed pi_latest
+  pi_installed="$(_pi_installed_version "$(resolve_pi_host_dir)")"
+  pi_latest="$(_npm_latest_version "$PI_NPM_PKG")"
+  if [[ -n "$pi_installed" ]]; then
+    echo "  ✓ pi installed: $pi_installed"
+    if [[ -n "$pi_latest" && "$pi_installed" != "$pi_latest" ]]; then
+      echo "  ⚠ Update available: $pi_latest (run 'piw update')"
+      ((errors+=1))
+    elif [[ -n "$pi_latest" ]]; then
+      echo "  ✓ Latest version: $pi_latest"
     else
-      echo "  ⚠ Cannot check package status (settings.json not seeded yet)"
+      echo "  ⚠ Cannot check latest version (npm unreachable?)"
+    fi
+  else
+    echo "  ✗ pi not installed in app mount (launch piw or run 'piw update')"
+    ((errors+=1))
+  fi
+
+  # ── Extensions (config-seeds manifest vs config mount) ──
+  echo "── Extensions ──"
+  if [[ -f "$SCRIPT_DIR/config-seeds/extensions.txt" ]]; then
+    echo "  ✓ config-seeds/extensions.txt found"
+    local checked=0 missing=0 outdated=0
+    while IFS= read -r line; do
+      line="${line/#"${line%%[![:space:]]*}"/}"
+      line="${line/%"${line##*[![:space:]]}"/}"
+      [[ -z "$line" ]] && continue
+      [[ "$line" == \#* ]] && continue
+      checked=$((checked + 1))
+      local edir ever elate
+      edir="$(_pkg_mount_dir "$config_dir" "$line")"
+      if [[ "$line" == npm:* ]]; then
+        ever="$(_pkg_installed_version "$edir")"
+        if [[ -z "$ever" ]]; then
+          echo "  ✗ $line (missing — run 'piw update')"
+          ((missing+=1))
+        else
+          elate="$(_npm_latest_version "${line#npm:}")"  # strip pi's npm: URI scheme
+          if [[ -n "$elate" && "$ever" != "$elate" ]]; then
+            echo "  ⚠ $line $ever → $elate (run 'piw update')"
+            ((outdated+=1))
+          else
+            echo "  ✓ $line $ever"
+          fi
+        fi
+      elif [[ -z "$edir" || ! -d "$edir" ]]; then
+        echo "  ✗ $line (missing — run 'piw update')"
+        ((missing+=1))
+      else
+        echo "  ✓ $line (git)"
+      fi
+    done <"$SCRIPT_DIR/config-seeds/extensions.txt"
+    echo "  Extensions: $((checked - missing))/$checked current, $outdated outdated"
+    if [[ "$missing" -gt 0 || "$outdated" -gt 0 ]]; then
+      echo "  ⚠ Run 'piw update' to sync extensions"
     fi
   else
     echo "  ⚠ No extensions.txt found"
   fi
 
-  # ── rtk ──
-  echo "── rtk ──"
-  local image_tag="${IMAGE_PREFIX}:${profile}"
-  if docker image inspect "$image_tag" &>/dev/null 2>&1; then
-    if rtk_version=$(docker run --rm "$image_tag" rtk --version 2>/dev/null); then
-      echo "  ✓ $rtk_version"
+  # ── Build archives ──
+  echo "── Build archives ──"
+  local missing_archives=0
+  for file in $(_profile_archives "$profile"); do
+    if [[ -f "$SCRIPT_DIR/build/archives/$file" ]]; then
+      echo "  ✓ $file"
     else
-      echo "  ⚠ rtk binary not found (rebuild image with 'piw build $profile')"
+      echo "  ✗ $file (missing — fetch manually, see build/README.md)"
+      ((missing_archives+=1))
     fi
-  else
-    echo "  ⚠ Cannot check rtk (image not built yet)"
+  done
+  if [[ "$missing_archives" -eq 0 ]]; then
+    echo "  ✓ All build archives present for $profile"
   fi
 
   # ── Skills catalog freshness ──
@@ -703,33 +1041,33 @@ cmd_generate_catalog() {
   bash "$script"
 }
 
-# ── Command: update harness and rebuild ───────────────────────────────────────
+# ── Command: update harness, images, pi, and extensions ──────────────────────
 cmd_update() {
   local profile="$1"
   local no_cache="${2:-false}"
   local do_all="${3:-false}"
   local build_only="${4:-false}"
   local install_only="${5:-false}"
+  local offline="${6:-false}"
+  local dry_run="${7:-false}"
+  local force="${8:-false}"
 
-  # Auto-stash local changes before pull
-  local stashed=false
-  if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
-    if ! git -C "$SCRIPT_DIR" diff --quiet 2>/dev/null; then
-      echo "INFO: Stashing local changes…"
-      git -C "$SCRIPT_DIR" stash push -m "piw update auto-stash" 2>/dev/null || true
-      stashed=true
-    fi
-
-    echo "INFO: Pulling harness updates from git…"
-    if ! git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
-      echo "ERROR: Git pull failed. Resolve conflicts and try again." >&2
-      if [[ "$stashed" == "true" ]]; then
-        git -C "$SCRIPT_DIR" stash pop 2>/dev/null || true
+  # 1) Pull harness updates (ff-only; never stash). Fail → abort.
+  if [[ "$dry_run" != "true" ]]; then
+    if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
+      echo "INFO: Pulling harness updates from git…"
+      if ! git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
+        echo "ERROR: Git pull failed." >&2
+        echo "  Local changes overlap incoming updates, or the remote diverged." >&2
+        echo "  Commit or unshelve locally, run 'git pull --ff-only' manually," >&2
+        echo "  then retry." >&2
+        return 1
       fi
-      return 1
+    else
+      echo "INFO: No git remote configured. Skipping pull."
     fi
   else
-    echo "INFO: No git remote configured. Skipping pull."
+    echo "INFO: (dry-run) Skipping git pull."
   fi
 
   # Determine target variant(s)
@@ -740,25 +1078,34 @@ cmd_update() {
     targets=("$profile")
   fi
 
-  for p in "${targets[@]}"; do
-    echo "--- $p ---"
-    if [[ "$install_only" != "true" ]]; then
-      _build_single "$p" "$no_cache"
-    fi
-    if [[ "$build_only" != "true" ]]; then
-      install_packages_for "$p"
-    fi
-  done
+  # 2) Rebuild images
+  if [[ "$install_only" != "true" ]]; then
+    for p in "${targets[@]}"; do
+      echo "--- $p ---"
+      if [[ "$dry_run" == "true" ]]; then
+        echo "(dry-run) Would rebuild pi-harness:$p"
+        continue
+      fi
+      _build_single "$p" "$no_cache" "$offline"
+    done
+  fi
 
-  # Restore stashed changes
-  if [[ "$stashed" == "true" ]]; then
-    echo "INFO: Restoring stashed changes…"
-    git -C "$SCRIPT_DIR" stash pop 2>/dev/null || echo "WARNING: Could not auto-pop stash. Check 'git stash list'."
+  # 3) Mount-level maintenance: pi (upgrade) + extensions (sync)
+  if [[ "$build_only" != "true" ]]; then
+    ensure_pi "${targets[0]}" upgrade "$dry_run"
+    for p in "${targets[@]}"; do
+      echo "--- $p ---"
+      sync_extensions_for "$p" "$force" "$dry_run"
+    done
   fi
 
   echo ""
-  cmd_generate_catalog  # refresh catalog after git pull may have changed skills
-  echo "✓ Update complete. Run 'piw' to launch."
+  if [[ "$dry_run" == "true" ]]; then
+    echo "✓ (dry-run) Nothing executed. Run without --dry-run to apply."
+  else
+    cmd_generate_catalog  # refresh catalog after git pull may have changed skills
+    echo "✓ Update complete. Run 'piw' to launch."
+  fi
 }
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -773,6 +1120,7 @@ FORCE="false"
 DRY_RUN="false"
 BUILD_ONLY="false"
 INSTALL_ONLY="false"
+OFFLINE="false"
 MODE="${PIW_MODE:-permissive}"
 POSITIONAL=()
 
@@ -788,6 +1136,10 @@ while [[ $# -gt 0 ]]; do
     ;;
   --no-cache)
     NO_CACHE="true"
+    shift
+    ;;
+  --offline)
+    OFFLINE="true"
     shift
     ;;
   -r | --resume)
@@ -833,7 +1185,7 @@ while [[ $# -gt 0 ]]; do
   --help | -h)
     show_help
     ;;
-  build | update | install-packages | install | uninstall | doctor | generate-catalog)
+  build | update | install | uninstall | doctor | generate-catalog)
     COMMAND="$1"
     shift
     ;;
@@ -857,13 +1209,10 @@ fi
 
 case "$COMMAND" in
 build)
-  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL"
+  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$OFFLINE"
   ;;
 update)
-  cmd_update "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY"
-  ;;
-install-packages)
-  cmd_install_packages "${POSITIONAL[0]:-$PROFILE}" "$DO_ALL" "$FORCE" "$DRY_RUN"
+  cmd_update "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY" "$OFFLINE" "$DRY_RUN" "$FORCE"
   ;;
 install)
   cmd_install "${POSITIONAL[0]:-}"

@@ -26,9 +26,12 @@ noisy.
 | Use case | Value | Retention need |
 |----------|-------|---------------|
 | Session resume (`piw -r`) | Resume in-progress work | Active sessions only |
-| `rtk discover` / `rtk gain --history` | Token optimization analytics | Recent sessions (7-30 days) |
 | Post-hoc reference | Check what happened in an earlier session | Until task is complete |
 | Audit trail | Know what the agent did | Project lifetime |
+
+The `rtk discover` / `rtk gain --history` analytics row was removed on
+2026-09-11; rtk was stripped from the harness (its analytics only ever
+scanned Claude Code sessions, never pi sessions).
 
 ## Proposals
 

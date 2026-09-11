@@ -39,7 +39,7 @@ Minimal GitHub Actions:
 - Build both variants (core, devops)
 - Run `piw doctor --profile <name>` on each
 - Validate JSON configs parse
-- Check that extensions.txt packages install without error
+- Check that config-seeds/extensions.txt packages install without error
 
 Even basic CI signals the project is maintained.
 

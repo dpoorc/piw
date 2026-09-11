@@ -29,10 +29,10 @@ your keys before the first launch.
 |---------|-------------|
 | `piw ~/project` | Launch pi (default: core variant, permissive mode) |
 | `piw -r` | Resume a previous session |
-| `piw build` | Build variant image and install packages |
-| `piw doctor` | Diagnose harness setup |
-| `piw install-packages` | Install packages from `extensions.txt` |
-| `piw update` | Pull updates, rebuild, reinstall packages |
+| `piw build` | Build tooling image + provision pi/extensions |
+| `piw build --offline` | Build from `build/archives/` only, no downloads |
+| `piw doctor` | Diagnose harness setup (incl. pi/extension versions) |
+| `piw update` | Pull updates, rebuild, upgrade pi, sync extensions |
 | `piw --mode restricted` | Launch with restricted permissions |
 | `piw --profile devops` | Launch with the devops variant |
 
@@ -40,14 +40,13 @@ your keys before the first launch.
 
 | Variant | Tools |
 |---------|-------|
-| **core** | pi, git, curl, jq, openssh |
+| **core** | node, git, curl, jq, openssh (pi comes from `.pi/app`) |
 | **devops** | Core + Python + Ansible + yq |
 
 ## Documentation
 
 Full docs are in [docs/index.md](docs/index.md). Topics include
-architecture, permission modes, skill system, and rtk token
-optimization.
+architecture, permission modes, and skill system.
 
 ## License
 

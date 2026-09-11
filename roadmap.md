@@ -44,7 +44,7 @@
   section, an APPEND_SYSTEM.md addition, or an STE-writing amendment.
 
 - **Install pending packages** — `pi-time-awareness` is listed in
-  `extensions.txt` but not yet installed. Run `piw install-packages`
+  `extensions.txt` but not yet installed. Run `piw update --install-only`
   to activate it.
 
 - **Rebuild core image** — `variants/core/Dockerfile` has a new
@@ -172,8 +172,10 @@
   pattern)
 - yq arch detection in devops variant (uname -m branching instead
   of amd64)
-- `--force` flag for `piw install-packages` (npm cache clean on
-  force)
+- pi moved out of the image into the config mount (`piw` ensure_pi);
+  `piw update` upgrades pi + syncs extensions version-aware;
+  `--force`/`--dry-run` on update; stash-based update removed
+  (ff-only pull only)
 - `--mode` flag for permission profiles (permissive, restricted,
   readonly)
 - Permission external_directory allow for config paths

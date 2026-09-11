@@ -9,8 +9,13 @@ extensions/pi-permission-system/logs/*
 # ── Docker ────────────────────────────────────────────────────────────────────
 **/Dockerfile.dockerignore
 
+# ── Build inputs ───────────────────────────────────────────────────────────────
+# Manual downloads used by image builds. Must stay gitignored (large) but
+# docker-visible: the root .dockerignore must NOT exclude build/archives/.
+build/archives/
+
 # ── Working notes ────────────────────────────────────────────────────────────
-piw-handoff-*.md
+docs/handoffs/
 
 # ── Docker bind-mount artifacts ──────────────────────────────────────────────
 skills/variant/

@@ -1,16 +1,37 @@
 # piw CLI Reference
 
-`piw` is the entry point for pi-harness. It manages Docker images,
-installs packages, and launches pi sessions.
+`piw` is the entry point for pi-harness. It manages Docker images and
+the pi runtime (pi itself + extensions) in the bind-mounted config dir.
+
+## Model
+
+The Docker image is tooling + isolation only. pi lives in its own app
+mount; extensions live in the config mount. Both update without image
+rebuilds:
+
+```
+.pi/                      ← harness-owned dir (gitignored)
+├── app/                  ← pi app mount (npm prefix, reinstallable)
+│   └── node_modules/@earendil-works/pi-coding-agent
+└── agent/                ← config mount (pi state + extensions)
+    ├── npm/              ← npm extensions (pi-managed)
+    ├── git/              ← git extensions (pi-managed)
+    ├── settings.json     ← pi's package bookkeeping
+    └── models.json       ← model/provider config
+```
+
+`piw update` is the one command that brings everything — repo, images,
+pi, extensions — current. Extension tweaks (code in the mount) need no
+wrapper involvement: pi reloads them on next launch or `/reload`.
 
 ## Synopsis
 
 ```bash
 piw [--profile <name>] [--resume|-r] [--help] [<path>]
-piw build [<profile>] [--all] [--no-cache]
-piw install-packages [<profile>] [--all] [--force] [--dry-run]
-piw update [<profile>] [--all] [--build-only] [--install-only] [--no-cache]
+piw build [<profile>] [--all] [--no-cache] [--offline]
+piw update [<profile>] [--all] [--build-only] [--install-only] [--force] [--dry-run] [--no-cache] [--offline]
 piw doctor [<profile>]
+piw generate-catalog
 piw --install [<dir>]
 piw --uninstall [<dir>]
 ```
@@ -35,6 +56,8 @@ piw -r                      Launch and pick a session to resume
 ```
 
 - Builds the Docker image if not cached
+- Ensures pi is installed in the app mount (`ensure_pi`, default
+  `.pi/app`); installs it if missing (requires network)
 - Sources `.env` for API keys
 - Bind-mounts config, skills, extensions, and workspace
 - Drops into the `pi` interactive session
@@ -42,42 +65,55 @@ piw -r                      Launch and pick a session to resume
 ### `build`
 
 ```
-piw build                   Build default profile + install packages
-piw build devops            Build devops profile + install packages
-piw build --all             Build all variants + install packages
+piw build                   Build default profile + provision mount
+piw build devops            Build devops profile + provision mount
+piw build --all             Build all variants + provision mount
 piw build --no-cache        Full rebuild (ignore Docker cache)
+piw build --offline         Build from build/archives only (no downloads)
 ```
 
-- Always runs `install-packages` after building
-- `--all` iterates all non-template variants
+- Builds tooling images (no pi layer — pi comes from the config mount)
+- After building: installs pi if missing, then syncs extensions from
+  `config-seeds/extensions.txt` (install missing, upgrade outdated)
+- Regenerates the skills catalog
 
-### `install-packages`
-
-```
-piw install-packages                    Install packages for default profile
-piw install-packages devops             Install packages for devops
-piw install-packages --all              Install packages for all variants
-piw install-packages --force            Force reinstall all packages
-piw install-packages --dry-run          Show what would be installed
-piw install-packages --force --dry-run  Show what --force would do
-```
-
-Packages are read from `extensions.txt`. Already-installed packages are
-skipped unless `--force` is given.
+`--offline` applies to the image builds; mount provisioning (pi
+install/upgrade, extension sync) still needs npm and fails with
+guidance when offline and something is missing.
 
 ### `update`
 
 ```
-piw update                  Pull git, build, install packages
-piw update --all            Update all variants
-piw update --build-only     Pull + rebuild, skip package install
-piw update --install-only   Pull + install packages, skip build
-piw update --all --no-cache Full rebuild all from scratch
+piw update                      Pull, rebuild, upgrade pi, sync extensions
+piw update --all                Update all variants
+piw update --build-only         Pull + rebuild, skip pi/extensions
+piw update --install-only       Pull + sync pi/extensions, skip build
+piw update --force              Reinstall every listed extension
+piw update --dry-run            Show the plan (pi, extensions, images) — no executions
+piw update --all --no-cache     Full rebuild all from scratch
+piw update --offline            Require build/archives present, no downloads
 ```
 
-- Auto-stashes local changes before `git pull` (pops after)
-- Uses `--ff-only` to prevent accidental merge commits
-- Default (no split flags) does pull + build + install
+Order of operations:
+
+1. `git pull --ff-only` — never stashes. Uncommitted work blocks
+   update: if local changes overlap incoming updates it aborts with
+   instructions (commit or unshelve locally, then retry). Commit your
+   work before running `piw update`.
+2. Rebuild variant images (`--install-only` skips).
+3. Upgrade pi in the config mount when npm shows a newer version.
+4. Sync extensions: install missing, upgrade outdated npm extensions
+   (`--force` reinstalls every listed extension).
+5. Regenerate the skills catalog.
+
+Dry-run prints the plan host-side: pi installed vs latest, each
+extension's status, and which images would rebuild. Nothing executes
+(no git pull, no docker builds, no installs).
+
+`--offline` covers **image builds only**: it requires `build/archives`
+present and never downloads archives. Pi install and extension sync
+still need npm — with no network, pi update/install or extension
+upgrades fail with guidance instead of silently proceeding.
 
 ### `doctor`
 
@@ -87,7 +123,14 @@ piw doctor devops           Diagnose devops profile
 ```
 
 Checks: Docker, variant dir, Docker image, `.env`, API keys, config
-directory, skills, extensions, packages, rtk, git repository status.
+directory, skills, extensions, **pi version in the config mount vs npm
+latest**, per-extension installed/latest status, build archives, skills
+catalog freshness, git repository status.
+
+### `generate-catalog`
+
+Regenerates `skills/catalog.md` from the `SKILL.md` files. Runs
+automatically at the end of `build` and `update`.
 
 ### `--install` / `--uninstall`
 
@@ -104,6 +147,7 @@ Also seeds config directory (settings.json, models.json) if missing.
 | Variable | Description |
 |----------|-------------|
 | `PI_CONFIG_DIR` | Override pi state directory (default: `.pi/agent/`) |
+| `PI_PI_DIR` | Override pi app directory (default: `.pi/app`; set to an absolute path e.g. `~/.local/share/pi-node` for pi-standard placement) |
 | `YADM_HOME` | Host home passed into the container at launch. The yadm wrapper uses it so dotfiles resolve to the host's repo/config. Not set on the host-side; it is internal to the container. |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |
@@ -115,15 +159,16 @@ All API keys are sourced from `.env` (if present) or the host environment.
 
 ## Flag Compatibility
 
-| Flag | launch | build | install-packages | update | doctor |
-|------|--------|-------|------------------|--------|--------|
-| `--profile` | ✅ | ✅ (default) | ✅ (default) | ✅ (default) | ✅ (default) |
-| `--all` | ❌ | ✅ | ✅ | ✅ | ❌ |
-| `--no-cache` | ❌ | ✅ | ❌ | ✅ | ❌ |
-| `--force` | ❌ | ❌ | ✅ | ❌ | ❌ |
-| `--dry-run` | ❌ | ❌ | ✅ | ❌ | ❌ |
-| `--build-only` | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `--install-only` | ❌ | ❌ | ❌ | ✅ | ❌ |
-| `--resume` | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Flag | launch | build | update | doctor |
+|------|--------|-------|--------|--------|
+| `--profile` | ✅ | ✅ (default) | ✅ (default) | ✅ (default) |
+| `--all` | ❌ | ✅ | ✅ | ❌ |
+| `--no-cache` | ❌ | ✅ | ✅ | ❌ |
+| `--force` | ❌ | ❌ | ✅ | ❌ |
+| `--dry-run` | ❌ | ❌ | ✅ | ❌ |
+| `--build-only` | ❌ | ❌ | ✅ | ❌ |
+| `--install-only` | ❌ | ❌ | ✅ | ❌ |
+| `--offline` | ❌ | ✅ | ✅ | ❌ |
+| `--resume` | ✅ | ❌ | ❌ | ❌ |
 
 `--build-only` and `--install-only` are mutually exclusive.

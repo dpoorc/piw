@@ -20,7 +20,6 @@ the tooling you need and no more.
 | See a design review of the harness | [architecture/design-review.md](architecture/design-review.md) |
 | Read about publishing considerations | [publishing.md](publishing.md) |
 | Understand permission rules and modes | [permissions.md](permissions.md) |
-| Learn about rtk token optimization | [rtk.md](rtk.md) |
 | Understand the state directory layout | [state-directory.md](state-directory.md) |
 
 ## Project layout
@@ -40,8 +39,13 @@ pi-harness/
 │   ├── vendor/             #   External collections (git submodules)
 │   └── catalog.md          #   Unified skill index
 ├── extensions/             # Custom TypeScript extensions (bind-mounted)
-├── extensions.txt          # Third-party package manifest
-├── models.json             # Provider/model configuration
+├── config-seeds/           # Repo-owned default config (seeded into .pi/agent/)
+│   ├── extensions.txt      #   Third-party package manifest
+│   ├── models.json         #   Provider/model configuration
+│   └── settings.json       #   Pi settings seed
+├── build/                  # Image build inputs
+│   ├── archives/           #   Manual downloads (gitignored)
+│   └── README.md           #   Archive manifest + fetch instructions
 └── docs/                   # Documentation
     ├── index.md            #   This file
     ├── overview.md         #   High-level architecture
@@ -49,12 +53,12 @@ pi-harness/
     ├── piw.md              #   CLI reference
     ├── extensions.txt.md   #   Package manifest format
     ├── permissions.md      #   Permission system
-    ├── rtk.md              #   Token optimization
     ├── state-directory.md  #   .pi/ directory layout
     ├── architecture/       #   Architecture docs
     │   └── design-review.md #     Design retrospective
     ├── workflow/           #   Workflow docs
-    ├── research/           #   Research docs
+    ├── handoffs/           #   Session handoffs (gitignored)
+    ├── research/           #   Research docs (incl. a2-prototype/)
     ├── publishing.md       #   Public release considerations
     └── session-file-management.md  #   Session log proposals
 
@@ -64,7 +68,7 @@ pi-harness/
 
 - Template variant aligned with core/devops (usermod -l pi node pattern)
 - yq arch detection in devops variant (uname -m branching instead of amd64)
-- `--force` flag for `piw install-packages` (npm cache clean on force)
+- pi moved out of the image into the config mount (`piw` ensure_pi); `piw update` upgrades pi + syncs extensions version-aware; `--force`/`--dry-run` on update; stash-based update removed (ff-only pull only)
 - `--mode` flag for permission profiles (permissive, restricted, readonly)
 - Permission external_directory allow for config paths
 - STE writing skill (auto-read via APPEND_SYSTEM.md)

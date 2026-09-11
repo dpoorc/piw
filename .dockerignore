@@ -1,0 +1,19 @@
+# Docker build context. Variant images build from the repo root so their
+# Dockerfiles can COPY shared build inputs from build/archives/.
+# Keep build/archives/ visible: image builds depend on it.
+.git
+.pi
+.issues
+agents
+docs
+extensions
+skills
+config-seeds
+*.md
+.env
+.env.example
+.gitignore
+.gitmodules
+piw
+LICENSE
+roadmap.md

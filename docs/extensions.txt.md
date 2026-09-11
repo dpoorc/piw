@@ -1,7 +1,8 @@
-# extensions.txt — Package Manifest
+# config-seeds/extensions.txt — Package Manifest
 
-`extensions.txt` lists third-party pi packages to be installed into the
-harness. It uses standard `pi install` syntax.
+`config-seeds/extensions.txt` lists third-party pi packages to be installed
+into the harness. It uses standard `pi install` syntax. The runtime copies
+live in `.pi/agent/settings.json` under the `"packages"` key.
 
 ## Format
 
@@ -13,7 +14,7 @@ harness. It uses standard `pi install` syntax.
 # My packages
 npm:pi-web-access@0.13.0
 npm:@gotgenes/pi-permission-system
-git:https://github.com/r3b1s/rtk-pi
+git:https://github.com/user/repo
 ```
 
 ## Package Syntax
@@ -45,34 +46,45 @@ commit hash.
 
 Examples:
 ```
-git:https://github.com/r3b1s/rtk-pi
+git:https://github.com/user/repo
 git:https://github.com/user/repo@v1.0.0
 ```
 
 ## How It Works
 
-When you run `piw install-packages`:
+When you run `piw update` (or `piw build` for a fresh mount):
 
-1. Pi reads `extensions.txt`
-2. For each package, runs `pi install <pkg>` inside the harness container
-3. Already-installed packages are skipped (use `--force` to reinstall)
+1. Pi reads `config-seeds/extensions.txt`
+2. For each extension, checks the config mount host-side (`.pi/agent/npm`,
+   `.pi/agent/git`) for presence and installed version
+3. Installs missing extensions and upgrades outdated npm extensions via
+   `pi install <pkg>` inside the harness container
 4. Results are summarized at the end
 
-The installed packages are tracked in `.pi/agent/settings.json` under the
-`"packages"` key.
+`git:` extensions are fetched **once at install time**. Manifest ref
+bumps (`@<ref>`) are not re-fetched by sync — the mount strips the ref
+so the version check reads empty and stays silent. Use
+`piw update --force` to refresh a git extension.
+
+The installed extensions are tracked in `.pi/agent/settings.json` under
+`"packages"` and their code lives in the bind-mounted `npm/` and `git/`
+trees — pi loads them at launch, no rebuild needed.
 
 ## Typical Workflow
 
 ```bash
 # Edit the manifest
-$EDITOR extensions.txt
+$EDITOR config-seeds/extensions.txt
 
-# Install new packages
-piw install-packages
+# Apply the change (pull, rebuild, upgrade pi, sync extensions)
+piw update
 
-# Force reinstall to upgrade
-piw install-packages --force
+# Only sync pi + extensions against the current tree (skip build)
+piw update --install-only
 
-# See what would change
-piw install-packages --dry-run
+# Reinstall every listed extension
+piw update --force
+
+# See what would change without executing anything
+piw update --dry-run
 ```

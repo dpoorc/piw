@@ -5,8 +5,8 @@
 # The container user is `pi` (UID/GID remapped at runtime via --user).
 # Bind-mount ~/.pi/agent and your project workspace at runtime.
 #
-# Build:
-#   docker build -t pi-harness:core .
+# Build (from repo root, so build/archives is in the build context):
+#   docker build -f variants/core/Dockerfile -t pi-harness:core .
 #
 # ── Build stage: git-issues (local file-based issue tracker) ─────────────────
 FROM golang:latest AS git-issues-builder
@@ -31,19 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Pi coding agent
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-
-# rtk (Rust Token Killer) — CLI proxy that cuts bash output tokens by up to 90%
-RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-        x86_64) rtk_arch="x86_64-unknown-linux-musl" ;; \
-        aarch64) rtk_arch="aarch64-unknown-linux-gnu" ;; \
-        *) echo "Unsupported arch: $arch"; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/rtk-ai/rtk/releases/latest/download/rtk-${rtk_arch}.tar.gz" \
-    | tar -xz -C /usr/local/bin/
+# Pi coding agent — installed into its own bind-mounted app dir at runtime
+# (piw ensure_pi, default .pi/app under the harness dir), not baked into
+# the image. The image is tooling + isolation only; the PATH entry makes
+# the mounted pi executable when the mount is present.
+ENV PATH="/opt/pi/node_modules/.bin:${PATH}"
 
 # git-issues — local file-based issue tracker
 COPY --from=git-issues-builder /go/bin/git-issues /usr/local/bin/git-issues

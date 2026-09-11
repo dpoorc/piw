@@ -2,8 +2,8 @@
 #
 # <description of what this variant is for>
 #
-# Build:
-#   docker build -t pi-harness:<name> .
+# Build (from repo root):
+#   docker build -f variants/<name>/Dockerfile -t pi-harness:<name> .
 #
 FROM node:24-bookworm-slim
 
@@ -16,19 +16,10 @@ FROM node:24-bookworm-slim
 # (install runtimes, package managers, linters, etc.)
 
 # ── Pi coding agent ──────────────────────────────────────────────────────────
-RUN npm install -g --ignore-scripts @earendil-works/pi-coding-agent
-
-# ── rtk (Rust Token Killer) ──────────────────────────────────────────────────
-# CLI proxy that cuts bash output tokens by up to 90%
-RUN set -eux; \
-    arch="$(uname -m)"; \
-    case "$arch" in \
-        x86_64) rtk_arch="x86_64-unknown-linux-musl" ;; \
-        aarch64) rtk_arch="aarch64-unknown-linux-gnu" ;; \
-        *) echo "Unsupported arch: $arch"; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/rtk-ai/rtk/releases/download/v0.43.0/rtk-${rtk_arch}.tar.gz" \
-    | tar -xz -C /usr/local/bin/
+# Installed into its own bind-mounted app dir at runtime (piw ensure_pi,
+# default .pi/app under the harness dir), not baked into the image.
+# Image = tooling + isolation.
+ENV PATH="/opt/pi/node_modules/.bin:${PATH}"
 
 # ── npm security ────────────────────────────────────────────────────────────
 # Disable install scripts globally (supply chain security)
