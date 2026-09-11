@@ -11,7 +11,7 @@ toolchains, linters, infrastructure tools, and analysis tools.
 | Toolchain | Tools | Linters |
 |-----------|-------|---------|
 | C/C++ | gcc, g++, clang, make, cmake (from core) | — |
-| Go | go 1.24 | go vet (built-in) |
+| Go | go 1.27 | go vet (built-in) |
 | Rust | rustc, cargo | clippy |
 | Python | python3, pip, venv | flake8, mypy, pylint |
 | JavaScript/TypeScript | node, npm (from core) | typescript, eslint, prettier |
@@ -51,9 +51,33 @@ dongles, SDRs) are documented but not activated in the container.
 Use the host for live capture, then analyze captured files in the
 container.
 
+### Media tools
+
+| Tool | Purpose |
+|------|---------|
+| ffmpeg (9.0 static) | Transcode, extract frames and audio |
+| ffprobe | Media stream analysis (codec, resolution, duration) |
+| mediainfo | Container and stream summary in human form |
+| exiftool | Deep metadata extraction (EXIF, GPS, maker notes) |
+
+ffmpeg and ffprobe come from the BtbN static 9.0 build. Debian
+bookworm's apt ffmpeg is 5.1 (2022) and lacks current codecs.
+
+### File forensics tools
+
+| Tool | Purpose |
+|------|---------|
+| binwalk | Embedded and firmware file analysis |
+| sleuthkit | Disk and filesystem forensics (fls, icat, mmls) |
+| foremost | File carving from raw dumps |
+| testdisk / photorec | Partition and data recovery from disk images |
+| steghide | Hidden-payload analysis (steganography) |
+| p7zip-full | Deep archive extraction (7z, rar, and more) |
+| xxd | Hex inspection (from vim-common) |
+
 ## Size
 
-~2-3GB (pi + Node + Debian + all toolchains)
+~3-4GB (pi + Node + Debian + all toolchains + ffmpeg)
 
 ## Usage
 

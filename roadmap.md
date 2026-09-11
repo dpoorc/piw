@@ -55,14 +55,13 @@
   Run `piw generate-catalog` after the vendor skills submodule is
   updated.
 
-- **Fix doc–reality mismatches** — Several documentation files have
-  drifted from actual state:
-  - `docs/architecture/variants.md` omits workstation variant
-  - `README.md` omits workstation variant, has stale Node version
-  - `docs/index.md` and `docs/architecture/variants.md` reference
-    `node:22-bookworm-slim` instead of `node:24-bookworm-slim`
-  - `variants/core/README.md` and `variants/devops/README.md` have
-    `~XXX MB` size placeholders
+- ✅ **Fix doc–reality mismatches** — Resolved 2026-09-11 (see Completed)
+  - ✅ `docs/architecture/variants.md` — workstation added, `node:22` → `node:24`
+  - ✅ `README.md` — workstation added to variants table
+  - ✅ `docs/index.md` — workstation added to layout and Done list
+  - ✅ `variants/README.md` — workstation row, `node:22` → `node:24`, sizes filled
+  - ✅ `variants/core/README.md` + `variants/devops/README.md` — sizes filled
+  - ✅ workstation docs — `go 1.24` → `go 1.27` (matches installed toolchain)
 
 ### Low priority
 
@@ -93,6 +92,15 @@
   for the full checklist (README polish, friction points, naming).
 
 ## Completed
+
+### 2026-09-11 session
+
+- **Media and forensics tools added to workstation variant** — ffmpeg
+  (BtbN static 9.0, amd64 archive, ffprobe only, no ffplay), mediainfo,
+  exiftool, binwalk, sleuthkit, foremost, steghide, testdisk (incl.
+  photorec), p7zip-full, xxd. Docs updated: workstation README +
+  SKILL.md, variants README + variants.md + index.md + root README.
+- **Doc–reality mismatches resolved** (see Todo item above).
 
 ### 2026-08-13 session
 

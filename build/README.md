@@ -23,6 +23,7 @@ architecture asset and adjust the COPY filename in the variant Dockerfile.
 | rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | https://static.rust-lang.org/dist/rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | workstation | Rust GNU toolchain (default) |
 | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz | https://static.rust-lang.org/dist/rust-1.98.1-x86_64-unknown-linux-musl.tar.xz | workstation | Rust musl std (static-build target) |
 | rizin-v0.9.1-static-x86_64.tar.xz | https://github.com/rizinorg/rizin/releases/download/v0.9.1/rizin-v0.9.1-static-x86_64.tar.xz | workstation | rizin reverse-engineering suite |
+| ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | workstation | ffmpeg + ffprobe 9.0 static build |
 | yq_linux_amd64.tar.gz | https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64.tar.gz | devops, workstation | yq YAML processor |
 | yadm-3.5.0 | https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm | workstation | yadm dotfile manager script |
 | tofu_1.12.6_linux_amd64.tar.gz | https://github.com/opentofu/opentofu/releases/download/v1.12.6/tofu_1.12.6_linux_amd64.tar.gz | workstation | OpenTofu IaC tool |
@@ -30,6 +31,10 @@ architecture asset and adjust the COPY filename in the variant Dockerfile.
 | hadolint-linux-x86_64 | https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 | workstation | Dockerfile linter |
 | tflint_linux_amd64.zip | https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_amd64.zip | workstation | Terraform/OpenTofu linter |
 | uv-x86_64-unknown-linux-gnu.tar.gz | https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz | workstation | uv Python package manager |
+
+Note on ffmpeg: the `latest` BtbN release tag is rebuilt daily; the
+`n9.0` filename pins the 9.0 branch. The manifest checksum commits the
+exact archive used by this repo.
 
 Note on yadm: fetch the standalone script (the raw.githubusercontent URL
 above saves the `yadm` file directly). If you instead downloaded GitHub's
@@ -41,6 +46,7 @@ repo tarball (`yadm-3.5.0.tar.gz`), extract the script from it:
 Present archives, for integrity verification:
 
 ```
+16e4a4a13088ca9f0b5a8ad4d17a1a296bc3cbf007a5ac612986a2220d329395  ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz
 63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  go1.27.1.linux-amd64.tar.gz
 c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507  hadolint-linux-x86_64
 5edcd14ab59b535040c512dbecd6ec9ef976a000b073c19d93e4c431c948581e  packer_1.16.0_linux_amd64.zip

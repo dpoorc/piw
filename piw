@@ -172,6 +172,7 @@ go1.27.1.linux-amd64.tar.gz
 rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz
 rust-1.98.1-x86_64-unknown-linux-musl.tar.xz
 rizin-v0.9.1-static-x86_64.tar.xz
+ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz
 yq_linux_amd64.tar.gz
 yadm-3.5.0
 tofu_1.12.6_linux_amd64.tar.gz
@@ -190,6 +191,7 @@ _archive_url() {
   go1.27.1.linux-amd64.tar.gz) echo "https://go.dev/dl/$1" ;;
   rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz) echo "https://static.rust-lang.org/dist/$1" ;;
   rizin-v0.9.1-static-x86_64.tar.xz) echo "https://github.com/rizinorg/rizin/releases/download/v0.9.1/$1" ;;
+  ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz) echo "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$1" ;;
   yq_linux_amd64.tar.gz) echo "https://github.com/mikefarah/yq/releases/latest/download/$1" ;;
   yadm-3.5.0) echo "https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm" ;;
   tofu_1.12.6_linux_amd64.tar.gz) echo "https://github.com/opentofu/opentofu/releases/download/v1.12.6/$1" ;;

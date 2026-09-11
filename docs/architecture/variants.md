@@ -19,7 +19,7 @@ Dedicated variant directories scale without architectural regret:
   clear interface (`Dockerfile` + `README.md`).
 
 The tradeoff is minor duplication between Dockerfiles. This is managed
-by keeping each variant on the same base image (`node:22-bookworm-slim`)
+by keeping each variant on the same base image (`node:24-bookworm-slim`)
 so Docker's layer cache handles the shared layers efficiently.
 
 ## Structure
@@ -33,7 +33,10 @@ variants/
 ├── core/                 # Minimal: pi + git + curl + jq + SSH
 │   ├── Dockerfile
 │   └── README.md
-└── devops/               # Core + Python + Ansible + yq + yamllint
+├── devops/               # Core + Python + Ansible + yq + yamllint
+│   ├── Dockerfile
+│   └── README.md
+└── workstation/          # Core + toolchains + security/forensics
     ├── Dockerfile
     └── README.md
 ```

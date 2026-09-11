@@ -42,6 +42,7 @@ your keys before the first launch.
 |---------|-------|
 | **core** | node, git, curl, jq, openssh (pi comes from `.pi/app`) |
 | **devops** | Core + Python + Ansible + yq |
+| **workstation** | Core + language toolchains + security and forensics tools |
 
 ## Documentation
 

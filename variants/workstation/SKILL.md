@@ -19,7 +19,7 @@ tools. Use it for general development, devops, and security research.
 | Toolchain | Compiler / Runtime | Linter / Analyzer |
 |-----------|-------------------|-------------------|
 | C/C++ | gcc, g++, clang, make, cmake | (core provides) |
-| Go | go 1.24 | go vet |
+| Go | go 1.27 | go vet |
 | Rust | rustc, cargo | clippy |
 | Python | python3, pip | flake8, mypy, pylint |
 | JavaScript/TS | node, npm | typescript, eslint, prettier |
@@ -35,6 +35,15 @@ opentofu, packer, yq, yadm, tflint, hadolint
 
 nmap, tcpdump, tshark, rizin, binutils, gdb, hashcat, john,
 bettercap, bluez
+
+### Media tools
+
+ffmpeg (9.0 static), ffprobe, mediainfo, exiftool
+
+### File forensics tools
+
+binwalk, sleuthkit, foremost, steghide, testdisk (incl. photorec),
+p7zip-full, xxd
 
 ## Discovering more tools
 

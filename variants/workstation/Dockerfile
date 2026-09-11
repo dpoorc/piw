@@ -40,11 +40,43 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libusb-1.0-0-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# ── Layer 1: Media and file forensics tools (stable apt) ────────────────────
+# libarchive-zip-perl: exiftool needs it for zip-based formats (docx,
+# pptx, xlsx); --no-install-recommends would skip it. vim-common provides
+# xxd in bookworm. testdisk includes photorec. sleuthkit adds disk/volume
+# forensics (fls, icat, mmls) with EWF/AFF/VMDK image support.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        mediainfo \
+        libimage-exiftool-perl \
+        libarchive-zip-perl \
+        binwalk \
+        sleuthkit \
+        foremost \
+        steghide \
+        testdisk \
+        p7zip-full \
+        vim-common \
+    && rm -rf /var/lib/apt/lists/*
+
 # ── Layer 2: rizin static binary (not in Debian repos) ───────────────────────
 # The rizin project does not provide a Debian package via apt.
 # Static binaries are published for each GitHub release.
 COPY build/archives/rizin-v0.9.1-static-x86_64.tar.xz /tmp/rizin.tar.xz
 RUN tar -xJf /tmp/rizin.tar.xz -C /usr/local && rm -f /tmp/rizin.tar.xz
+
+# ── Layer 2: ffmpeg static build (BtbN, 9.0) ────────────────────────────────
+# Debian bookworm ships ffmpeg 5.1 (2022). BtbN publishes current static
+# builds on GitHub. The "latest" release tag is rebuilt daily; the n9.0
+# filename pins the 9.0 branch. Only ffmpeg and ffprobe are installed;
+# ffplay (media player) is useless in a headless container.
+# Verified extraction: tar --strip-components=2 over the two bin members
+# yields /tmp/ffmpeg and /tmp/ffprobe (see issue 0011 verification).
+COPY build/archives/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz /tmp/ffmpeg.tar.xz
+RUN tar -xJf /tmp/ffmpeg.tar.xz -C /tmp --strip-components=2 \
+        "ffmpeg-n9.0-latest-linux64-gpl-9.0/bin/ffmpeg" \
+        "ffmpeg-n9.0-latest-linux64-gpl-9.0/bin/ffprobe" \
+    && mv /tmp/ffmpeg /tmp/ffprobe /usr/local/bin/ \
+    && rm -f /tmp/ffmpeg.tar.xz
 
 # ── Layer 2: Powershell (MS repo, apt-based) — COMMENTED OUT ────────────────
 # Microsoft's package repo was unreachable at build time (connection reset).

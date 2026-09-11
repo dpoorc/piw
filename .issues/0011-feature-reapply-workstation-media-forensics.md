@@ -1,11 +1,11 @@
 ---
 id: 11
 title: 'Re-apply workstation media/forensics tooling from stash@{0}'
-status: open
+status: done
 priority: high
 labels:
     - kind:feature
-    - state:needs-triage
+    - state:resolved
 relations: []
 created: "2026-09-11"
 updated: "2026-09-11"
@@ -39,9 +39,23 @@ Re-apply the media/forensics work **adapted to the archives model**:
 4. Restore the README/SKILL/docs changes (verify against the current tree
    first — they may already be partially applied)
 
+## Resolution (2026-09-11)
+
+- ffmpeg n9.0 gpl archive downloaded, sha256-verified
+  (16e4a4a1…d329395), tar extraction verified locally, wired into
+  `_profile_archives`/`_archive_url`/build README manifest + checksums
+- Media/forensics apt layer (10 packages) added to workstation Dockerfile
+- Docs restored, adapted: workstation README/SKILL (go 1.27), variants
+  README sizes + workstation row, root README, architecture/variants.md
+  (node:24), docs/index.md, roadmap Completed entry
+- The stash's pre-refactor doc content (rtk, install-packages, root
+  extensions.txt) was **not** restored — those were superseded by the
+  refactor.
+
 ## Constraints
 
-- **Do NOT `git stash drop` / `git stash clear` / prune stashes** until this
-  work is committed — the stash is the only copy.
+- The stash is now redundant: this commit carries the work. `stash@{0}`
+  may be dropped once this commit is verified (verified = workstation
+  image builds with media tools available).
 - `piw update` uses `git pull --ff-only` and will abort if uncommitted work
   overlaps; commit this in its own change.
