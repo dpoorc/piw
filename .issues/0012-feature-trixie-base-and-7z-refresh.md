@@ -1,12 +1,13 @@
 ---
 id: 12
-title: 'Migrate base image to Debian 13 (trixie) + refresh forensics tools'
-status: open
+title: Migrate base image to Debian 13 (trixie) + refresh forensics tools
+status: closed
 priority: high
 labels:
     - kind:feature
 created: "2026-09-16"
-updated: "2026-09-16"
+updated: "2026-09-29"
+closed: "2026-09-29"
 ---
 
 ## Context
