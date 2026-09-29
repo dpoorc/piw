@@ -39,7 +39,7 @@
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
 #   PI_PI_DIR       Override the pi app directory (default: .pi/app)
-#   PI_TOOLS_DIR    Override the tool store directory (default: .pi/tools)
+#   PI_TOOLS_DIR    Override the tool store directory (default: .pi/store)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
 #   PIW_DEFAULT_PROFILE  Default variant profile (overrides "core")
 #
@@ -327,7 +327,7 @@ resolve_tools_dir() {
   if [[ "${PI_TOOLS_DIR:-}" = /* ]]; then
     echo "$PI_TOOLS_DIR"
   else
-    echo "$SCRIPT_DIR/${PI_TOOLS_DIR:-.pi/tools}"
+    echo "$SCRIPT_DIR/${PI_TOOLS_DIR:-.pi/store}"
   fi
 }
 

@@ -134,7 +134,7 @@ automatically at the end of `build` and `update`.
 
 ### `tool`
 
-Manage the shared tool store at `.pi/tools`, mounted at `/home/pi/.local`
+Manage the shared tool store at `.pi/store`, mounted at `/home/pi/.local`
 inside the container.
 
 ```
@@ -170,10 +170,14 @@ language toolchains, so `piw tool install rust` works without the
 `workstation` profile. The `uv:`, `cargo:`, and `go:` prefixes are
 conveniences that use the toolchains already in the image.
 
-The store lives at `.pi/tools`. mise data and its global `mise.toml` live
+The store lives at `.pi/store`. mise data and its global `mise.toml` live
 inside it, so installed tools survive container recreation.
 
-Project-local tools are planned: a gitignored `.pi/tools` in the project,
+The store sits beside pi's own `.pi/agent` and `.pi/app`. Do not put it in
+`.pi/tools`: pi reads that path as a deprecated project tools directory and
+warns on start.
+
+Project-local tools are planned: a gitignored `.pi/store` in the project,
 placed ahead of the shared store on PATH.
 
 ### `--install` / `--uninstall`
@@ -192,7 +196,7 @@ Also seeds config directory (settings.json, models.json) if missing.
 |----------|-------------|
 | `PI_CONFIG_DIR` | Override pi state directory (default: `.pi/agent/`) |
 | `PI_PI_DIR` | Override pi app directory (default: `.pi/app`; set to an absolute path e.g. `~/.local/share/pi-node` for pi-standard placement) |
-| `PI_TOOLS_DIR` | Override the tool store directory (default: `.pi/tools`) |
+| `PI_TOOLS_DIR` | Override the tool store directory (default: `.pi/store`) |
 | `YADM_HOME` | Host home passed into the container at launch. The yadm wrapper uses it so dotfiles resolve to the host's repo/config. Not set on the host-side; it is internal to the container. |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |
