@@ -5,7 +5,8 @@ agent's access to files, commands, and paths.
 
 ## Configuration
 
-The permission config lives at `extensions/pi-permission-system/config.json`:
+The permission config lives at `extensions/pi-permission-system/config.json`
+(seeded from `config-seeds/permissions/config.json` on first launch):
 
 ```json
 {
@@ -69,18 +70,26 @@ piw ~/project
 
 ### How modes work
 
-Each mode corresponds to a config file alongside the default:
+The shipped policies live in `config-seeds/permissions/`:
 
 ```
-extensions/pi-permission-system/
+config-seeds/permissions/
 ├── config.json              # permissive mode
 ├── config.restricted.json   # restricted mode
 └── config.readonly.json     # readonly mode
 ```
 
-When a non-default mode is active, piw bind-mounts the mode-specific
-config over the default in the container. The permission system reads
-it at the same path — no extension changes needed.
+At launch, piw copies each missing policy into the live extension
+directory, `extensions/pi-permission-system/`. That directory is
+gitignored. It is the user's own state, and both the user and the
+permission system change it over time. piw seeds a file only when it
+is absent, so your edits are never overwritten. Delete a live policy
+to restore the shipped version on the next launch.
+
+When a non-default mode is active, piw bind-mounts the live
+mode-specific config over the default one in the container. The
+permission system reads the file at the same path. No extension
+changes are needed.
 
 For `readonly` mode, piw also applies Docker-level restrictions:
 - Workspace is mounted read-only (`:ro`)
@@ -103,8 +112,9 @@ given project while keeping the default restrictive.
 ### Custom modes
 
 You can define your own mode by creating `config.<name>.json` in
-the same directory and passing `--mode <name>`. The file is
-resolved at `extensions/pi-permission-system/config.<name>.json`.
+`config-seeds/permissions/`, or directly in the live
+`extensions/pi-permission-system/` directory, and passing
+`--mode <name>`.
 
 ## Project-Level Overrides
 

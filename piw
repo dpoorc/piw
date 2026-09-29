@@ -88,14 +88,22 @@ validate_mode() {
   if [[ "$mode" == "permissive" ]]; then
     return 0
   fi
-  local mode_config="$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
-  if [[ ! -f "$mode_config" ]]; then
+  local seed_config="$SCRIPT_DIR/config-seeds/permissions/config.$mode.json"
+  local live_config="$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
+  if [[ ! -f "$seed_config" && ! -f "$live_config" ]]; then
     echo "ERROR: Unknown mode '$mode'." >&2
     echo "  Available modes:" >&2
-    for f in "$SCRIPT_DIR"/extensions/pi-permission-system/config.*.json; do
-      local name
+    local f name
+    local -a modes=()
+    for f in "$SCRIPT_DIR"/config-seeds/permissions/config.*.json \
+             "$SCRIPT_DIR"/extensions/pi-permission-system/config.*.json; do
+      [[ -f "$f" ]] || continue
       name="$(basename "$f" .json)"
       name="${name#config.}"
+      [[ " ${modes[*]} " == *" $name "* ]] && continue
+      modes+=("$name")
+    done
+    for name in "${modes[@]}"; do
       echo "    - $name" >&2
     done
     exit 1
@@ -148,6 +156,31 @@ bootstrap_config() {
   if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/config-seeds/settings.json" ]]; then
     cp "$SCRIPT_DIR/config-seeds/settings.json" "$config_dir/settings.json"
     echo "INFO: Seeded $config_dir/settings.json from harness defaults."
+  fi
+}
+
+# ── Utility: seed permission configs into the live extension directory ───────
+# The live extensions/ directory is gitignored user state. Shipped policies
+# live in config-seeds/permissions/ and are copied in only when absent.
+bootstrap_permissions() {
+  local seed_dir="$SCRIPT_DIR/config-seeds/permissions"
+  local live_dir="$SCRIPT_DIR/extensions/pi-permission-system"
+
+  mkdir -p "$live_dir"
+
+  [[ -d "$seed_dir" ]] || return 0
+
+  local seed name seeded="false"
+  for seed in "$seed_dir"/config*.json; do
+    [[ -f "$seed" ]] || continue
+    name="$(basename "$seed")"
+    if [[ ! -f "$live_dir/$name" ]]; then
+      cp "$seed" "$live_dir/$name"
+      seeded="true"
+    fi
+  done
+  if [[ "$seeded" == "true" ]]; then
+    echo "INFO: Seeded permission configs into $live_dir"
   fi
 }
 
@@ -574,6 +607,7 @@ cmd_launch() {
   local config_dir
   config_dir="$(resolve_config_dir)"
   bootstrap_config "$config_dir"
+  bootstrap_permissions
 
   # Ensure APPEND_SYSTEM.md exists
   local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
@@ -773,6 +807,7 @@ cmd_install() {
   local config_dir
   config_dir="$(resolve_config_dir)"
   bootstrap_config "$config_dir"
+  bootstrap_permissions
 
   if [[ ":$PATH:" != *":$target_dir:"* ]]; then
     echo ""

@@ -1,7 +1,9 @@
 {
+  "debugLog": false,
+  "permissionReviewLog": true,
+  "yoloMode": true,
   "permission": {
     "*": "allow",
-
     "path": {
       "*": "allow",
       ".env": "deny",
@@ -11,7 +13,9 @@
       "*.pem": "deny",
       "*.key": "deny"
     },
-
+    "external_directory": {
+      "*": "ask"
+    },
     "bash": {
       "*": "allow",
       "rm -rf *": "ask",
@@ -26,10 +30,6 @@
       "reboot*": "ask",
       "kill *": "ask",
       "pkill *": "ask"
-    },
-
-    "external_directory": {
-      "*": "ask"
     }
   }
 }
