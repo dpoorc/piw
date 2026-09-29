@@ -31,7 +31,7 @@ piw --profile my-variant        # launch it
 
 ### Guidelines
 
-1. **Start from `node:24-bookworm-slim`** — this keeps all variants on the
+1. **Start from `node:24-trixie-slim`** — this keeps all variants on the
    same base, maximizing layer cache reuse.
 2. **Keep images lean** — prefer `--no-install-recommends` and clean up
    apt lists. Every MB matters when you pull on a new machine.

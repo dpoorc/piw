@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3-venv \
         perl \
         fish \
-        openjdk-17-jdk-headless \
+        openjdk-25-jdk-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Layer 1: Security and analysis tools (stable apt) ────────────────────────
@@ -42,9 +42,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # ── Layer 1: Media and file forensics tools (stable apt) ────────────────────
 # libarchive-zip-perl: exiftool needs it for zip-based formats (docx,
-# pptx, xlsx); --no-install-recommends would skip it. vim-common provides
-# xxd in bookworm. testdisk includes photorec. sleuthkit adds disk/volume
-# forensics (fls, icat, mmls) with EWF/AFF/VMDK image support.
+# pptx, xlsx); --no-install-recommends would skip it. xxd is its own
+# package since trixie (vim-common only recommends it). testdisk includes
+# photorec. sleuthkit adds disk/volume forensics (fls, icat, mmls) with
+# EWF/AFF/VMDK image support.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         mediainfo \
         libimage-exiftool-perl \
@@ -54,8 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         foremost \
         steghide \
         testdisk \
-        p7zip-full \
-        vim-common \
+        xxd \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Layer 2: rizin static binary (not in Debian repos) ───────────────────────
@@ -64,11 +64,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY build/archives/rizin-v0.9.1-static-x86_64.tar.xz /tmp/rizin.tar.xz
 RUN tar -xJf /tmp/rizin.tar.xz -C /usr/local && rm -f /tmp/rizin.tar.xz
 
+# ── Layer 2: 7-Zip official build (7zz, 26.03) ──────────────────────────────
+# Debian's `7zip` package (trixie) strips the unRAR code for DFSG
+# compliance. The official 7-Zip Linux binary (7zz) extracts RAR4/RAR5,
+# so it comes from build/archives (version pinned in the filename).
+# The `7z` symlink keeps p7zip-era scripts working (7zz covers the
+# 7za/7zr surface too).
+COPY build/archives/7z2603-linux-x64.tar.xz /tmp/7z.tar.xz
+RUN tar -xJf /tmp/7z.tar.xz -C /usr/local/bin 7zz \
+    && ln -s 7zz /usr/local/bin/7z \
+    && rm -f /tmp/7z.tar.xz
+
 # ── Layer 2: ffmpeg static build (BtbN, 9.0) ────────────────────────────────
-# Debian bookworm ships ffmpeg 5.1 (2022). BtbN publishes current static
-# builds on GitHub. The "latest" release tag is rebuilt daily; the n9.0
-# filename pins the 9.0 branch. Only ffmpeg and ffprobe are installed;
-# ffplay (media player) is useless in a headless container.
+# Debian apt ffmpeg is old (5.1 on bookworm, 7.x on trixie). BtbN publishes
+# current static builds on GitHub. The "latest" release tag is rebuilt
+# daily; the n9.0 filename pins the 9.0 branch. Only ffmpeg and ffprobe
+# are installed; ffplay (media player) is useless in a headless container.
 # Verified extraction: tar --strip-components=2 over the two bin members
 # yields /tmp/ffmpeg and /tmp/ffprobe (see issue 0011 verification).
 COPY build/archives/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz /tmp/ffmpeg.tar.xz

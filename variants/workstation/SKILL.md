@@ -23,7 +23,7 @@ tools. Use it for general development, devops, and security research.
 | Rust | rustc, cargo | clippy |
 | Python | python3, pip | flake8, mypy, pylint |
 | JavaScript/TS | node, npm | typescript, eslint, prettier |
-| Java | openjdk-17-jdk | (javac) |
+| Java | openjdk-25-jdk | (javac) |
 | Shell | bash, fish | shellcheck |
 | Powershell | pwsh (PS 7) | — |
 
@@ -43,7 +43,7 @@ ffmpeg (9.0 static), ffprobe, mediainfo, exiftool
 ### File forensics tools
 
 binwalk, sleuthkit, foremost, steghide, testdisk (incl. photorec),
-p7zip-full, xxd
+7zz (7-Zip 26.03), xxd
 
 ## Discovering more tools
 

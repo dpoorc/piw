@@ -23,6 +23,7 @@ architecture asset and adjust the COPY filename in the variant Dockerfile.
 | rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | https://static.rust-lang.org/dist/rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | workstation | Rust GNU toolchain (default) |
 | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz | https://static.rust-lang.org/dist/rust-1.98.1-x86_64-unknown-linux-musl.tar.xz | workstation | Rust musl std (static-build target) |
 | rizin-v0.9.1-static-x86_64.tar.xz | https://github.com/rizinorg/rizin/releases/download/v0.9.1/rizin-v0.9.1-static-x86_64.tar.xz | workstation | rizin reverse-engineering suite |
+| 7z2603-linux-x64.tar.xz | https://github.com/ip7z/7zip/releases/download/26.03/7z2603-linux-x64.tar.xz | workstation | 7-Zip 26.03 official build (7zz; RAR4/RAR5 extraction) |
 | ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz | workstation | ffmpeg + ffprobe 9.0 static build |
 | yq_linux_amd64.tar.gz | https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64.tar.gz | devops, workstation | yq YAML processor |
 | yadm-3.5.0 | https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm | workstation | yadm dotfile manager script |
@@ -46,6 +47,7 @@ repo tarball (`yadm-3.5.0.tar.gz`), extract the script from it:
 Present archives, for integrity verification:
 
 ```
+dc99eff5008f1ab79bd7084c68513701547a808a89502bf4133683535ab3c695  7z2603-linux-x64.tar.xz
 16e4a4a13088ca9f0b5a8ad4d17a1a296bc3cbf007a5ac612986a2220d329395  ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz
 63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  go1.27.1.linux-amd64.tar.gz
 c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507  hadolint-linux-x86_64

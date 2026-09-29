@@ -15,7 +15,7 @@ toolchains, linters, infrastructure tools, and analysis tools.
 | Rust | rustc, cargo | clippy |
 | Python | python3, pip, venv | flake8, mypy, pylint |
 | JavaScript/TypeScript | node, npm (from core) | typescript, eslint, prettier |
-| Java | openjdk-17-jdk | — |
+| Java | openjdk-25-jdk | — |
 | Perl | perl | — |
 | Shell | bash, fish | shellcheck |
 | Powershell | pwsh (PS 7) | — |
@@ -60,8 +60,8 @@ container.
 | mediainfo | Container and stream summary in human form |
 | exiftool | Deep metadata extraction (EXIF, GPS, maker notes) |
 
-ffmpeg and ffprobe come from the BtbN static 9.0 build. Debian
-bookworm's apt ffmpeg is 5.1 (2022) and lacks current codecs.
+ffmpeg and ffprobe come from the BtbN static 9.0 build. The Debian
+apt ffmpeg (5.1 on bookworm, 7.x on trixie) lacks current codecs.
 
 ### File forensics tools
 
@@ -72,8 +72,8 @@ bookworm's apt ffmpeg is 5.1 (2022) and lacks current codecs.
 | foremost | File carving from raw dumps |
 | testdisk / photorec | Partition and data recovery from disk images |
 | steghide | Hidden-payload analysis (steganography) |
-| p7zip-full | Deep archive extraction (7z, rar, and more) |
-| xxd | Hex inspection (from vim-common) |
+| 7zz (7-Zip 26.03) | Deep archive extraction incl. RAR4/RAR5 |
+| xxd | Hex inspection |
 
 ## Size
 

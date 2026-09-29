@@ -70,7 +70,7 @@ pi-harness/
 - Template variant aligned with core/devops (usermod -l pi node pattern)
 - yq arch detection in devops variant (uname -m branching instead of amd64)
 - pi moved out of the image into the config mount (`piw` ensure_pi); `piw update` upgrades pi + syncs extensions version-aware; `--force`/`--dry-run` on update; stash-based update removed (ff-only pull only)
-- Workstation media + forensics tooling: ffmpeg 9.0 static (archive), mediainfo, exiftool, binwalk, sleuthkit, foremost, steghide, testdisk, p7zip-full, xxd
+- Workstation media + forensics tooling: ffmpeg 9.0 static (archive), mediainfo, exiftool, binwalk, sleuthkit, foremost, steghide, testdisk, 7zz (7-Zip 26.03), xxd
 - Doc–reality mismatches fixed: workstation in variant docs, `node:24` base, real image sizes
 - `--mode` flag for permission profiles (permissive, restricted, readonly)
 - Permission external_directory allow for config paths

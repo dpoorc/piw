@@ -5,7 +5,7 @@
 # Build (from repo root):
 #   docker build -f variants/<name>/Dockerfile -t pi-harness:<name> .
 #
-FROM node:24-bookworm-slim
+FROM node:24-trixie-slim
 
 # ── System dependencies ──────────────────────────────────────────────────────
 # RUN apt-get update && apt-get install -y --no-install-recommends \

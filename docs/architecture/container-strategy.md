@@ -2,10 +2,10 @@
 
 ## Base image
 
-All variants use `node:24-bookworm-slim` as their base. This gives us:
+All variants use `node:24-trixie-slim` as their base. This gives us:
 
 - Node.js v24 (required by pi)
-- Debian 12 Bookworm (stable, widely used)
+- Debian 13 Trixie (stable, current packages)
 - `slim` variant (smaller attack surface, faster pulls)
 
 No Alpine — the musl libc compatibility issues with native npm modules

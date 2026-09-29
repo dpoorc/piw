@@ -93,6 +93,21 @@
 
 ## Completed
 
+### 2026-09-16 session
+
+- **Base image moved to Debian 13 (trixie)** — `node:24-trixie-slim`
+  replaces `node:24-bookworm-slim` in core + template. Apt set jumps:
+  binwalk 2.4.3, exiftool 13.25, sleuthkit 4.12.1, testdisk 7.2,
+  mediainfo 25.04. `p7zip-full` dropped (dead upstream), replaced by the
+  official 7-Zip 26.03 build (7zz) from build/archives — adds RAR4/RAR5
+  extraction that Debian's DFSG-cleaned `7zip` package cannot provide.
+  `vim-common` → `xxd` (own package since trixie). Manifest row + sha256
+  added in build/README. Image rebuilt and verified in the running
+  workstation container: Debian 13.6, 7-Zip 26.03 with Rar/Rar5,
+  OpenJDK 25, exiftool 13.25, sleuthkit 4.12.1, testdisk 7.2, binwalk
+  2.4.3, MediaInfoLib 25.04. Image sizes and aarch64 stay open
+  (issue #12).
+
 ### 2026-09-11 session
 
 - **Media and forensics tools added to workstation variant** — ffmpeg
