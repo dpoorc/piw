@@ -35,7 +35,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (piw ensure_pi, default .pi/app under the harness dir), not baked into
 # the image. The image is tooling + isolation only; the PATH entry makes
 # the mounted pi executable when the mount is present.
-ENV PATH="/opt/pi/node_modules/.bin:${PATH}"
+ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:${PATH}"
 
 # git-issues — local file-based issue tracker
 COPY --from=git-issues-builder /go/bin/git-issues /usr/local/bin/git-issues

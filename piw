@@ -23,6 +23,9 @@
 #   piw update --dry-run        Show what would change (no executions)
 #   piw doctor [profile]        Diagnose harness setup
 #   piw generate-catalog        Regenerate skills catalog from SKILL.md files
+#   piw tool install <spec>...   Install tools into the shared store
+#   piw tool list               List tools in the shared store
+#   piw tool remove <spec>...   Remove tools from the shared store
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
 #   piw --profile <name>        Launch with a specific variant
@@ -36,6 +39,7 @@
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
 #   PI_PI_DIR       Override the pi app directory (default: .pi/app)
+#   PI_TOOLS_DIR    Override the tool store directory (default: .pi/tools)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
 #   PIW_DEFAULT_PROFILE  Default variant profile (overrides "core")
 #
@@ -312,6 +316,51 @@ resolve_pi_host_dir() {
   fi
 }
 
+# ── Utility: resolve the shared tool store directory ─────────────────────────
+resolve_tools_dir() {
+  # Mirror the other resolvers: an absolute PI_TOOLS_DIR wins; otherwise the
+  # harness owns the store under its own .pi/.
+  if [[ "${PI_TOOLS_DIR:-}" = /* ]]; then
+    echo "$PI_TOOLS_DIR"
+  else
+    echo "$SCRIPT_DIR/${PI_TOOLS_DIR:-.pi/tools}"
+  fi
+}
+
+# ── Utility: create the tool store before Docker can create it as root ───────
+# A missing bind-mount source is created by Docker as root:root, and the host
+# user cannot then write it. Create it here, as the user.
+ensure_tools_dir() {
+  mkdir -p "$(resolve_tools_dir)/bin"
+}
+
+# ── Utility: run a command inside the harness image ──────────────────────────
+# The image is the stable environment. Tool actions run here, never through a
+# host package manager. Leading -v/-e pairs are passed through as extra
+# mounts and env vars.
+_in_container() {
+  local profile="$1"
+  shift
+  local -a extra=()
+  while [[ "${1:-}" == "-v" || "${1:-}" == "-e" ]]; do
+    extra+=("$1" "${2:?missing value for $1}")
+    shift 2
+  done
+
+  ensure_tools_dir
+  docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/pi \
+    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
+    -e npm_config_cache=/tmp/.npm-cache \
+    -e npm_config_ignore_scripts=true \
+    -v "$(resolve_config_dir):/home/pi/.pi/agent:z" \
+    -v "$(resolve_tools_dir):/home/pi/.local:z" \
+    "${extra[@]}" \
+    "${IMAGE_PREFIX}:${profile}" \
+    "$@"
+}
+
 # ── Utility: installed pi version (host-side read from the app dir) ─────────
 _pi_installed_version() {
   local pi_host="$1"
@@ -585,6 +634,95 @@ sync_extensions_for() {
   return "$exit_code"
 }
 
+# ── Command: shared tool store ────────────────────────────────────────────────
+# Specs dispatch to the manager that owns each ecosystem. Every install runs
+# inside the container and lands in the mounted store.
+_tool_install() {
+  local profile="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    echo "ERROR: piw tool install needs at least one spec." >&2
+    echo "  Example: piw tool install npm:typescript uv:ruff" >&2
+    exit 1
+  fi
+  local spec
+  for spec in "$@"; do
+    echo "INFO: Installing $spec into the tool store…"
+    case "$spec" in
+    npm:*) _in_container "$profile" npm install --global --prefix /home/pi/.local "${spec#npm:}" ;;
+    uv:*) _in_container "$profile" env UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool install --force "${spec#uv:}" ;;
+    cargo:*) _in_container "$profile" cargo install --root /home/pi/.local "${spec#cargo:}" ;;
+    go:*) _in_container "$profile" env GOBIN=/home/pi/.local/bin go install "${spec#go:}" ;;
+    *)
+      echo "ERROR: Unknown tool spec '$spec'." >&2
+      echo "  Known prefixes: npm:, uv:, cargo:, go:" >&2
+      exit 1
+      ;;
+    esac
+  done
+}
+
+_tool_remove() {
+  local profile="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    echo "ERROR: piw tool remove needs at least one spec." >&2
+    exit 1
+  fi
+  local spec
+  for spec in "$@"; do
+    case "$spec" in
+    npm:*) _in_container "$profile" npm uninstall --global --prefix /home/pi/.local "${spec#npm:}" ;;
+    uv:*) _in_container "$profile" uv tool uninstall "${spec#uv:}" ;;
+    cargo:*) _in_container "$profile" cargo uninstall --root /home/pi/.local "${spec#cargo:}" ;;
+    go:*)
+      echo "ERROR: go install has no uninstall." >&2
+      echo "  Remove the binary under $(resolve_tools_dir)/bin by hand." >&2
+      exit 1
+      ;;
+    *)
+      echo "ERROR: Unknown tool spec '$spec'." >&2
+      exit 1
+      ;;
+    esac
+  done
+}
+
+_tool_list() {
+  local profile="$1"
+  _in_container "$profile" sh -c '
+    echo "== binaries"
+    ls -1 /home/pi/.local/bin 2>/dev/null || true
+    echo
+    echo "== npm"
+    npm ls --global --prefix /home/pi/.local --depth=0 2>/dev/null || true
+    echo
+    echo "== uv"
+    UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool list 2>/dev/null || true
+    echo
+    echo "== cargo"
+    cargo install --list --root /home/pi/.local 2>/dev/null || true
+  '
+}
+
+# ── Command: manage the shared tool store ────────────────────────────────────
+cmd_tool() {
+  local profile="$1"
+  shift
+  local sub="${1:-list}"
+  [[ $# -gt 0 ]] && shift
+  case "$sub" in
+  install) _tool_install "$profile" "$@" ;;
+  remove) _tool_remove "$profile" "$@" ;;
+  list) _tool_list "$profile" ;;
+  *)
+    echo "ERROR: Unknown 'piw tool' subcommand: $sub" >&2
+    echo "Usage: piw tool install <spec>... | list | remove <spec>..." >&2
+    exit 1
+    ;;
+  esac
+}
+
 # ── Command: launch pi in Docker ──────────────────────────────────────────────
 cmd_launch() {
   local profile="$1"
@@ -606,6 +744,7 @@ cmd_launch() {
   config_dir="$(resolve_config_dir)"
   bootstrap_config "$config_dir"
   bootstrap_permissions
+  ensure_tools_dir
 
   # Ensure APPEND_SYSTEM.md exists
   local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
@@ -688,9 +827,11 @@ cmd_launch() {
 
   # Mode-specific Docker restrictions
   local mode_vol_suffix=""
+  local tools_suffix=""
   local -a mode_docker_flags=()
   if [[ "$mode" == "readonly" ]]; then
-    mode_vol_suffix=":ro"
+    mode_vol_suffix=",ro"
+    tools_suffix=",ro"
     mode_docker_flags+=(--network none)
   fi
 
@@ -715,6 +856,7 @@ cmd_launch() {
     "${variant_skill_volumes[@]}" \
     "${pi_volumes[@]}" \
     -v "$workspace:$workspace:z${mode_vol_suffix}" \
+    -v "$(resolve_tools_dir):/home/pi/.local:z${tools_suffix}" \
     -w "$workspace" \
     "$image_tag" \
     pi "${pi_args[@]}"
@@ -1214,7 +1356,7 @@ while [[ $# -gt 0 ]]; do
   --help | -h)
     show_help
     ;;
-  build | update | install | uninstall | doctor | generate-catalog)
+  build | update | install | uninstall | doctor | generate-catalog | tool)
     COMMAND="$1"
     shift
     ;;
@@ -1254,6 +1396,9 @@ doctor)
   ;;
 generate-catalog)
   cmd_generate_catalog
+  ;;
+tool)
+  cmd_tool "$PROFILE" "${POSITIONAL[@]}"
   ;;
 *)
   cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"

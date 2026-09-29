@@ -19,7 +19,7 @@ FROM node:24-trixie-slim
 # Installed into its own bind-mounted app dir at runtime (piw ensure_pi,
 # default .pi/app under the harness dir), not baked into the image.
 # Image = tooling + isolation.
-ENV PATH="/opt/pi/node_modules/.bin:${PATH}"
+ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:${PATH}"
 
 # ── npm security ────────────────────────────────────────────────────────────
 # Disable install scripts globally (supply chain security)

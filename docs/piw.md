@@ -132,6 +132,39 @@ catalog freshness, git repository status.
 Regenerates `skills/catalog.md` from the `SKILL.md` files. Runs
 automatically at the end of `build` and `update`.
 
+### `tool`
+
+Manage the shared tool store at `.pi/tools`, mounted at `/home/pi/.local`
+inside the container.
+
+```
+piw tool install npm:typescript
+piw tool install uv:ruff
+piw tool install cargo:ripgrep
+piw tool install go:github.com/bettercap/bettercap/v2
+piw tool list
+piw tool remove npm:typescript
+```
+
+Every install runs inside the container and lands in the store, so tools
+survive container recreation. The store bin directory is on PATH in the
+container.
+
+Specs dispatch to the manager that owns each ecosystem:
+
+| Prefix | Manager | Notes |
+|--------|---------|-------|
+| `npm:` | npm | Installed under the store prefix |
+| `uv:` | uv | Python CLI tools |
+| `cargo:` | cargo | Rust crates |
+| `go:` | go | Go modules. `go install` has no uninstall |
+
+`npm:` works in every profile. `uv:`, `cargo:`, and `go:` need a profile
+that ships those toolchains (`workstation` today).
+
+Project-local tools are planned: a gitignored `.pi/tools` in the project,
+placed ahead of the shared store on PATH.
+
 ### `--install` / `--uninstall`
 
 ```
@@ -148,6 +181,7 @@ Also seeds config directory (settings.json, models.json) if missing.
 |----------|-------------|
 | `PI_CONFIG_DIR` | Override pi state directory (default: `.pi/agent/`) |
 | `PI_PI_DIR` | Override pi app directory (default: `.pi/app`; set to an absolute path e.g. `~/.local/share/pi-node` for pi-standard placement) |
+| `PI_TOOLS_DIR` | Override the tool store directory (default: `.pi/tools`) |
 | `YADM_HOME` | Host home passed into the container at launch. The yadm wrapper uses it so dotfiles resolve to the host's repo/config. Not set on the host-side; it is internal to the container. |
 | `ANTHROPIC_API_KEY` | Anthropic API key |
 | `OPENAI_API_KEY` | OpenAI API key |
