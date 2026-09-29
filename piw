@@ -197,6 +197,15 @@ variant_names() {
   done
 }
 
+# ── Utility: the variant image a profile is built FROM, if any ────────────────
+_variant_base() {
+  local from
+  from="$(grep -m1 '^FROM ' "$SCRIPT_DIR/variants/$1/Dockerfile" 2>/dev/null | awk '{print $2}')"
+  if [[ "$from" == "${IMAGE_PREFIX}:"* ]]; then
+    echo "${from#"${IMAGE_PREFIX}:"}"
+  fi
+}
+
 # ── Utility: archives required by a profile ─────────────────────────────────
 _profile_archives() {
   case "$1" in
@@ -899,6 +908,27 @@ cmd_build() {
     mapfile -t targets < <(variant_names)
   else
     targets=("$profile")
+  fi
+
+  # A variant built FROM another variant image needs its base rebuilt first.
+  # Without this, a stale base silently yields a stale variant. The layer
+  # cache makes an unchanged base rebuild cheap.
+  local -a bases=()
+  local p base
+  for p in "${targets[@]}"; do
+    base="$(_variant_base "$p")"
+    [[ -z "$base" ]] && continue
+    [[ " ${targets[*]} " == *" $base "* ]] && continue
+    [[ " ${bases[*]:-} " == *" $base "* ]] && continue
+    bases+=("$base")
+  done
+
+  if (( ${#bases[@]} > 0 )); then
+    echo "INFO: Rebuilding base image(s) first: ${bases[*]}"
+    for p in "${bases[@]}"; do
+      echo "--- $p ---"
+      _build_single "$p" "$no_cache" "$offline"
+    done
   fi
 
   for p in "${targets[@]}"; do
