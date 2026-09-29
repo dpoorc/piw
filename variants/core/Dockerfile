@@ -35,10 +35,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (piw ensure_pi, default .pi/app under the harness dir), not baked into
 # the image. The image is tooling + isolation only; the PATH entry makes
 # the mounted pi executable when the mount is present.
-ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:${PATH}"
+ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:${PATH}"
 
 # git-issues — local file-based issue tracker
 COPY --from=git-issues-builder /go/bin/git-issues /usr/local/bin/git-issues
+
+# ── Tool manager: mise ───────────────────────────────────────────────────────
+# Installs language toolchains and release binaries into the tool store
+# (mounted at /home/pi/.local). The store holds the tools, not the image.
+COPY build/archives/mise-v2026.9.17-linux-x64.tar.gz /tmp/mise.tar.gz
+RUN tar -xzf /tmp/mise.tar.gz -C /tmp \
+    && install -m755 /tmp/mise/bin/mise /usr/local/bin/mise \
+    && rm -rf /tmp/mise.tar.gz /tmp/mise
+
+# mise keeps its data and global config in the store, so installed tools
+# survive a container rebuild. Its shims directory is on PATH.
+ENV MISE_DATA_DIR=/home/pi/.local/share/mise \
+    MISE_GLOBAL_CONFIG_FILE=/home/pi/.local/mise.toml
 
 # Disable npm install scripts globally (supply chain security)
 RUN npm config set ignore-scripts true

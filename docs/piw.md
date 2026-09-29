@@ -142,6 +142,8 @@ piw tool install npm:typescript
 piw tool install uv:ruff
 piw tool install cargo:ripgrep
 piw tool install go:github.com/bettercap/bettercap/v2
+piw tool install opentofu
+piw tool install bin:opentofu/opentofu@v1.12.6
 piw tool list
 piw tool remove npm:typescript
 ```
@@ -158,9 +160,18 @@ Specs dispatch to the manager that owns each ecosystem:
 | `uv:` | uv | Python CLI tools |
 | `cargo:` | cargo | Rust crates |
 | `go:` | go | Go modules. `go install` has no uninstall |
+| `mise:` | mise | Any mise backend, for example `mise:cargo:ripgrep` |
+| `bin:` | mise | GitHub release binary, for example `bin:opentofu/opentofu@v1.12.6` |
+| (no prefix) | mise | Registry name, for example `ripgrep` or `opentofu` |
 
-`npm:` works in every profile. `uv:`, `cargo:`, and `go:` need a profile
-that ships those toolchains (`workstation` today).
+Bare specs and `bin:` specs resolve through mise. It pins versions, and
+it verifies checksums where the backend provides them. mise also installs
+language toolchains, so `piw tool install rust` works without the
+`workstation` profile. The `uv:`, `cargo:`, and `go:` prefixes are
+conveniences that use the toolchains already in the image.
+
+The store lives at `.pi/tools`. mise data and its global `mise.toml` live
+inside it, so installed tools survive container recreation.
 
 Project-local tools are planned: a gitignored `.pi/tools` in the project,
 placed ahead of the shared store on PATH.

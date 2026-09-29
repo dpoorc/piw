@@ -18,8 +18,9 @@ FROM node:24-trixie-slim
 # ── Pi coding agent ──────────────────────────────────────────────────────────
 # Installed into its own bind-mounted app dir at runtime (piw ensure_pi,
 # default .pi/app under the harness dir), not baked into the image.
-# Image = tooling + isolation.
-ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:${PATH}"
+# Image = tooling + isolation. The tool store is mounted at /home/pi/.local;
+# its bin and the mise shims are on PATH. `core` ships mise.
+ENV PATH="/opt/pi/node_modules/.bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:${PATH}"
 
 # ── npm security ────────────────────────────────────────────────────────────
 # Disable install scripts globally (supply chain security)

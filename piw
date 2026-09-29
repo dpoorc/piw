@@ -200,6 +200,9 @@ variant_names() {
 # ── Utility: archives required by a profile ─────────────────────────────────
 _profile_archives() {
   case "$1" in
+  core)
+    echo "mise-v2026.9.17-linux-x64.tar.gz"
+    ;;
   devops)
     echo "yq_linux_amd64.tar.gz"
     ;;
@@ -225,6 +228,7 @@ EOF
 # ── Utility: per-archive download URL (mirrors build/README.md) ─────────────
 _archive_url() {
   case "$1" in
+  mise-v2026.9.17-linux-x64.tar.gz) echo "https://github.com/jdx/mise/releases/download/v2026.9.17/$1" ;;
   go1.27.1.linux-amd64.tar.gz) echo "https://go.dev/dl/$1" ;;
   rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz) echo "https://static.rust-lang.org/dist/$1" ;;
   rizin-v0.9.1-static-x86_64.tar.xz) echo "https://github.com/rizinorg/rizin/releases/download/v0.9.1/$1" ;;
@@ -653,11 +657,9 @@ _tool_install() {
     uv:*) _in_container "$profile" env UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool install --force "${spec#uv:}" ;;
     cargo:*) _in_container "$profile" cargo install --root /home/pi/.local "${spec#cargo:}" ;;
     go:*) _in_container "$profile" env GOBIN=/home/pi/.local/bin go install "${spec#go:}" ;;
-    *)
-      echo "ERROR: Unknown tool spec '$spec'." >&2
-      echo "  Known prefixes: npm:, uv:, cargo:, go:" >&2
-      exit 1
-      ;;
+    mise:*) _in_container "$profile" mise use -g "${spec#mise:}" ;;
+    bin:*) _in_container "$profile" mise use -g "github:${spec#bin:}" ;;
+    *) _in_container "$profile" mise use -g "$spec" ;;
     esac
   done
 }
@@ -680,10 +682,9 @@ _tool_remove() {
       echo "  Remove the binary under $(resolve_tools_dir)/bin by hand." >&2
       exit 1
       ;;
-    *)
-      echo "ERROR: Unknown tool spec '$spec'." >&2
-      exit 1
-      ;;
+    mise:*) _in_container "$profile" mise unuse -g "${spec#mise:}" ;;
+    bin:*) _in_container "$profile" mise unuse -g "github:${spec#bin:}" ;;
+    *) _in_container "$profile" mise unuse -g "$spec" ;;
     esac
   done
 }
@@ -702,6 +703,9 @@ _tool_list() {
     echo
     echo "== cargo"
     cargo install --list --root /home/pi/.local 2>/dev/null || true
+    echo
+    echo "== mise"
+    mise ls 2>/dev/null || true
   '
 }
 

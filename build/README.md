@@ -32,6 +32,7 @@ architecture asset and adjust the COPY filename in the variant Dockerfile.
 | hadolint-linux-x86_64 | https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64 | workstation | Dockerfile linter |
 | tflint_linux_amd64.zip | https://github.com/terraform-linters/tflint/releases/latest/download/tflint_linux_amd64.zip | workstation | Terraform/OpenTofu linter |
 | uv-x86_64-unknown-linux-gnu.tar.gz | https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz | workstation | uv Python package manager |
+| mise-v2026.9.17-linux-x64.tar.gz | https://github.com/jdx/mise/releases/download/v2026.9.17/mise-v2026.9.17-linux-x64.tar.gz | core | mise tool manager (toolchains + release binaries) |
 
 Note on ffmpeg: the `latest` BtbN release tag is rebuilt daily; the
 `n9.0` filename pins the 9.0 branch. The manifest checksum commits the
@@ -51,6 +52,7 @@ dc99eff5008f1ab79bd7084c68513701547a808a89502bf4133683535ab3c695  7z2603-linux-x
 16e4a4a13088ca9f0b5a8ad4d17a1a296bc3cbf007a5ac612986a2220d329395  ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz
 63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445  go1.27.1.linux-amd64.tar.gz
 c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507  hadolint-linux-x86_64
+8d1bcbc0b2ba167ee765e7410502c3f89974d0195eb8ec74537bc93bb367420d  mise-v2026.9.17-linux-x64.tar.gz
 5edcd14ab59b535040c512dbecd6ec9ef976a000b073c19d93e4c431c948581e  packer_1.16.0_linux_amd64.zip
 9102249a9f0b6319c5334a2e5cf8d9cc3f2035e1d3def027c41f6a90f647e8cf  rizin-v0.9.1-static-x86_64.tar.xz
 5326b36c53de11d148c8f8dab6553a3d1006c2cfd32123683073fad3c302605b  rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz
