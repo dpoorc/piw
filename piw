@@ -339,7 +339,7 @@ _npm_latest_version() {
 }
 
 # ── Utility: ensure pi is present in the config mount ────────────────────────
-# mode: require  — install if missing; never touch an installed copy
+# mode: require  — install if missing; never check the registry
 #       upgrade  — bring to latest when npm is reachable, keep otherwise
 ensure_pi() {
   local profile="$1"
@@ -356,14 +356,19 @@ ensure_pi() {
   mkdir -p "$pi_host"
 
   installed="$(_pi_installed_version "$pi_host")"
+
+  # require mode stays offline: pi exists, so there is nothing to do. pi
+  # reports its own updates.
+  if [[ "$mode" == "require" && -n "$installed" ]]; then
+    echo "INFO: pi $installed present."
+    return 0
+  fi
+
+  # The install path and upgrade mode need the published version.
   latest="$(_npm_latest_version "$PI_NPM_PKG")"
 
   if [[ -n "$installed" && -z "$latest" ]]; then
     echo "INFO: pi $installed present (offline — cannot check npm)."
-    return 0
-  fi
-  if [[ "$mode" == "require" && -n "$installed" && ( -z "$latest" || "$installed" == "$latest" ) ]]; then
-    echo "INFO: pi $installed present (latest: ${latest:-unknown})."
     return 0
   fi
   if [[ "$mode" == "upgrade" && -n "$installed" && "$installed" == "$latest" ]]; then
@@ -374,12 +379,6 @@ ensure_pi() {
     echo "ERROR: pi is not installed and npm is unreachable (offline?)." >&2
     echo "  Run 'piw update' with network access to install pi." >&2
     exit 1
-  fi
-  # enforce the guard: this branch requires pi to EXIST (require mode never
-  # upgrades, but a missing pi must fall through to the install path below)
-  if [[ -n "$installed" && -n "$latest" && "$installed" != "$latest" && "$mode" == "require" ]]; then
-    echo "INFO: pi $installed present — update available ($latest); run 'piw update'."
-    return 0
   fi
 
   if [[ "$dry_run" == "true" ]]; then
@@ -592,7 +591,6 @@ cmd_launch() {
   local workspace="$2"
   local resume="${3:-false}"
   local mode="${4:-permissive}"
-  local variant_dir="$SCRIPT_DIR/variants/$profile"
   local image_tag="${IMAGE_PREFIX}:${profile}"
 
   validate_profile "$profile"
@@ -617,14 +615,8 @@ cmd_launch() {
     touch "$append_src"
   fi
 
-  # Build image if missing
-  if ! docker image inspect "$image_tag" &>/dev/null; then
-    echo "INFO: Image '$image_tag' not found. Building…"
-    ensure_archives "$profile"
-    docker build -f "$variant_dir/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
-  fi
-
-  # pi itself lives in the config mount — ensure it before launching
+  # ensure_pi builds the image when missing (ensure_image) and checks the
+  # pi install in the config mount.
   ensure_pi "$profile" require
 
   # Cheap pre-exec guard: a corrupted/empty app mount that still passes the
