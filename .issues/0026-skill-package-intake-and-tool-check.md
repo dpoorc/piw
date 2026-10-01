@@ -1,7 +1,7 @@
 ---
 id: 26
 title: Skill package, intake, and tool check
-status: in-progress
+status: closed
 priority: high
 labels:
     - kind:feature
@@ -12,6 +12,7 @@ relations:
         - 28
 created: "2026-10-01"
 updated: "2026-10-01"
+closed: "2026-10-01"
 ---
 
 ## Parent

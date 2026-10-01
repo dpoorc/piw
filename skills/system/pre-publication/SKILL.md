@@ -36,8 +36,8 @@ Sterilize a project before it becomes public.
 5. **Gated fixes** - propose each fix, apply only what is approved,
    and gate destructive actions separately.
 
-Only intake is implemented at present. Later stages arrive with their
-own work.
+Intake, inventory, and the report skeleton are implemented. The scan
+and gated-fix stages arrive with their own work.
 
 ## Stage 1: Intake
 
@@ -109,6 +109,38 @@ single line `.local` to `.gitignore` as a gated fix. Do not edit
 The output directory holds the report, the sanitized export, and the
 sensitive-information reference. Exclude `.local/prepublish` from the
 scan by exact path, always.
+
+## Stage 2: Inventory
+
+Run `scripts/inventory.py`:
+
+```
+python3 scripts/inventory.py --project-root . --format json > inventory.json
+```
+
+It lists the content categories present, the meta layers present, the
+heavy directories it did not recurse into, and any extension or content
+mismatch. A mismatch is a finding in its own right.
+
+Carrier checks are gated by what the inventory shows. A check whose
+carrier is absent is skipped, and the skip is recorded in the report.
+
+## Stage 4: Report
+
+Run `scripts/report.py`:
+
+```
+python3 scripts/report.py --project-root . \
+  --public-mode "open source" \
+  --known-risk "..." \
+  --inventory inventory.json \
+  --tools tools.json \
+  --stage intake --stage inventory
+```
+
+It writes `report.md` to the output directory. The sections are header,
+declared known risks, findings, skipped checks, suggested remediation
+plan, non-findings, and readiness summary.
 
 ## Invocation
 

@@ -1,7 +1,7 @@
 ---
 id: 27
 title: Inventory and report skeleton
-status: open
+status: in-progress
 priority: high
 labels:
     - kind:feature
