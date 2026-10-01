@@ -1,7 +1,7 @@
 ---
 id: 26
 title: Skill package, intake, and tool check
-status: open
+status: in-progress
 priority: high
 labels:
     - kind:feature
