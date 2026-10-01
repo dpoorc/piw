@@ -1,0 +1,68 @@
+{
+  "comment": "Planted findings in the fixture. Written before the fixture. The runner verifies each one is present, so a broken fixture fails loudly instead of passing every later check.",
+  "findings": [
+    {
+      "id": "secret-tree",
+      "vector": "secrets",
+      "carrier": "working tree",
+      "location": "src/settings.py",
+      "note": "a fake GitHub token shape"
+    },
+    {
+      "id": "secret-history",
+      "vector": "secrets",
+      "carrier": "git history",
+      "location": "config/credentials.py",
+      "note": "committed, then removed, so it exists only in history"
+    },
+    {
+      "id": "pii-content",
+      "vector": "pii",
+      "carrier": "working tree",
+      "location": "docs/contact.md",
+      "note": "a reserved example email and a reserved example phone number"
+    },
+    {
+      "id": "exif-identity",
+      "vector": "metadata",
+      "carrier": "file metadata",
+      "location": "photo.jpg",
+      "note": "Artist, Make, Model, and GPS coordinates"
+    },
+    {
+      "id": "office-author",
+      "vector": "metadata",
+      "carrier": "document metadata",
+      "location": "docs/report.docx",
+      "note": "the core-properties creator field"
+    },
+    {
+      "id": "stray-artifact",
+      "vector": "hygiene",
+      "carrier": "working tree",
+      "location": ".DS_Store",
+      "note": "an editor artifact"
+    },
+    {
+      "id": "ignore-gap",
+      "vector": "hygiene",
+      "carrier": "working tree",
+      "location": ".gitignore",
+      "note": "a direct file ignore that does not cover the directory or the pattern"
+    },
+    {
+      "id": "large-file",
+      "vector": "hygiene",
+      "carrier": "working tree",
+      "location": "big.bin",
+      "note": "a tracked file of six megabytes"
+    },
+    {
+      "id": "extension-mismatch",
+      "vector": "hygiene",
+      "carrier": "working tree",
+      "location": "broken.png",
+      "note": "text content behind an image extension"
+    }
+  ]
+}
