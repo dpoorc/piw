@@ -25,6 +25,9 @@ relations:
         - 29
         - 30
         - 31
+        - 32
+        - 33
+        - 34
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
@@ -62,10 +65,10 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Decision: mise is the install path](.issues/0017-decision-mise-is-the-install-path.md) — mise, using its backends and lockfile only. The docs must not claim universal checksum verification.
 - [Research: tool manager comparison](.issues/0018-research-tool-manager-comparison.md) — mise is the only candidate meeting every requirement. Detail in `docs/research/2026-10-01-tool-manager-comparison.md`.
 - [Research: prior art for extensible defaults](.issues/0019-research-prior-art-for-extensible-defaul.md) — small base, user declaration outside upstream, privileged step in a build step. Detail in `docs/research/2026-10-01-extensibility-prior-art.md`.
+- [Repo shape: public content vs user state](.issues/0020-repo-shape-public-content-vs-user-state.md) — one gitignored `.local/` namespace holds all user state, and `.pi/` leaves the harness root. Generated artifacts stay in tracked directories. See `docs/adr/0001-local-state-namespace.md`.
 
 ## Not yet specified
 
-- How the repo splits public content from user state. A single gitignored local-state namespace is the leading idea, for example `.local/`
 - Whether the layer mechanism ships example layers in-repo, and how a user adopts one
 
 ## Out of scope

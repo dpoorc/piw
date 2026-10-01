@@ -10,6 +10,7 @@ relations:
         - 22
         - 26
         - 27
+        - 34
     depends-on:
         - 20
     related-to:
