@@ -68,10 +68,11 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Research: prior art for extensible defaults](.issues/0019-research-prior-art-for-extensible-defaul.md) — small base, user declaration outside upstream, privileged step in a build step. Detail in `docs/research/2026-10-01-extensibility-prior-art.md`.
 - [Repo shape: public content vs user state](.issues/0020-repo-shape-public-content-vs-user-state.md) — one gitignored `.local/` namespace holds all user state, and `.pi/` leaves the harness root. Generated artifacts stay in tracked directories. See `docs/adr/0001-local-state-namespace.md`.
 - [User manifest: format and location](.issues/0021-user-manifest-format-and-location.md) — two files, no translation. `mise.toml` for `[tools]`, which mise alone parses. `.local/config/piw.conf`, line-oriented and POSIX-awk-readable, for `[layers]` and `[pi]`. Env is not a tool concern and stays out.
+- [Layer mechanism](.issues/0022-layer-mechanism.md) — a layer is `.local/layers/<name>/` with a required `install.sh` run as root at build time, an optional `env`, and an optional `check.sh`. One user image, one Dockerfile, no chaining. `apt:` is sugar. No generated file on disk. `build/` disappears with `ADD --checksum`.
 
 ## Not yet specified
 
-- Whether the layer mechanism ships example layers in-repo, and how a user adopts one
+- Nothing at present. #20, #21, and #22 cleared the fog.
 
 ## Out of scope
 
