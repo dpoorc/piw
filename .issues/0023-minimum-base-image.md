@@ -191,3 +191,50 @@ trusted, at 51 MB instead of 30 MB.
    `releases/latest`.** A pinned sha256 and a floating URL cannot both be
    right, so those three break whenever upstream publishes. `ADD
    --checksum` forces a pinned URL, which removes the class of bug.
+
+## Decisions after review
+
+### Do not strip mise
+
+Rejected. The 21 MB saved is uncompressed, so the compressed layer saving
+is a fraction of that, and it is small against a roughly 250 MB image. A
+build step and a small risk of breaking the binary are not worth it.
+Download size and disk size are not the constraint here.
+
+### `git-issues` does not ship in the default image
+
+The `golang:latest` builder stage is removed. `git-issues` ships in the
+workstation layer instead, which also serves this project's own workflow
+until it moves to GitHub's issue tracker. See #36.
+
+## Final decisions
+
+### The base tag floats
+
+`node:24-trixie-slim`, not a digest pin. piw has to keep up with the tools
+around it. Reproducibility in this project means "this works on every
+machine, first try", not byte-for-byte copies. Tool versions are carried
+by the mise lockfile, not by the base image.
+
+### Image size is acceptable, and it is not the constraint
+
+Roughly 490 MB of additions is fine. The constraint is **build time**,
+including the network downloads, and the feel of the first run. Feels
+small beats is small. No ceiling is stated, and none is enforced. The
+verdict comes from the user, by feel, after a real build.
+
+This is consistent with rejecting `strip`: stripping mise saves disk, not
+build time, so it buys nothing under this rule.
+
+### pi stays in the mount
+
+`CMD ["pi"]` stays, and the image does not install pi. pi evolves fast, so
+baking it would cause problems and solve little. piw owns pi's install and
+`pi update self` owns updates. The image keeps no second source of truth
+for pi.
+
+### `build-essential` stays whole
+
+218 MB, kept for `cargo install`, npm native modules, and Python without
+wheels. The reasoning from #15 is unchanged, and the size is now known
+rather than assumed.

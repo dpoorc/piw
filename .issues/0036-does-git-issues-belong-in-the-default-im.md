@@ -1,7 +1,7 @@
 ---
 id: 36
 title: Does git-issues belong in the default image?
-status: open
+status: closed
 priority: medium
 labels:
     - wayfinder:grilling
@@ -11,6 +11,7 @@ relations:
         - 23
 created: "2026-10-01"
 updated: "2026-10-01"
+closed: "2026-10-01"
 ---
 
 Found while resolving #23.
@@ -31,3 +32,20 @@ The question is also a principle question: the map says the author's personal to
 ## Note
 
 It is already a Go binary, so a store tool via mise's `go:` backend would work and would cost nothing in the image.
+
+## Answer
+
+Not in the default image.
+
+- The `golang:latest AS git-issues-builder` stage is removed from the
+  default Dockerfile. That also removes a heavy builder image from the
+  build, which is worth more than the binary itself.
+- `git-issues` ships in the workstation layer, which is seeded but off by
+  default.
+- This project moves to GitHub's issue tracker when it goes public, so
+  `git-issues` stops being a requirement of the harness at all.
+
+Until that migration, the workstation layer provides it for this
+project's own workflow. Note that `AGENTS.md` and `docs/agents/` describe
+the local `.issues/` workflow and will need updating when the tracker
+moves.

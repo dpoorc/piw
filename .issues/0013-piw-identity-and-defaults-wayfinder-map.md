@@ -58,6 +58,8 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - Do not promise version pinning that the backends cannot deliver
 - Keep piw in bash, with the test suite as the guard
 - Publishing is the intent, so defaults must not encode one person toolset
+- Leanness is about time, not bytes. Build and launch must feel fast, network downloads included. Image size is acceptable when it buys a simpler or faster first run. Feels small beats is small
+- Reproducibility means "this works on every machine, first try", not byte-for-byte copies. Pins are for that, not for carbon copies. Tool versions are carried by the mise lockfile
 
 ## Decisions so far
 
