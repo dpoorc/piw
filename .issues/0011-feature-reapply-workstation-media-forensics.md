@@ -1,12 +1,11 @@
 ---
 id: 11
 title: 'Re-apply workstation media/forensics tooling from stash@{0}'
-status: done
+status: closed
 priority: high
 labels:
     - kind:feature
     - state:resolved
-relations: []
 created: "2026-09-11"
 updated: "2026-09-11"
 ---

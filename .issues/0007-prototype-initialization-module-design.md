@@ -6,7 +6,6 @@ priority: medium
 labels:
     - wayfinder:prototype
     - docs
-relations: []
 created: "2026-08-08"
 updated: "2026-08-14"
 ---

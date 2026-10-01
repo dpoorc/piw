@@ -6,7 +6,6 @@ priority: high
 labels:
     - kind:bug
     - state:needs-triage
-relations: []
 created: "2026-09-11"
 updated: "2026-09-11"
 ---
