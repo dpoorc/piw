@@ -39,8 +39,8 @@ explicitly, so pi does not need `.pi/`.
 - `.local/` sits inside the workspace when the harness is self-hosted, so
   the agent can read it. Deny rules are required for the secrets and for
   pi's `auth.json`.
-- The secrets file keeps the basename `.env`, because the permission rules
-  match that name.
+- The secrets file is `.local/env`. The permission rules match the basename
+  `.env`, so they must be updated to match the new name.
 - Generated artifacts in tracked directories stay where they are. They are
   generated, not user-owned, and `build/archives/` must remain in the
   Docker build context.

@@ -28,6 +28,7 @@ relations:
         - 32
         - 33
         - 34
+        - 35
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
@@ -66,6 +67,7 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Research: tool manager comparison](.issues/0018-research-tool-manager-comparison.md) — mise is the only candidate meeting every requirement. Detail in `docs/research/2026-10-01-tool-manager-comparison.md`.
 - [Research: prior art for extensible defaults](.issues/0019-research-prior-art-for-extensible-defaul.md) — small base, user declaration outside upstream, privileged step in a build step. Detail in `docs/research/2026-10-01-extensibility-prior-art.md`.
 - [Repo shape: public content vs user state](.issues/0020-repo-shape-public-content-vs-user-state.md) — one gitignored `.local/` namespace holds all user state, and `.pi/` leaves the harness root. Generated artifacts stay in tracked directories. See `docs/adr/0001-local-state-namespace.md`.
+- [User manifest: format and location](.issues/0021-user-manifest-format-and-location.md) — two files, no translation. `mise.toml` for `[tools]`, which mise alone parses. `.local/config/piw.conf`, line-oriented and POSIX-awk-readable, for `[layers]` and `[pi]`. Env is not a tool concern and stays out.
 
 ## Not yet specified
 

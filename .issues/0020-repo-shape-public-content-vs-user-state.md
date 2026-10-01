@@ -38,7 +38,7 @@ deleted from the harness root.
 
 ```
 .local/
-├── .env          secrets (was .env at the root)
+├── env           secrets (was .env at the root)
 ├── config/       piw's user configuration: manifest and layers
 ├── extensions/   pi's global extensions, user-owned (was extensions/)
 ├── agent/        pi's agent directory (was .pi/agent)
@@ -80,7 +80,8 @@ sandbox, then asserts that `git status --porcelain` is empty.
 ### Consequences found while resolving this
 
 - The permission rules deny the basename `.env`. A file named
-  `.local/env` would not match, so the secrets file keeps the name `.env`.
+  `.local/env` would not match, so the rule must be updated to match the
+  new name. The rules are ours to change.
 - No rule covers pi's `auth.json`, which the agent can read today when the
   workspace is the harness directory. The state namespace needs deny
   rules. See the new ticket.
