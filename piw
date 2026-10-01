@@ -1379,19 +1379,25 @@ while [[ $# -gt 0 ]]; do
     MODE="$2"
     shift 2
     ;;
-  --install)
-    COMMAND="install"
-    shift
-    ;;
-  --uninstall)
-    COMMAND="uninstall"
+  --install | --uninstall)
+    if [[ -n "$COMMAND" ]]; then
+      echo "ERROR: $1 cannot be combined with the '$COMMAND' command." >&2
+      exit 1
+    fi
+    COMMAND="${1#--}"
     shift
     ;;
   --help | -h)
     show_help
     ;;
   build | update | install | uninstall | doctor | generate-catalog | tool)
-    COMMAND="$1"
+    # Only the first command word counts. Every later word is an argument to
+    # it, so "piw tool install x" reaches cmd_tool, not cmd_install.
+    if [[ -n "$COMMAND" ]]; then
+      POSITIONAL+=("$1")
+    else
+      COMMAND="$1"
+    fi
     shift
     ;;
   -*)

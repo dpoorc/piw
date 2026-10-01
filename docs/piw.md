@@ -206,6 +206,20 @@ Also seeds config directory (settings.json, models.json) if missing.
 
 All API keys are sourced from `.env` (if present) or the host environment.
 
+## Tests
+
+```
+tests/run.sh
+```
+
+Drives the real `piw` with a stub `docker` on PATH. Argument parsing, image
+tags, mounts, environment, and the container command are all exercised. No
+Docker daemon is needed, and the suite runs in under a second.
+
+The suite runs in a temporary sandbox with a fake variants tree, dummy
+archives, and stubs for `curl` and `npm`, so it never touches the repo or the
+network. Run it after any change to `piw`.
+
 ## Flag Compatibility
 
 | Flag | launch | build | update | doctor |
