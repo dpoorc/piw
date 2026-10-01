@@ -1,7 +1,7 @@
 ---
 id: 28
 title: Fixture project and seam harness
-status: in-progress
+status: closed
 priority: high
 labels:
     - kind:feature
@@ -17,6 +17,7 @@ relations:
         - 26
 created: "2026-10-01"
 updated: "2026-10-01"
+closed: "2026-10-01"
 ---
 
 ## Parent

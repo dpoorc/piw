@@ -36,8 +36,8 @@ Sterilize a project before it becomes public.
 5. **Gated fixes** - propose each fix, apply only what is approved,
    and gate destructive actions separately.
 
-Intake, inventory, and the report skeleton are implemented. The scan
-and gated-fix stages arrive with their own work.
+Intake, inventory, the report skeleton, and the gated-fix protocol are
+implemented. The scan stages arrive with their own work.
 
 ## Stage 1: Intake
 
@@ -141,6 +141,33 @@ python3 scripts/report.py --project-root . \
 It writes `report.md` to the output directory. The sections are header,
 declared known risks, findings, skipped checks, suggested remediation
 plan, non-findings, and readiness summary.
+
+## Stage 5: Gated fixes
+
+Nothing is applied without approval. The ledger records every proposed
+fix and its state.
+
+```
+python3 scripts/fixes.py --project-root . add --from proposals.json
+python3 scripts/fixes.py --project-root . list
+python3 scripts/fixes.py --project-root . approve F1
+python3 scripts/fixes.py --project-root . apply F1
+python3 scripts/fixes.py --project-root . verify F1
+```
+
+Rules the script enforces:
+
+- A fix is applied only after it is approved.
+- A batch approval covers low-risk reversible fixes only. Every other
+  fix is approved on its own.
+- A destructive fix needs a separate confirmation, a named backup that
+  exists, and a recorded restore command. The restore command is
+  printed on apply.
+- A credential rotation is handed off. A history rewrite is never a
+  substitute for rotation.
+
+Propose the exact action, not a description of the action. Name the
+file, the line, and the command.
 
 ## Invocation
 

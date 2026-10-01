@@ -1,7 +1,7 @@
 ---
 id: 29
 title: Gated-fix protocol and destructive gate
-status: open
+status: in-progress
 priority: high
 labels:
     - kind:feature

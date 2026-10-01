@@ -50,6 +50,13 @@ so a broken fixture fails loudly instead of passing every later check.
 ticket numbers, batch names, option letters, or TODO markers. The test
 harness is excluded from the gate.
 
+## The gate scenario
+
+Seam A drives the fix ledger through a full scenario: propose, refuse
+to apply without approval, refuse to batch a destructive fix, apply a
+destructive fix only with a backup and a printed restore command, and
+verify only an applied fix.
+
 ## Later vectors
 
 As each vector lands, add its assertion to Seam A. The fixture already

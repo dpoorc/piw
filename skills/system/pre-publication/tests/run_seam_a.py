@@ -281,6 +281,60 @@ def check_g1(results):
         results.fail("gate G1 hygiene", result.stdout.strip())
 
 
+def run_fixes(root, args):
+    result = subprocess.run(
+        [sys.executable, os.path.join(SCRIPTS, "fixes.py"),
+         "--project-root", root] + args,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return result.returncode, result.stdout
+
+
+def check_gate(results):
+    import tempfile
+    gate = tempfile.mkdtemp(prefix="prepublish-gate-")
+    source = os.path.join(gate, "fixes-in.json")
+    with open(source, "w", encoding="utf-8") as handle:
+        json.dump([
+            {"finding": "secret-tree", "class": "secrets",
+             "carrier": "working tree", "location": "src/settings.py",
+             "kind": "forward-fix", "action": "Remove the token.",
+             "reversible": True},
+            {"finding": "secret-history", "class": "secrets",
+             "carrier": "git history", "location": "config/credentials.py",
+             "kind": "history-rewrite", "action": "Rewrite history.",
+             "destructive": True, "restore": "git reset --hard backup"},
+        ], handle)
+    backup = os.path.join(gate, "backup.bundle")
+    open(backup, "w").close()
+
+    steps = [
+        (("add", "--from", source), 0, "propose fixes"),
+        (("apply", "F1"), 1, "refuse to apply an unapproved fix"),
+        (("approve", "F1", "F2", "--batch"), 1,
+         "refuse to batch a destructive fix"),
+        (("approve", "F1", "F2"), 1, "refuse a batch without --batch"),
+        (("approve", "F1"), 0, "approve a low-risk fix"),
+        (("approve", "F2"), 0, "approve a destructive fix alone"),
+        (("apply", "F2", "--confirm-destructive"), 1,
+         "refuse a destructive fix with no backup"),
+        (("apply", "F2", "--confirm-destructive", "--backup", backup), 0,
+         "apply a destructive fix with a backup"),
+        (("verify", "F1"), 1, "refuse to verify an unapplied fix"),
+        (("apply", "F1"), 0, "apply an approved fix"),
+        (("verify", "F1"), 0, "verify an applied fix"),
+    ]
+    for args, expected, label in steps:
+        code, out = run_fixes(gate, list(args))
+        if code != expected:
+            results.fail("gate: %s" % label, "exit %s, expected %s" % (code, expected))
+            continue
+        if "--backup" in args and "Restore:" not in out:
+            results.fail("gate: %s" % label, "no restore command printed")
+            continue
+        results.ok("gate: %s" % label)
+    shutil.rmtree(gate, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", default=None,
@@ -300,6 +354,7 @@ def main():
     check_inventory(target, results)
     check_report(target, results)
     check_g1(results)
+    check_gate(results)
     return results.report()
 
 
