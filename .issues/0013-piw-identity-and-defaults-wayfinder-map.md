@@ -31,7 +31,7 @@ relations:
         - 35
         - 36
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-02"
 ---
 
 ## Destination
@@ -70,9 +70,10 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Research: tool manager comparison](.issues/0018-research-tool-manager-comparison.md) — mise is the only candidate meeting every requirement. Detail in `docs/research/2026-10-01-tool-manager-comparison.md`.
 - [Research: prior art for extensible defaults](.issues/0019-research-prior-art-for-extensible-defaul.md) — small base, user declaration outside upstream, privileged step in a build step. Detail in `docs/research/2026-10-01-extensibility-prior-art.md`.
 - [Repo shape: public content vs user state](.issues/0020-repo-shape-public-content-vs-user-state.md) — one gitignored `.local/` namespace holds all user state, and `.pi/` leaves the harness root. Generated artifacts stay in tracked directories. See `docs/adr/0001-local-state-namespace.md`.
-- [User manifest: format and location](.issues/0021-user-manifest-format-and-location.md) — two files, no translation. `mise.toml` for `[tools]`, which mise alone parses. `.local/config/piw.conf`, line-oriented and POSIX-awk-readable, for `[layers]` and `[pi]`. Env is not a tool concern and stays out.
+- [User manifest: format and location](.issues/0021-user-manifest-format-and-location.md) — two files, no translation. `mise.toml` for `[tools]`, which mise alone parses. `.local/mise/config.toml` for `[tools]`, which mise alone parses. `.local/piw.conf`, line-oriented and POSIX-awk-readable, for `[layers]` and `[pi]`. Env is not a tool concern and stays out.
 - [Layer mechanism](.issues/0022-layer-mechanism.md) — a layer is `.local/layers/<name>/` with a required `install.sh` run as root at build time, an optional `env`, and an optional `check.sh`. One user image, one Dockerfile, no chaining. `apt:` is sugar. No generated file on disk. `build/` disappears with `ADD --checksum`.
 - [Minimum base image](.issues/0023-minimum-base-image.md) — `node:24-trixie-slim`, T0 and T1 from apt, and mise, yq, and uv from GitHub with `ADD --checksum`. Debian's `yq` is a different tool at 3.x, and `uv` is absent, so both come from GitHub. Roughly 490 MB of additions. The full Dockerfile is in the ticket.
+- [Store layout and the container mount map](.issues/0024-store-layout-and-two-scope-plumbing.md) — one mount per piece, twelve in all. The harness becomes a read-only resource tree: skills, agents, and `APPEND_SYSTEM.md` mount read-only, which is safe because nothing in pi writes to those paths. `.local/mise/config.toml` replaces `.local/mise.toml`. `.local/extensions/` disappears into `.local/agent/extensions/`. `.local/agents/skills/` adds the Agent Skills convention. `.local/env` passes whole with `--env-file` and holds secrets only, so the API key allowlist goes.
 
 ## Not yet specified
 
