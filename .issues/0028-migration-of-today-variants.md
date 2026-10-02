@@ -6,13 +6,15 @@ priority: medium
 labels:
     - wayfinder:task
 relations:
+    blocks:
+        - 34
     depends-on:
         - 22
         - 23
     related-to:
         - 13
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-02"
 ---
 
 ## Question

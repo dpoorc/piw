@@ -6,6 +6,8 @@ priority: medium
 labels:
     - wayfinder:grilling
 relations:
+    blocks:
+        - 34
     related-to:
         - 13
 created: "2026-10-02"
@@ -53,6 +55,37 @@ where the command lives.
    script on the host, not in the container, and the extraction is a
    `python3 -c` call. This contradicts the standing preference that piw runs on
    a host without python3, jq, or yq.
+
+## What the catalog is for
+
+The first reading of this ticket was wrong, and the correction is worth
+recording because the goal is not written down anywhere. It belongs in the docs.
+See #30.
+
+pi's mechanism is that `docs/skills.md` adds each skill's name, description, and
+path to the system prompt, and the system prompt is sent on **every turn**. The
+catalog's purpose is the opposite: one artifact, read **once**, describing
+**many** skills. The index then lives in the conversation and is periodically
+refreshed, instead of being repeated in the system prompt forever.
+
+### The tension it creates
+
+**pi has no setting that suppresses skill advertising.** `settings.md` offers
+only `skills`, which chooses the paths, and `enableSkillCommands`, which chooses
+whether `/skill:name` commands are registered. A skill is advertised if pi
+discovers it, so the only way to keep it out of the system prompt is to keep it
+out of pi's discovery paths.
+
+Measured: the harness holds 43 skills, and their `name` and `description` lines
+total 6967 bytes, roughly 1741 tokens. That is the per-turn cost of letting pi
+advertise them.
+
+So the catalog only saves tokens if the harness's skills stop being discoverable
+by pi, and the catalog becomes the index instead. That is a real trade. The
+agent loses pi's progressive disclosure and its `/skill:name` commands, and
+gains a smaller system prompt.
+
+That trade is the question this ticket now has to answer.
 
 ## Questions
 

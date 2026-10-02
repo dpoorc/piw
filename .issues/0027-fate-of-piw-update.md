@@ -28,11 +28,15 @@ Today it pulls the repo, rebuilds images, upgrades pi, and syncs extensions. Dec
 
 ### What `piw update` becomes
 
-Three steps, in order:
+Four steps, in order:
 
 1. `git pull --ff-only` the harness. Fail loudly on divergence.
-2. `piw build`.
-3. `pi update --all` in the container, which covers pi, the extensions, and the
+2. Report drift between the seeded config files and their seeds. A diff, not a
+   failure. Added while resolving **How are the default extensions declared,
+   seeded, and updated?**: the user who needs to see a newly added default is
+   the established user, and they are the one running `update`.
+3. `piw build`.
+4. `pi update --all` in the container, which covers pi, the extensions, and the
    model catalogs in one command.
 
 ### What dies
@@ -94,6 +98,10 @@ Dockerfile.
 a passthrough to `pi update --all --force`.
 
 **`--build-only` and `--install-only` die.**
+
+**`update` reports seeded-config drift.** Added after this ticket closed, by
+**How are the default extensions declared, seeded, and updated?**. See the four
+steps above.
 
 ### Findings
 

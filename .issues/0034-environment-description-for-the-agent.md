@@ -9,10 +9,13 @@ relations:
     depends-on:
         - 21
         - 22
+        - 28
+        - 38
+        - 37
     related-to:
         - 13
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-02"
 ---
 
 The variant skill dies with variants, but the need it served does not. The agent must know what the environment provides.
