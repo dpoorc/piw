@@ -31,6 +31,7 @@ relations:
         - 35
         - 36
         - 37
+        - 38
 created: "2026-10-01"
 updated: "2026-10-02"
 ---
@@ -77,6 +78,7 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Store layout and the container mount map](.issues/0024-store-layout-and-two-scope-plumbing.md) — one mount per piece, twelve in all. The harness becomes a read-only resource tree: skills, agents, and `APPEND_SYSTEM.md` mount read-only, which is safe because nothing in pi writes to those paths. `.local/mise/config.toml` replaces `.local/mise.toml`. `.local/extensions/` disappears into `.local/agent/extensions/`. `.local/agents/skills/` adds the Agent Skills convention. `.local/env` passes whole with `--env-file` and holds secrets only, so the API key allowlist goes.
 - [Project tool declaration](.issues/0025-workspace-native-tools.md) — no project scope. mise already reads the project's own `mise.toml` from the working directory, and piw does not duplicate it. piw never installs project tools at launch and never runs `mise trust`. No piw command touches the project's tools; the agent runs `mise install` itself. The lockfile carries two platforms, not seven.
 - [CLI surface](.issues/0026-cli-surface.md) — the final command set. `--profile`, `--all`, and `--offline` die. `--install` and `--uninstall` become `link` and `unlink`. The manifest gains `layer` beside `tool`, and `layer add` scaffolds a `run:` layer and points the user at both ways to edit it. There is no project command: piw manages the harness, not the project. Each command declares its flags, so a mismatched flag is an error. `doctor` checks four things, and reports seeded-config drift as a diff rather than a failure. `--version` is added.
+- [Fate of piw update](.issues/0027-fate-of-piw-update.md) — `piw update` shrinks to a pull, a build, and `pi update --all` in the container. `ensure_pi`'s upgrade mode and `sync_extensions_for` die, because pi owns both. Launch detects a stale image by comparing a hash of the build plan against an image label, and refuses rather than rebuilding, so a manifest edit is never silent and never slow. `--build-only` and `--install-only` die.
 
 ## Not yet specified
 
