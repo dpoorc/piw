@@ -176,6 +176,12 @@ never runs mise.
 5. **`pi-subagents` reads its global agents flat.** `readdirSync` on
    `<agent-dir>/agents`, filtered to `.md`. A subdirectory would not be
    discovered, so that directory must be a whole-directory overlay.
+6. **mise's state directory is outside `MISE_DATA_DIR`.** Correction, found
+   while resolving #25. Trust and tracking state live at `$XDG_STATE_HOME/mise`,
+   which defaults to `~/.local/state/mise`, not under
+   `/home/pi/.local/share/mise`. In the container both are inside the store
+   mount, so the map needs no change, but the read-write store mount is load
+   bearing for a reason that `MISE_DATA_DIR` does not describe.
 
 ### Final decisions
 
