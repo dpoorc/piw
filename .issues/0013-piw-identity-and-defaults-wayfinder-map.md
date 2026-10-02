@@ -30,6 +30,7 @@ relations:
         - 34
         - 35
         - 36
+        - 37
 created: "2026-10-01"
 updated: "2026-10-02"
 ---
@@ -74,11 +75,12 @@ The harness ships one default image that is useful out of the box, and anyone ca
 - [Layer mechanism](.issues/0022-layer-mechanism.md) — a layer is `.local/layers/<name>/` with a required `install.sh` run as root at build time, an optional `env`, and an optional `check.sh`. One user image, one Dockerfile, no chaining. `apt:` is sugar. No generated file on disk. `build/` disappears with `ADD --checksum`.
 - [Minimum base image](.issues/0023-minimum-base-image.md) — `node:24-trixie-slim`, T0 and T1 from apt, and mise, yq, and uv from GitHub with `ADD --checksum`. Debian's `yq` is a different tool at 3.x, and `uv` is absent, so both come from GitHub. Roughly 490 MB of additions. The full Dockerfile is in the ticket.
 - [Store layout and the container mount map](.issues/0024-store-layout-and-two-scope-plumbing.md) — one mount per piece, twelve in all. The harness becomes a read-only resource tree: skills, agents, and `APPEND_SYSTEM.md` mount read-only, which is safe because nothing in pi writes to those paths. `.local/mise/config.toml` replaces `.local/mise.toml`. `.local/extensions/` disappears into `.local/agent/extensions/`. `.local/agents/skills/` adds the Agent Skills convention. `.local/env` passes whole with `--env-file` and holds secrets only, so the API key allowlist goes.
-- [Project tool declaration](.issues/0025-workspace-native-tools.md) — no project scope. mise already reads the project's own `mise.toml` from the working directory, and piw does not duplicate it. piw never installs project tools at launch and never runs `mise trust`. One explicit command installs them, and the agent can always run `mise install` itself. The lockfile carries two platforms, not seven.
+- [Project tool declaration](.issues/0025-workspace-native-tools.md) — no project scope. mise already reads the project's own `mise.toml` from the working directory, and piw does not duplicate it. piw never installs project tools at launch and never runs `mise trust`. No piw command touches the project's tools; the agent runs `mise install` itself. The lockfile carries two platforms, not seven.
+- [CLI surface](.issues/0026-cli-surface.md) — the final command set. `--profile`, `--all`, and `--offline` die. `--install` and `--uninstall` become `link` and `unlink`. The manifest gains `layer` beside `tool`, and `layer add` scaffolds a `run:` layer and points the user at both ways to edit it. There is no project command: piw manages the harness, not the project. Each command declares its flags, so a mismatched flag is an error. `doctor` checks four things, and reports seeded-config drift as a diff rather than a failure. `--version` is added.
 
 ## Not yet specified
 
-- Nothing at present. #20, #21, and #22 cleared the fog.
+- Nothing at present. #20 through #26 cleared the fog.
 
 ## Out of scope
 

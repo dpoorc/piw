@@ -112,9 +112,11 @@ proportional to the project's tool count, and it would break under
 `--network none` in readonly mode. The agent, or pi's escape hatch, runs the
 install.
 
-**A command exists to install the project's tools.** The explicit path. Its
-name and shape belong to #26. The implicit path is the agent running
-`mise install` itself.
+**No piw command touches the project's tools.** Amended while resolving **CLI
+surface**. An explicit command was considered and rejected: piw manages the
+harness, not the project, and no other piw command writes to the workspace.
+The only path is the agent running `mise install` itself, inside the
+container, or pi's escape hatch.
 
 **piw never runs `mise trust` on the workspace.** `mise install` auto-trusts
 when the agent needs it. Pre-trusting every workspace at launch would
@@ -141,7 +143,7 @@ own note writes it in its own `AGENTS.md`. Amends #34.
 
 ## Consequences
 
-- **#26 loses the two scopes** and gains one project-install command.
+- **#26 loses the two scopes and gains no project command at all.**
 - **#34 narrows.** A global environment description may not be needed at all.
 - **A correction to #24.** mise's state directory is outside `MISE_DATA_DIR` and
   lands in the store mount. Nothing changes in the map, because the store mount
