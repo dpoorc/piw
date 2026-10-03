@@ -1,6 +1,6 @@
-# pi-harness
+# piw
 
-pi-harness is a launcher and environment manager for the pi coding agent.
+piw is a launcher and environment manager for the pi coding agent.
 It runs pi inside a container and keeps the workspace native.
 
 ## Language

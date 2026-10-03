@@ -1,12 +1,12 @@
 ---
 name: workflow
 description: >
-  pi-harness workflow — interaction model, patterns, and environment
+  piw workflow — interaction model, patterns, and environment
   context for working inside this Docker-based coding harness. Read
   this before taking any action and after every compaction.
 ---
 
-# pi-harness Workflow
+# piw Workflow
 
 ## 1. Interaction Model
 

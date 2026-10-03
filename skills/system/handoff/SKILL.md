@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: >
-  Request and receive handoffs for pi-harness sessions. Use when
+  Request and receive handoffs for piw sessions. Use when
   transitioning between sessions, collecting context before
   compaction, or delegating work via pi-intercom. A handoff
   transfers findings, WIP, and roadmap context.

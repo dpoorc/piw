@@ -1,4 +1,4 @@
-# pi-harness: <name>
+# piw: <name>
 
 <one-paragraph description of what this variant provides and when to use it>
 

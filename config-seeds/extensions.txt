@@ -1,4 +1,4 @@
-# pi-harness third-party packages
+# piw third-party packages
 # One package per line, # for comments, blank lines ignored.
 # Uses standard `pi install` syntax:
 #   npm:<name>[@<version>]

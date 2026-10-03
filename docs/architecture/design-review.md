@@ -1,6 +1,6 @@
 # Design Review
 
-Observations from working inside the pi-harness across multiple
+Observations from working inside the piw across multiple
 sessions. This is a retrospective — what works well and where the
 design shows strain.
 
@@ -45,7 +45,7 @@ contributions. Even JSON schema validation of config files would
 catch a class of bugs.
 
 **Self-hosting is elegant but confusing.** The workspace is the harness
-itself. Changes to pi-harness happen from inside pi-harness. For the
+itself. Changes to piw happen from inside piw. For the
 creator this is natural. For a newcomer: "Do I clone this into itself?
 Do I need the harness to build the harness?"
 

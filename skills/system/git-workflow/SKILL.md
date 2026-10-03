@@ -1,7 +1,7 @@
 ---
 name: git-workflow
 description: >
-  Git conventions for projects developed inside the pi-harness.
+  Git conventions for projects developed inside the piw.
   Covers commit format, branch strategy, and integration with the
   alignment-before-action workflow. A global skill that gives way
   to project-local conventions.
@@ -10,7 +10,7 @@ description: >
 # Git workflow
 
 This skill defines git conventions for projects developed inside the
-pi-harness. It is a global skill: if a project has its own git
+piw. It is a global skill: if a project has its own git
 conventions (in a local skill or CONTRIBUTING.md), those take
 priority.
 

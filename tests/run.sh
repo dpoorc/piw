@@ -23,8 +23,8 @@ mkdir -p "$SANDBOX/variants/core" "$SANDBOX/variants/devops" \
   "$SANDBOX/variants/workstation" "$SANDBOX/build/archives"
 cp "$ROOT/piw" "$SANDBOX/piw"
 printf 'FROM scratch\n' > "$SANDBOX/variants/core/Dockerfile"
-printf 'FROM pi-harness:core\n' > "$SANDBOX/variants/devops/Dockerfile"
-printf 'FROM pi-harness:core\n' > "$SANDBOX/variants/workstation/Dockerfile"
+printf 'FROM piw:core\n' > "$SANDBOX/variants/devops/Dockerfile"
+printf 'FROM piw:core\n' > "$SANDBOX/variants/workstation/Dockerfile"
 
 # Dummy file for every archive piw knows, so ensure_archives never downloads.
 # The names come from piw itself, so the fixtures cannot drift out of date.

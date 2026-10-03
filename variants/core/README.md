@@ -1,4 +1,4 @@
-# pi-harness: core
+# piw: core
 
 The minimal coding agent variant. Includes pi and the bare essentials
 (git, curl, jq, openssh-client). Use this for general coding work where
@@ -30,7 +30,7 @@ piw /path/to/workspace          # core is the default
 piw build core
 
 # Or build directly:
-docker build -t pi-harness:core variants/core
+docker build -t piw:core variants/core
 docker run --rm -it \
   --user $(id -u):$(id -g) \
   -e HOME=/home/pi \
@@ -38,5 +38,5 @@ docker run --rm -it \
   -v .pi/agent:/home/pi/.pi/agent:z \
   -v /path/to/workspace:/path/to/workspace:z \
   -w /path/to/workspace \
-  pi-harness:core
+  piw:core
 ```

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# piw — pi-harness: launch the pi coding agent in Docker
+# piw — piw: launch the pi coding agent in Docker
 #
 # Model:
 #   The Docker image is tooling + isolation only. pi lives in its own
@@ -47,7 +47,7 @@ set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-IMAGE_PREFIX="pi-harness"
+IMAGE_PREFIX="piw"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
@@ -574,7 +574,7 @@ sync_extensions_for() {
   local image_tag="${IMAGE_PREFIX}:${profile}"
   local exit_code=0 installed=0 upgraded=0 skipped=0 failed=0
 
-  echo "Syncing extensions for pi-harness:$profile…"
+  echo "Syncing extensions for piw:$profile…"
 
   for pkg in "${packages[@]}"; do
     local dir ver latest verb
@@ -848,7 +848,7 @@ cmd_launch() {
     mode_docker_flags+=(--network none)
   fi
 
-  echo "INFO: Launching pi-harness ($profile) in $workspace (mode: $mode)$session_flag"
+  echo "INFO: Launching piw ($profile) in $workspace (mode: $mode)$session_flag"
   exec docker run --rm -it \
     --add-host host.docker.internal:host-gateway \
     --user "$(id -u):$(id -g)" \
@@ -891,7 +891,7 @@ _build_single() {
     build_args=("--no-cache" "${build_args[@]}")
   fi
 
-  echo "INFO: Building pi-harness:$profile…"
+  echo "INFO: Building piw:$profile…"
   docker build "${build_args[@]}"
   echo "INFO: Build complete: $image_tag"
 }
@@ -984,7 +984,7 @@ cmd_install() {
   fi
 
   echo ""
-  echo "✓ pi-harness installed. Run 'piw' to launch."
+  echo "✓ piw installed. Run 'piw' to launch."
 }
 
 # ── Command: remove piw symlink from PATH ────────────────────────────────────
@@ -1026,7 +1026,7 @@ cmd_doctor() {
   local profile="$1"
   local errors=0
 
-  echo "pi-harness doctor — diagnosing \"$profile\" profile"
+  echo "piw doctor — diagnosing \"$profile\" profile"
   echo ""
 
   # ── Docker ──
@@ -1288,7 +1288,7 @@ cmd_update() {
     for p in "${targets[@]}"; do
       echo "--- $p ---"
       if [[ "$dry_run" == "true" ]]; then
-        echo "(dry-run) Would rebuild pi-harness:$p"
+        echo "(dry-run) Would rebuild piw:$p"
         continue
       fi
       _build_single "$p" "$no_cache" "$offline"

@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 Chrome DevTools Protocol tools for agent-assisted web automation. These tools connect to Chrome running on `:9222` with remote debugging enabled.
 
-## Setup (pi-harness)
+## Setup (piw)
 
 This skill requires Chrome with remote debugging on port 9222. Since the
 container does not include Chrome, run it on the host:

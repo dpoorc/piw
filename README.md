@@ -1,6 +1,6 @@
-# pi-harness — Docker environment for the pi coding agent
+# piw — Docker environment for the pi coding agent
 
-pi-harness wraps [pi](https://pi.dev) in a Docker container. It
+piw wraps [pi](https://pi.dev) in a Docker container. It
 isolates the agent from your host system while keeping the workspace
 accessible through bind mounts. No dependency pollution, no host
 modifications, no "works on my machine."

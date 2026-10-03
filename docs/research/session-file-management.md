@@ -8,7 +8,7 @@
 
 Session files accumulate in `.pi/agent/sessions/<workspace-hash>/`
 as JSONL files. Each session produces one file (50KB–2MB typical).
-Over time this grows without bound — the pi-harness workspace alone
+Over time this grows without bound — the piw workspace alone
 had 9 files totaling ~5.5MB before cleanup.
 
 The `.pi/` directory is gitignored so session files never pollute

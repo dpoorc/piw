@@ -1,4 +1,4 @@
-# pi-harness documentation
+# piw documentation
 
 A Docker-based harness for the [pi coding agent](https://pi.dev).
 Designed to be lean, flexible, and composable — you carry exactly
@@ -25,7 +25,7 @@ the tooling you need and no more.
 ## Project layout
 
 ```
-pi-harness/
+piw/
 ├── piw                     # Entry point — build & run any variant
 ├── .env                    # API keys and config (gitignored)
 ├── .pi/                    # Runtime state: sessions, config, auth (gitignored)

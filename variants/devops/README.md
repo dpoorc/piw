@@ -1,4 +1,4 @@
-# pi-harness: devops
+# piw: devops
 
 Extends the core variant with Python tooling and infrastructure
 management tools. Use this for Ansible playbooks, Terraform configs,
@@ -29,7 +29,7 @@ piw --profile devops /path/to/workspace
 piw build devops
 
 # Or build directly:
-docker build -t pi-harness:devops variants/devops
+docker build -t piw:devops variants/devops
 docker run --rm -it \
   --user $(id -u):$(id -g) \
   -e HOME=/home/pi \
@@ -37,5 +37,5 @@ docker run --rm -it \
   -v .pi/agent:/home/pi/.pi/agent:z \
   -v /path/to/workspace:/path/to/workspace:z \
   -w /path/to/workspace \
-  pi-harness:devops
+  piw:devops
 ```

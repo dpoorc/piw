@@ -1,6 +1,6 @@
 # Overview
 
-pi-harness wraps the [pi coding agent](https://pi.dev) in a Docker
+piw wraps the [pi coding agent](https://pi.dev) in a Docker
 container with three design goals:
 
 ## 1. Isolation without friction
@@ -29,7 +29,7 @@ them — on the host or from inside the container. No black boxes.
 piw ./my-project
  │
  ├── Sources .env for API keys
- ├── Builds pi-harness:core (if not cached)
+ ├── Builds piw:core (if not cached)
  ├── Mounts .pi/agent/ → /home/pi/.pi/agent
  ├── Mounts skills/ → /home/pi/.pi/agent/skills
  ├──── with APPEND_SYSTEM.md overlaid (read-only)

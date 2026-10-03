@@ -1,6 +1,6 @@
 # piw CLI Reference
 
-`piw` is the entry point for pi-harness. It manages Docker images and
+`piw` is the entry point for piw. It manages Docker images and
 the pi runtime (pi itself + extensions) in the bind-mounted config dir.
 
 ## Model

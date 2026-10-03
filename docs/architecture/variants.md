@@ -44,7 +44,7 @@ variants/
 ## How variants are selected
 
 `piw --profile <name>` picks `variants/<name>/Dockerfile` and
-tags the image as `pi-harness:<name>`. If the image isn't cached,
+tags the image as `piw:<name>`. If the image isn't cached,
 it's built automatically.
 
 ## Creating a new variant

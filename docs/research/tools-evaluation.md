@@ -1,7 +1,7 @@
 # Tools evaluation
 
 > **REFERENCE** — Evaluations of third-party tools and packages for
-> potential integration into pi-harness. Items here are either
+> potential integration into piw. Items here are either
 > documented for future consideration or were evaluated but not
 > integrated at this time.
 
@@ -116,5 +116,5 @@ and pi-intercom (known quantity).
 **Why deferred:**
 - MCP-based integration requires the MCP bridge (deferred)
 - Heavy dependency: Rust kernel, RocksDB, 38 parsers
-- Overkill for most pi-harness use cases
+- Overkill for most piw use cases
 - More valuable for large unfamiliar codebases than day-to-day work

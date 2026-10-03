@@ -1,17 +1,17 @@
-# pi-harness — workstation variant
+# piw — workstation variant
 #
 # Full development environment: language toolchains, linters,
 # infrastructure tools, and security analysis tools.
 # Use this for general development, devops, and security research.
 #
-# Dependencies: pi-harness:core must be built first.
+# Dependencies: piw:core must be built first.
 #   piw build core && piw build workstation
 #   or: piw build --all
 # Build context is the repo root (build/archives provides all downloaded
 # artifacts); piw handles this automatically:
-#   docker build -f variants/workstation/Dockerfile -t pi-harness:workstation .
+#   docker build -f variants/workstation/Dockerfile -t piw:workstation .
 #
-FROM pi-harness:core
+FROM piw:core
 
 # ── Layer 1: Language toolchains and linters (stable apt) ─────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \

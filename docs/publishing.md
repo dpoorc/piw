@@ -1,4 +1,4 @@
-# Publishing pi-harness
+# Publishing piw
 
 > **REFERENCE** — Considerations for making this harness public.
 > Not a plan. Just a record of what was discussed so you can pick
@@ -12,7 +12,7 @@ The repo root has no README.md. GitHub shows visitors
 `docs/index.md` by default, but a root README.md is the platform
 standard. Write a one-pager:
 
-- What pi-harness is (one paragraph)
+- What piw is (one paragraph)
 - Quick start: prerequisites, install, first run
 - Link to full docs
 
@@ -76,7 +76,7 @@ configurable permissions, and a composable tooling environment.
 
 ## Naming
 
-Current split: repo is `pi-harness`, CLI tool is `piw`.
+Current split: repo is `piw`, CLI tool is `piw`.
 
 | Option | Pros | Cons |
 |--------|------|------|
@@ -84,7 +84,7 @@ Current split: repo is `pi-harness`, CLI tool is `piw`.
 | Rename repo to `piw` | Tool/repo match (ripgrep/rg, bat, fd). More brandable. | SEO loss. Touch every doc and path. |
 | Rename both to something new | Clean break. | Loses all existing references. |
 
-Recommendation: keep `pi-harness` as the repo name and `piw` as the
+Recommendation: keep `piw` as the repo name and `piw` as the
 tool name. This split is well-understood. If you rename, do it
 before publishing — not after.
 

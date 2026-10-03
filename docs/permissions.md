@@ -1,6 +1,6 @@
 # Permission System
 
-pi-harness ships with `@gotgenes/pi-permission-system` to control the
+piw ships with `@gotgenes/pi-permission-system` to control the
 agent's access to files, commands, and paths.
 
 ## Configuration
@@ -173,8 +173,8 @@ The permission system logs all interactions to
 `extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`:
 
 ```jsonl
-{"timestamp":"2026-07-23T21:40:00.000Z","action":"deny","target":"read","path":"/home/<user>/Projekt/pi-harness/.env","rule":".env"}
-{"timestamp":"2026-07-23T21:41:00.000Z","action":"allow","target":"read","path":"/home/<user>/Projekt/pi-harness/src/main.ts","rule":"*"}
+{"timestamp":"2026-07-23T21:40:00.000Z","action":"deny","target":"read","path":"/home/<user>/Projekt/piw/.env","rule":".env"}
+{"timestamp":"2026-07-23T21:41:00.000Z","action":"allow","target":"read","path":"/home/<user>/Projekt/piw/src/main.ts","rule":"*"}
 ```
 
 Each log entry contains:

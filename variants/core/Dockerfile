@@ -1,4 +1,4 @@
-# pi-harness — core variant
+# piw — core variant
 #
 # Minimal coding agent environment: pi + essential CLI tools.
 # Includes build-essential and clang for basic compilation.
@@ -6,7 +6,7 @@
 # Bind-mount ~/.pi/agent and your project workspace at runtime.
 #
 # Build (from repo root, so build/archives is in the build context):
-#   docker build -f variants/core/Dockerfile -t pi-harness:core .
+#   docker build -f variants/core/Dockerfile -t piw:core .
 #
 # ── Build stage: git-issues (local file-based issue tracker) ─────────────────
 FROM golang:latest AS git-issues-builder

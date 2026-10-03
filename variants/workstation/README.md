@@ -1,4 +1,4 @@
-# pi-harness: workstation
+# piw: workstation
 
 Full development environment for general development, devops, and
 security research. Extends the core variant with multiple language

@@ -1,9 +1,9 @@
-# pi-harness — <name> variant
+# piw — <name> variant
 #
 # <description of what this variant is for>
 #
 # Build (from repo root):
-#   docker build -f variants/<name>/Dockerfile -t pi-harness:<name> .
+#   docker build -f variants/<name>/Dockerfile -t piw:<name> .
 #
 FROM node:24-trixie-slim
 

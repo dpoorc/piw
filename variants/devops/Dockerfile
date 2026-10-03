@@ -1,17 +1,17 @@
-# pi-harness — devops variant
+# piw — devops variant
 #
 # Extends core with Python toolchain, Ansible, yq, yamllint, and
 # other infrastructure management tools. Use this for provisioning,
 # configuration management, and deployment work.
 #
-# Dependencies: pi-harness:core must be built first.
+# Dependencies: piw:core must be built first.
 #   piw build core && piw build devops
 #   or: piw build --all
 # Build context is the repo root (build/archives provides the yq artifact);
 # piw handles this automatically:
-#   docker build -f variants/devops/Dockerfile -t pi-harness:devops .
+#   docker build -f variants/devops/Dockerfile -t piw:devops .
 #
-FROM pi-harness:core
+FROM piw:core
 
 # Python toolchain
 RUN apt-get update && apt-get install -y --no-install-recommends \
