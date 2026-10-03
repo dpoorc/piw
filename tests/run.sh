@@ -179,6 +179,40 @@ else
 fi
 assert_exists "install creates the namespace" "$SANDBOX/.local/store/bin"
 
+printf '== default Dockerfile\n'
+df="$ROOT/Dockerfile"
+assert_exists "Dockerfile at the repo root" "$df"
+df_body="$(cat "$df" 2>/dev/null || true)"
+assert_status "syntax directive is line 1" "$(sed -n '1p' "$df")" "# syntax=docker/dockerfile:1.6"
+assert_contains "uses the Node 24 trixie base" "$df_body" "FROM node:24-trixie-slim"
+assert_not_contains "does not pin the base digest" "$df_body" "node:24-trixie-slim@"
+
+# The apt set must match the decided 19 exactly, so an extra or a missing
+# package fails the suite.
+apt_set="$(sed -n '/--no-install-recommends/,/&& rm -rf/p' "$df" | grep -vE 'RUN|rm -rf' | awk '{print $1}' | grep -v '^$' | sort | tr '\n' ' ')"
+apt_expected="bind9-dnsutils build-essential ca-certificates curl file git jq less lsof openssh-client pkg-config procps python3 shellcheck tree unzip wget xz-utils zip "
+if [[ "$apt_set" == "$apt_expected" ]]; then
+  ok "apt set matches the decided 19 exactly"
+else
+  bad "apt set differs (got: $apt_set)"
+fi
+
+# Each pin must sit on the ADD that names its URL, so a swapped digest fails.
+mise_block="$(grep -A1 'ADD --checksum=sha256:a31542ee4d660b048d9ddc8f60ed024bff13bd292c08fecde5739ef7a5721dbc' "$df")"
+assert_contains "fetches mise with its pin" "$mise_block" "https://github.com/jdx/mise/releases/download/v2026.9.17/mise-v2026.9.17-linux-x64.tar.xz"
+yq_block="$(grep -A1 'ADD --checksum=sha256:38b907b21b1b04327fb9481c595331d925a67c6ee1aabd0ef419d0b7d12dfb3d' "$df")"
+assert_contains "fetches yq with its pin" "$yq_block" "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64.tar.gz"
+uv_block="$(grep -A1 'ADD --checksum=sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd' "$df")"
+assert_contains "fetches uv with its pin" "$uv_block" "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
+
+assert_contains "points mise at the mounted config" "$df_body" "MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml"
+assert_not_contains "drops the superseded mise path" "$df_body" "MISE_GLOBAL_CONFIG_FILE=/home/pi/.local/mise.toml"
+
+# The rejected decisions stay rejected.
+assert_not_contains "does not strip mise" "$df_body" "strip /usr/local/bin/mise"
+assert_not_contains "does not ship git-issues" "$df_body" "git-issues"
+assert_not_contains "does not install pi" "$df_body" "npm install"
+
 printf '== no retired names\n'
 # The pattern is split so this test file does not match its own search.
 if grep -Eq 'varia[n]ts|config[-]seeds|PIW_DEFAULT_PROFILE|pi-harness' "$SANDBOX/piw"; then

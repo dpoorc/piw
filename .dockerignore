@@ -1,6 +1,5 @@
-# Docker build context. The default image builds from the repo root, so its
-# Dockerfile can COPY shared build inputs from build/archives/.
-# Keep build/archives/ visible: image builds depend on it.
+# Docker build context. The default image builds from the repo root.
+# Keep build/archives/ visible: a later layer may COPY a manual download.
 .git
 .local
 .issues
