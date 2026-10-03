@@ -506,13 +506,8 @@ launch_image() {
 
 # ── Utility: ensure the default Docker image exists ──────────────────────────
 ensure_image() {
-  local dry_run="${1:-false}"
   local image_tag="${IMAGE_PREFIX}:default"
   if ! docker image inspect "$image_tag" &>/dev/null; then
-    if [[ "$dry_run" == "true" ]]; then
-      echo "INFO: (dry-run) Image '$image_tag' is missing - would build."
-      return 0
-    fi
     # Build through _build_single, so the piw.plan label is written. Without
     # the label the staleness check would refuse the image it just built.
     _build_single "false"
@@ -715,52 +710,30 @@ _npm_latest_version() {
 }
 
 # ── Utility: ensure pi is present in the config mount ────────────────────────
-# mode: require  — install if missing; never check the registry
-#       upgrade  — bring to latest when npm is reachable, keep otherwise
+# Install pi only when it is missing. pi reports its own updates.
 ensure_pi() {
-  local mode="${1:-require}"
-  local dry_run="${2:-false}"
-  local force="${3:-false}"
   local installed latest pi_host
 
-  ensure_image "$dry_run"
+  ensure_image
 
   pi_host="$(resolve_pi_host_dir)"
   mkdir -p "$pi_host"
 
   installed="$(_pi_installed_version "$pi_host")"
-
-  # require mode stays offline: pi exists, so there is nothing to do. pi
-  # reports its own updates.
-  if [[ "$mode" == "require" && -n "$installed" ]]; then
+  if [[ -n "$installed" ]]; then
     echo "INFO: pi $installed present."
     return 0
   fi
 
-  # The install path and upgrade mode need the published version.
   latest="$(_npm_latest_version "$PI_NPM_PKG")"
-
-  if [[ -n "$installed" && -z "$latest" ]]; then
-    echo "INFO: pi $installed present (offline — cannot check npm)."
-    return 0
-  fi
-  if [[ "$mode" == "upgrade" && "$force" != "true" && -n "$installed" && "$installed" == "$latest" ]]; then
-    echo "INFO: pi $installed is current."
-    return 0
-  fi
-  if [[ -z "$installed" && -z "$latest" ]]; then
+  if [[ -z "$latest" ]]; then
     echo "ERROR: pi is not installed and npm is unreachable (offline?)." >&2
     echo "  Run 'piw update' with network access to install pi." >&2
     exit 1
   fi
 
-  if [[ "$dry_run" == "true" ]]; then
-    echo "(dry-run) Would install pi ${latest:-latest} (was: ${installed:-none})."
-    return 0
-  fi
-
-  echo "INFO: Installing pi ${latest:-latest} (was: ${installed:-none}) into app mount…"
-  if ! container_run -- sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@${latest:-latest}'"; then
+  echo "INFO: Installing pi $latest into app mount…"
+  if ! container_run -- sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@$latest'"; then
     echo "ERROR: npm install of pi failed (see output above)." >&2
     exit 1
   fi
@@ -1224,7 +1197,7 @@ cmd_launch() {
 
   # ensure_pi builds the image when missing (ensure_image) and checks the
   # pi install in the config mount.
-  ensure_pi require
+  ensure_pi
 
   # Cheap pre-exec guard: a corrupted/empty app mount that still passes the
   # version read would otherwise die inside the container with an opaque
@@ -1417,7 +1390,7 @@ cmd_build() {
 
   # Populate the store in the image just built, then provision pi.
   install_store "$image"
-  ensure_pi require
+  ensure_pi
 
   cmd_generate_catalog  # refresh catalog, skills may have changed
 }
