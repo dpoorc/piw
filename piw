@@ -27,7 +27,7 @@
 #   piw link [dir]               Put piw on PATH (symlink into dir)
 #   piw unlink [dir]             Take piw off PATH (remove the symlink)
 #   piw generate-catalog         Regenerate the skills catalog
-#   piw update                   Pull, rebuild, and upgrade pi
+#   piw update                   Pull, report drift, rebuild, and update pi
 #     --no-cache                 Full rebuild (ignore the Docker cache)
 #     --force                    Force the update
 #     --dry-run                  Show what would change (no executions)
@@ -480,6 +480,30 @@ plan_hash() {
   } | sha256sum | awk '{print $1}'
 }
 
+# ── Utility: hash the root Dockerfile ────────────────────────────────────────
+# The default image has no layer plan; its only build input is the root
+# Dockerfile. The hash is written as the piw.plan label on the default build.
+default_plan_hash() {
+  if [[ ! -f "$SCRIPT_DIR/Dockerfile" ]]; then
+    echo "ERROR: Dockerfile not found at $SCRIPT_DIR/Dockerfile" >&2
+    return 1
+  fi
+  sha256sum "$SCRIPT_DIR/Dockerfile" | awk '{print $1}'
+}
+
+# ── Utility: the image a launch uses, decided by the manifest ────────────────
+# A manifest with any layer entry needs the composed image. Otherwise the
+# default image is used. A missing manifest counts as no layers.
+launch_image() {
+  local steps=""
+  steps="$(resolve_layers 2>/dev/null || true)"
+  if [[ -n "$steps" ]]; then
+    echo "${IMAGE_PREFIX}:local"
+  else
+    echo "${IMAGE_PREFIX}:default"
+  fi
+}
+
 # ── Utility: ensure the default Docker image exists ──────────────────────────
 ensure_image() {
   local dry_run="${1:-false}"
@@ -489,13 +513,9 @@ ensure_image() {
       echo "INFO: (dry-run) Image '$image_tag' is missing - would build."
       return 0
     fi
-    if [[ ! -f "$SCRIPT_DIR/Dockerfile" ]]; then
-      echo "ERROR: Dockerfile not found at $SCRIPT_DIR/Dockerfile" >&2
-      echo "  The default image builds from the repository root Dockerfile." >&2
-      exit 1
-    fi
-    echo "INFO: Image '$image_tag' not found. Building…"
-    docker build -f "$SCRIPT_DIR/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
+    # Build through _build_single, so the piw.plan label is written. Without
+    # the label the staleness check would refuse the image it just built.
+    _build_single "false"
   fi
 }
 
@@ -1224,10 +1244,41 @@ cmd_launch() {
   local session_flag=""
   [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
 
-  # The composed image wins when it exists; otherwise the default.
-  local image="${IMAGE_PREFIX}:default"
-  if docker image inspect "${IMAGE_PREFIX}:local" &>/dev/null; then
+  # The manifest decides the image and the expected plan hash. A manifest with
+  # any layer entry needs the composed image; otherwise the default image.
+  local steps image expected_hash
+  if ! steps="$(resolve_layers)"; then
+    exit 1
+  fi
+  if [[ -n "$steps" ]]; then
     image="${IMAGE_PREFIX}:local"
+    if ! expected_hash="$(plan_hash)"; then
+      exit 1
+    fi
+  else
+    image="${IMAGE_PREFIX}:default"
+    if ! expected_hash="$(default_plan_hash)"; then
+      exit 1
+    fi
+  fi
+
+  # Staleness check. One inspect reads the label written at build time. The
+  # image label is the single source of image state; no stamp file exists. A
+  # missing piw:default on a first run is not stale: ensure_image built it.
+  local label
+  if ! label="$(docker image inspect \
+    --format '{{index .Config.Labels "piw.plan"}}' "$image" 2>/dev/null)"; then
+    echo "ERROR: Required image '$image' is missing." >&2
+    echo "  Run 'piw build' to build it." >&2
+    exit 1
+  fi
+  if [[ -z "$label" || "$label" != "$expected_hash" ]]; then
+    echo "ERROR: Image '$image' is stale." >&2
+    echo "  The image was not built from the current plan." >&2
+    echo "  Expected plan hash: $expected_hash" >&2
+    echo "  Image plan hash:    ${label:-<none>}" >&2
+    echo "  Run 'piw build' to rebuild the image." >&2
+    exit 1
   fi
 
   echo "INFO: Launching piw in $workspace (mode: $mode)$session_flag"
@@ -1251,10 +1302,16 @@ _build_single() {
     exit 1
   fi
 
+  local hash
+  if ! hash="$(default_plan_hash)"; then
+    return 1
+  fi
+
   local -a build_args=(-f "$SCRIPT_DIR/Dockerfile" -t "$image_tag" "$SCRIPT_DIR")
   if [[ "$no_cache" == "true" ]]; then
     build_args=("--no-cache" "${build_args[@]}")
   fi
+  build_args+=(--label "piw.plan=$hash")
 
   echo "INFO: Building $image_tag…"
   docker build "${build_args[@]}"
@@ -1490,6 +1547,24 @@ _doctor_seed_diff() {
   diff -u "$seed" "$live" | sed 's/^/     /' || true
 }
 
+# ── Utility: report every seeded file against its seed (never fails) ─────────
+# The same list feeds `doctor` check 4 and `update` step 2, so the two stay in
+# step. The files belong to the user; a diff is a report, not a failure.
+report_seed_drift() {
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  _doctor_seed_diff "settings.json" "$config_dir/settings.json" "$SCRIPT_DIR/seed/settings.json"
+  _doctor_seed_diff "models.json" "$config_dir/models.json" "$SCRIPT_DIR/seed/models.json"
+  local s
+  for s in "$SCRIPT_DIR"/seed/permissions/config*.json; do
+    [[ -f "$s" ]] || continue
+    _doctor_seed_diff "permissions/$(basename "$s")" \
+      "$config_dir/extensions/pi-permission-system/$(basename "$s")" "$s"
+  done
+  _doctor_seed_diff "piw.conf" "$(resolve_piw_conf)" "$SCRIPT_DIR/seed/piw.conf"
+  _doctor_seed_diff "mise/config.toml" "$(resolve_mise_config)" "$SCRIPT_DIR/seed/mise/config.toml"
+}
+
 # ── Command: diagnose the harness ────────────────────────────────────────────
 # Four checks. Checks 1 to 3 decide the exit code. Check 4 reports drift as a
 # diff and never fails: the seeded files belong to the user.
@@ -1580,18 +1655,7 @@ cmd_doctor() {
 
   # 4. Seeds. A diff is a report, never a failure.
   echo "4. Seeds (a diff is a report, not a failure)"
-  local config_dir
-  config_dir="$(resolve_config_dir)"
-  _doctor_seed_diff "settings.json" "$config_dir/settings.json" "$SCRIPT_DIR/seed/settings.json"
-  _doctor_seed_diff "models.json" "$config_dir/models.json" "$SCRIPT_DIR/seed/models.json"
-  local s
-  for s in "$SCRIPT_DIR"/seed/permissions/config*.json; do
-    [[ -f "$s" ]] || continue
-    _doctor_seed_diff "permissions/$(basename "$s")" \
-      "$config_dir/extensions/pi-permission-system/$(basename "$s")" "$s"
-  done
-  _doctor_seed_diff "piw.conf" "$(resolve_piw_conf)" "$SCRIPT_DIR/seed/piw.conf"
-  _doctor_seed_diff "mise/config.toml" "$(resolve_mise_config)" "$SCRIPT_DIR/seed/mise/config.toml"
+  report_seed_drift
   echo ""
 
   echo "Exit code rule: 0 when checks 1-3 pass, 1 when any of them fails."
@@ -1614,48 +1678,68 @@ cmd_generate_catalog() {
 }
 
 # ── Command: update harness, images, and pi ──────────────────────────────────
+# Four steps, in order: pull the harness, report seeded drift, rebuild, and
+# update pi in the container. A divergent pull stops the update.
 cmd_update() {
   local no_cache="${1:-false}"
   local dry_run="${2:-false}"
   local force="${3:-false}"
 
-  # 1) Pull harness updates (ff-only; never stash). Fail → abort.
-  if [[ "$dry_run" != "true" ]]; then
-    if git -C "$SCRIPT_DIR" remote -v &>/dev/null; then
-      echo "INFO: Pulling harness updates from git…"
-      if ! git -C "$SCRIPT_DIR" pull --ff-only 2>&1; then
-        echo "ERROR: Git pull failed." >&2
-        echo "  Local changes overlap incoming updates, or the remote diverged." >&2
-        echo "  Commit or unshelve locally, run 'git pull --ff-only' manually," >&2
-        echo "  then retry." >&2
-        return 1
-      fi
-    else
-      echo "INFO: No git remote configured. Skipping pull."
+  echo "piw update"
+  echo ""
+
+  # 1) Pull the harness. --ff-only refuses to guess on divergence.
+  echo "1. Pull the harness"
+  if [[ "$dry_run" == "true" ]]; then
+    echo "   (dry-run) Would run: git pull --ff-only"
+  elif git -C "$SCRIPT_DIR" remote 2>/dev/null | grep -q .; then
+    echo "   git pull --ff-only"
+    if ! git -C "$SCRIPT_DIR" pull --ff-only; then
+      echo "ERROR: git pull --ff-only failed." >&2
+      echo "  The branch diverged from the remote, or local changes overlap." >&2
+      echo "  Resolve it by hand, then retry. piw does not merge." >&2
+      return 1
     fi
   else
-    echo "INFO: (dry-run) Skipping git pull."
+    echo "   No git remote configured. Skipping the pull."
   fi
+  echo ""
 
-  # 2) Seed the starters, then rebuild the default image
-  if [[ "$dry_run" != "true" ]]; then
-    bootstrap_starters
-  fi
+  # 2) Report seeded-config drift. A diff, never a failure.
+  echo "2. Seeded config drift (a diff is a report, not a failure)"
   if [[ "$dry_run" == "true" ]]; then
-    echo "(dry-run) Would rebuild piw:default"
+    echo "   (dry-run) Would report settings.json, models.json, permissions, piw.conf, and mise/config.toml"
   else
-    _build_single "$no_cache"
+    report_seed_drift
   fi
+  echo ""
 
-  # 3) Mount-level maintenance: pi (upgrade). Extensions belong to pi's own
-  #    package manager; piw does not sync them here.
-  ensure_pi upgrade "$dry_run" "$force"
+  # 3) Rebuild the default image, the composed image, and the store.
+  echo "3. Rebuild"
+  if [[ "$dry_run" == "true" ]]; then
+    echo "   (dry-run) Would run: piw build"
+  else
+    cmd_build "$no_cache" "false"
+  fi
+  echo ""
+
+  # 4) Update pi, the extensions, and the model catalogs in one command.
+  echo "4. Update pi"
+  local image
+  image="$(launch_image)"
+  local -a pi_args=(update --all)
+  [[ "$force" == "true" ]] && pi_args+=(--force)
+  if [[ "$dry_run" == "true" ]]; then
+    echo "   (dry-run) Would run in $image: pi ${pi_args[*]}"
+  else
+    echo "   $image: pi ${pi_args[*]}"
+    container_run --image "$image" -- pi "${pi_args[@]}"
+  fi
 
   echo ""
   if [[ "$dry_run" == "true" ]]; then
     echo "✓ (dry-run) Nothing executed. Run without --dry-run to apply."
   else
-    cmd_generate_catalog  # refresh catalog after git pull may have changed skills
     echo "✓ Update complete. Run 'piw' to launch."
   fi
 }

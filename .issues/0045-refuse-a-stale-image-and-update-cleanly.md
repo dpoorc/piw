@@ -1,7 +1,7 @@
 ---
 id: 45
 title: Refuse a stale image and update cleanly
-status: open
+status: closed
 priority: high
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 44
 created: "2026-10-03"
 updated: "2026-10-03"
+closed: "2026-10-03"
 ---
 
 ## Parent

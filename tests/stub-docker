@@ -21,11 +21,26 @@ args=("$@")
 } >> "${PIW_TEST_DOCKER_LOG:?PIW_TEST_DOCKER_LOG is not set}"
 
 if [[ "${args[0]:-}" == "image" && "${args[1]:-}" == "inspect" ]]; then
-  tag="${args[2]:-}"
+  # The image tag is the last argument in both forms:
+  #   image inspect <tag>
+  #   image inspect --format <fmt> <tag>
+  tag="${args[-1]}"
+  found="false"
   for image in ${PIW_TEST_IMAGES:-}; do
-    [[ "$image" == "$tag" ]] && exit 0
+    [[ "$image" == "$tag" ]] && found="true"
   done
-  exit 1
+  [[ "$found" == "true" ]] || exit 1
+  # A --format request reads the piw.plan label. PIW_TEST_LABELS holds
+  # space-separated <image>=<label> pairs. An image with no pair has no label.
+  if [[ " ${args[*]} " == *" --format "* ]]; then
+    for pair in ${PIW_TEST_LABELS:-}; do
+      if [[ "${pair%%=*}" == "$tag" ]]; then
+        printf '%s\n' "${pair#*=}"
+        break
+      fi
+    done
+  fi
+  exit 0
 fi
 
 # `docker run ... mise ls` prints PIW_TEST_MISE_LS, so doctor can be tested

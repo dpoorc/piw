@@ -81,6 +81,36 @@ chmod +x "$STUB/curl"
 # Keep piw from consulting a real npm registry for versions.
 printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB/npm"
 chmod +x "$STUB/npm"
+
+# Stub git so the update pull is observable and controllable without a network
+# or a real remote. `pull` is logged and `remote` reports a fake origin. Every
+# other invocation goes to the real git, so the git identity reads still work.
+REAL_GIT="$(command -v git)"
+export PIW_TEST_GIT_LOG="$WORK/git.log"
+: > "$PIW_TEST_GIT_LOG"
+cat > "$STUB/git" <<STUB
+#!/usr/bin/env bash
+for arg in "\$@"; do
+  case "\$arg" in
+  pull)
+    printf 'git %s\n' "\$*" >> "\${PIW_TEST_GIT_LOG:?}"
+    if [[ "\${PIW_TEST_PULL_FAIL:-}" == "1" ]]; then
+      echo "fatal: Not possible to fast-forward, aborting." >&2
+      exit 1
+    fi
+    exit 0
+    ;;
+  remote)
+    [[ "\${PIW_TEST_NO_REMOTE:-}" == "1" ]] && exit 0
+    echo "origin"
+    exit 0
+    ;;
+  esac
+done
+exec "$REAL_GIT" "\$@"
+STUB
+chmod +x "$STUB/git"
+
 export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
 : > "$PIW_TEST_DOCKER_LOG"
 
@@ -106,6 +136,23 @@ piw_fn() { (source "$SANDBOX/piw"; "$@"); }
 log() { cat "$PIW_TEST_DOCKER_LOG"; }
 reset_log() { : > "$PIW_TEST_DOCKER_LOG"; }
 
+# Point the stub at a matching image label for the current sandbox state, so a
+# launch that should proceed passes the staleness check.
+sync_label() {
+  local h steps
+  steps="$(piw_fn resolve_layers 2>/dev/null || true)"
+  if [[ -n "$steps" ]]; then
+    h="$(piw_fn plan_hash)"
+    PIW_TEST_IMAGES="piw:default piw:local"
+    PIW_TEST_LABELS="piw:local=$h"
+  else
+    h="$(piw_fn default_plan_hash)"
+    PIW_TEST_IMAGES="piw:default"
+    PIW_TEST_LABELS="piw:default=$h"
+  fi
+  export PIW_TEST_IMAGES PIW_TEST_LABELS
+}
+
 # ── Assertions ───────────────────────────────────────────────────────────────
 ok() { PASS=$((PASS + 1)); printf '  ok   %s\n' "$1"; }
 bad() { FAIL=$((FAIL + 1)); printf '  FAIL %s\n' "$1"; }
@@ -130,6 +177,8 @@ assert_exists() { # name path
 printf '== piw tool list (namespace creation)\n'
 reset_log
 piw tool list >/dev/null 2>&1
+first_label="$(piw_fn default_plan_hash)"
+assert_contains "first-run build writes the plan label" "$(log)" "--label piw.plan=$first_label"
 assert_contains "runs in the container" "$(log)" "piw:default mise ls"
 assert_contains "lists mise tools" "$(log)" "mise ls"
 assert_exists "creates .local/agent" "$SANDBOX/.local/agent"
@@ -189,9 +238,12 @@ reset_log
 piw build >/dev/null 2>&1
 assert_contains "builds piw:default from the root Dockerfile" "$(log)" \
   "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX"
+default_label="$(piw_fn default_plan_hash)"
+assert_contains "writes the default plan label" "$(log)" "--label piw.plan=$default_label"
 
 printf '== piw launch (exact argv)\n'
 mkdir -p "$WORK/proj"
+sync_label
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
 status=$?
@@ -222,6 +274,7 @@ assert_not_contains "no Gemini key allowlist flag" "$run_line" "-e GEMINI_API_KE
 
 printf '== piw launch passes the env file\n'
 printf 'ANTHROPIC_API_KEY=test-key\n' > "$SANDBOX/.local/env"
+sync_label
 reset_log
 out="$(ANTHROPIC_API_KEY=host-only piw "$WORK/proj" 2>&1)"
 assert_contains "passes the env file" "$(log)" "--env-file $SANDBOX/.local/env"
@@ -229,6 +282,7 @@ assert_not_contains "does not forward a host API key" "$(log)" "-e ANTHROPIC_API
 rm -f "$SANDBOX/.local/env"
 
 printf '== piw --mode readonly\n'
+sync_label
 reset_log
 out="$(piw --mode readonly "$WORK/proj" 2>&1)"
 status=$?
@@ -273,6 +327,7 @@ fi
 
 printf '== parser: launch is the default case\n'
 mkdir -p "$WORK/proj"
+sync_label
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
 assert_status "piw <path> launches" "$?" "0"
@@ -351,6 +406,7 @@ assert_contains "keeps an edited mise config" "$(cat "$SANDBOX/.local/mise/confi
 
 # Launch seeds the same two files.
 rm -f "$SANDBOX/.local/piw.conf" "$SANDBOX/.local/mise/config.toml"
+sync_label
 piw "$WORK/proj" >/dev/null 2>&1
 assert_exists "launch seeds .local/piw.conf" "$SANDBOX/.local/piw.conf"
 assert_exists "launch seeds .local/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
@@ -607,18 +663,73 @@ assert_contains "rebuild reinstalls the global store" "$(log)" " mise install"
 assert_contains "rebuild reinstalls the layer store" "$(log)" \
   "mise -C /opt/piw/layers/alpha install"
 
-printf '== layers: launch selects the image\n'
+printf '== layers: launch uses the image the manifest needs\n'
+# With layers: piw:local and the full plan hash.
+printf '[layers]\nrun:alpha\n' > "$SANDBOX/.local/piw.conf"
+mkdir -p "$SANDBOX/.local/layers/alpha"
+printf '#!/bin/sh\n' > "$SANDBOX/.local/layers/alpha/install.sh"
+local_label="$(piw_fn plan_hash)"
 PIW_TEST_IMAGES="piw:default piw:local"
+PIW_TEST_LABELS="piw:local=$local_label"
 reset_log
-piw "$WORK/proj" >/dev/null 2>&1
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "launch with layers exits 0" "$?" "0"
 run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
-assert_contains "launch uses piw:local when it exists" "$run_line" "piw:local"
+assert_contains "launch with layers uses piw:local" "$run_line" "piw:local"
+
+# Without layers: piw:default and the default Dockerfile hash.
+printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
+default_label="$(piw_fn default_plan_hash)"
 PIW_TEST_IMAGES="piw:default"
+PIW_TEST_LABELS="piw:default=$default_label"
 reset_log
-piw "$WORK/proj" >/dev/null 2>&1
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "launch without layers exits 0" "$?" "0"
 run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
-assert_contains "launch falls back to piw:default" "$run_line" "piw:default"
-PIW_TEST_IMAGES=""
+assert_contains "launch without layers uses piw:default" "$run_line" "piw:default"
+
+printf '== launch: staleness check\n'
+# A matching label proceeds.
+printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
+matching_label="$(piw_fn default_plan_hash)"
+PIW_TEST_IMAGES="piw:default"
+PIW_TEST_LABELS="piw:default=$matching_label"
+reset_log
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "matching label exits 0" "$?" "0"
+assert_contains "matching label launches" "$(log)" "piw:default pi"
+
+# A mismatched label refuses, names the fix, and never builds.
+PIW_TEST_LABELS="piw:default=deadbeef"
+reset_log
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "mismatched label exits 1" "$?" "1"
+assert_contains "mismatched label names staleness" "$out" "stale"
+assert_contains "mismatched label names the fix" "$out" "piw build"
+assert_not_contains "mismatched label invokes no build" "$(log)" "build"
+
+# A missing label refuses.
+PIW_TEST_LABELS=""
+reset_log
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "missing label exits 1" "$?" "1"
+assert_contains "missing label names staleness" "$out" "stale"
+assert_contains "missing label names the fix" "$out" "piw build"
+assert_not_contains "missing label invokes no build" "$(log)" "build"
+
+# A required piw:local that is missing refuses and names piw build.
+printf '[layers]\nrun:alpha\n' > "$SANDBOX/.local/piw.conf"
+PIW_TEST_IMAGES="piw:default"
+PIW_TEST_LABELS=""
+reset_log
+out="$(piw "$WORK/proj" 2>&1)"
+assert_status "missing piw:local exits 1" "$?" "1"
+assert_contains "missing piw:local names the image" "$out" "piw:local"
+assert_contains "missing piw:local names the fix" "$out" "piw build"
+assert_not_contains "missing piw:local invokes no build" "$(log)" "build"
+
+# Leave the manifest with no layers for the later launch tests.
+printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
 
 printf '== default Dockerfile\n'
 df="$ROOT/Dockerfile"
@@ -677,6 +788,7 @@ assert_absent "seed/extensions.txt is gone" "$SANDBOX/seed/extensions.txt"
 
 printf '== settings seed once\n'
 rm -f "$SANDBOX/.local/agent/settings.json"
+sync_label
 piw "$WORK/proj" >/dev/null 2>&1
 assert_exists "launch seeds settings.json" "$SANDBOX/.local/agent/settings.json"
 printf '{"packages":["npm:custom"]}\n' > "$SANDBOX/.local/agent/settings.json"
@@ -835,6 +947,54 @@ active="$(cat "$SANDBOX/.local/layers/updatable/apt")"
 assert_not_contains "replace: drops the local change" "$active" "local-change"
 assert_contains "replace: brings the shipped change" "$active" "upstream-change"
 git -C "$SANDBOX" checkout -- layers/updatable
+
+printf '== update: four steps\n'
+# No layers, so step 4 runs in piw:default.
+printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
+PIW_TEST_IMAGES="piw:default"
+PIW_TEST_LABELS=""
+: > "$PIW_TEST_GIT_LOG"
+reset_log
+# Make a seeded file differ, so step 2 has something to report.
+printf '{"packages":["npm:custom"]}\n' > "$SANDBOX/.local/agent/settings.json"
+out="$(piw update 2>&1)"
+status=$?
+assert_status "update exits 0" "$status" "0"
+assert_contains "update pulls" "$(cat "$PIW_TEST_GIT_LOG")" "pull --ff-only"
+assert_contains "update reports seeded drift" "$out" "DIFFERS from the seed"
+assert_contains "update calls cmd_build" "$(log)" "build -f $SANDBOX/Dockerfile -t piw:default"
+assert_contains "update runs pi update --all" "$(log)" "piw:default pi update --all"
+
+# --force passes through to pi update.
+: > "$PIW_TEST_GIT_LOG"
+reset_log
+out="$(piw update --force 2>&1)"
+assert_status "update --force exits 0" "$?" "0"
+assert_contains "update --force passes --force" "$(log)" "pi update --all --force"
+
+# --dry-run prints the four steps and executes none.
+: > "$PIW_TEST_GIT_LOG"
+reset_log
+out="$(piw update --dry-run 2>&1)"
+status=$?
+assert_status "update --dry-run exits 0" "$status" "0"
+assert_contains "dry-run prints step 1" "$out" "1. Pull the harness"
+assert_contains "dry-run prints step 2" "$out" "2. Seeded config drift"
+assert_contains "dry-run prints step 3" "$out" "3. Rebuild"
+assert_contains "dry-run prints step 4" "$out" "4. Update pi"
+assert_status "dry-run invokes no docker" "$(log)" ""
+assert_status "dry-run pulls nothing" "$(cat "$PIW_TEST_GIT_LOG")" ""
+
+# A divergent pull fails loudly and stops before the build.
+: > "$PIW_TEST_GIT_LOG"
+reset_log
+export PIW_TEST_PULL_FAIL=1
+out="$(piw update 2>&1)"
+status=$?
+unset PIW_TEST_PULL_FAIL
+assert_status "divergent pull exits 1" "$status" "1"
+assert_contains "divergent pull says so" "$out" "git pull --ff-only failed"
+assert_status "divergent pull invokes no build" "$(log)" ""
 
 printf '== doctor: four checks, drift is a report\n'
 rm -rf "$SANDBOX/.local/layers"
