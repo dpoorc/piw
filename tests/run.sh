@@ -172,74 +172,103 @@ assert_absent() { # name path
 assert_exists() { # name path
   if [[ -e "$2" ]]; then ok "$1"; else bad "$1 ($2 missing)"; fi
 }
+# Compare two multi-line strings exactly. On mismatch, print a unified diff.
+assert_output() { # name actual expected
+  if [[ "$2" == "$3" ]]; then
+    ok "$1"
+  else
+    bad "$1 (output differs)"
+    diff <(printf '%s\n' "$3") <(printf '%s\n' "$2") | sed 's/^/    /' >&2
+  fi
+}
+
+# The environment and base mounts every container invocation carries. The
+# exact-argv tests build the expected run line from this base. The layer mount
+# is separate because a workspace mount can precede it.
+seam_base="--add-host host.docker.internal:host-gateway"
+seam_base+=" --user $(id -u):$(id -g)"
+seam_base+=" -e HOME=/home/pi"
+seam_base+=" -e YADM_HOME=$TEST_HOME"
+seam_base+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
+seam_base+=" -e npm_config_cache=/tmp/.npm-cache"
+seam_base+=" -e npm_config_ignore_scripts=true"
+seam_base+=" -v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
+seam_base+=" -v $SANDBOX/.local/store:/home/pi/.local:z"
+seam_base+=" -v $SANDBOX/.local/mise:/home/pi/.config/mise:z"
+seam_base+=" -v $SANDBOX/.local/app:/opt/pi:z"
+seam_base+=" -v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z"
+seam_base+=" -v $SANDBOX/skills:/home/pi/.pi/agent/skills:z,ro"
+seam_base+=" -v $SANDBOX/agents:/home/pi/.pi/agent/agents:z,ro"
+seam_base+=" -v $SANDBOX/skills/system/workflow/APPEND_SYSTEM.md:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro"
+seam_layers="-v $SANDBOX/.local/layers:/opt/piw/layers:z,ro"
 
 # ── Cases ────────────────────────────────────────────────────────────────────
 printf '== piw tool list (namespace creation)\n'
 reset_log
 piw tool list >/dev/null 2>&1
 first_label="$(piw_fn default_plan_hash)"
-assert_contains "first-run build writes the plan label" "$(log)" "--label piw.plan=$first_label"
-assert_contains "runs in the container" "$(log)" "piw:default mise ls"
-assert_contains "lists mise tools" "$(log)" "mise ls"
-assert_exists "creates .local/agent" "$SANDBOX/.local/agent"
-assert_exists "creates .local/store/bin" "$SANDBOX/.local/store/bin"
-assert_exists "creates .local/app" "$SANDBOX/.local/app"
-assert_exists "creates .local/mise" "$SANDBOX/.local/mise"
-assert_exists "creates .local/layers" "$SANDBOX/.local/layers"
-assert_exists "creates .local/agents/skills" "$SANDBOX/.local/agents/skills"
+assert_output "first run builds the default image with the plan label" \
+  "$(log | grep '^build ')" \
+  "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX --label piw.plan=$first_label"
+assert_contains "tool list runs in the default image" "$(log)" "piw:default mise ls"
+missing=()
+for d in agent store/bin app mise layers agents/skills; do
+  [[ -d "$SANDBOX/.local/$d" ]] || missing+=(".local/$d")
+done
+assert_status "creates the whole .local namespace" "${#missing[@]}" "0"
 
 printf '== piw tool install\n'
 reset_log
 out="$(piw tool install opentofu 2>&1)"
 status=$?
-assert_status "exits 0" "$status" "0"
-assert_contains "reaches the container" "$(log)" "mise use -g opentofu"
-assert_contains "mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
-assert_not_contains "does not run the top-level install command" "$out" "Installed:"
+assert_status "tool install exits 0" "$status" "0"
+assert_output "tool install announces the mise install only" \
+  "$(printf '%s\n' "$out" | grep -v '^INFO: Build')" \
+  "INFO: Installing opentofu into the tool store…"
+assert_output "tool install reaches mise in the container" \
+  "$(log | grep '^run ' | sed 's/.* piw:default //')" "mise use -g opentofu"
 
 printf '== piw tool install (every spec goes to mise)\n'
 reset_log
 piw tool install npm:typescript pypi:ruff go:example.com/x \
   cargo:ripgrep >/dev/null 2>&1
-assert_contains "npm spec" "$(log)" "mise use -g npm:typescript"
-assert_contains "pypi spec" "$(log)" "mise use -g pypi:ruff"
-assert_contains "go spec" "$(log)" "mise use -g go:example.com/x"
-assert_contains "cargo spec" "$(log)" "mise use -g cargo:ripgrep"
-assert_not_contains "no npm dispatch" "$(log)" "npm install --global"
-assert_not_contains "no uv dispatch" "$(log)" "uv tool install"
-assert_not_contains "no cargo dispatch" "$(log)" "cargo install --root"
-assert_not_contains "no go install dispatch" "$(log)" "go install"
+assert_output "every spec goes to mise" \
+  "$(log | grep '^run ' | sed 's/.* piw:default //')" \
+  "$(printf 'mise use -g %s\n' npm:typescript pypi:ruff go:example.com/x cargo:ripgrep)"
 
 printf '== piw tool remove\n'
 reset_log
 piw tool remove opentofu >/dev/null 2>&1
-assert_contains "unuses the mise tool" "$(log)" "mise unuse -g opentofu"
+assert_output "remove unuses the mise tool" \
+  "$(log | grep '^run ' | sed 's/.* piw:default //')" "mise unuse -g opentofu"
 
 printf '== piw tool (errors)\n'
-reset_log
 out="$(piw tool bogus 2>&1)"
 assert_status "unknown subcommand exits 1" "$?" "1"
-assert_contains "unknown subcommand explains itself" "$out" "Unknown 'piw tool' subcommand"
+assert_output "unknown subcommand explains itself" "$out" \
+  "ERROR: Unknown 'piw tool' subcommand: bogus
+Usage: piw tool install <spec>... | list | remove <spec>..."
 out="$(piw tool install 2>&1)"
 assert_status "install with no spec exits 1" "$?" "1"
-assert_contains "install with no spec explains itself" "$out" "needs at least one spec"
+assert_output "install with no spec explains itself" \
+  "$(printf '%s\n' "$out" | grep -v '^INFO: Build')" \
+  "ERROR: piw tool install needs at least one spec.
+  Example: piw tool install npm:typescript pypi:ruff"
 
 printf '== piw tool runs through the container seam\n'
 reset_log
 piw tool list >/dev/null 2>&1
-assert_contains "tool run mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
-assert_contains "tool run mounts the layers read-only" "$(log)" "-v $SANDBOX/.local/layers:/opt/piw/layers:z,ro"
-assert_contains "tool run mounts the agent directory" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
-assert_contains "tool run uses the container user" "$(log)" "--user $(id -u):$(id -g)"
-assert_contains "tool run runs in the default image" "$(log)" "piw:default mise ls"
+assert_output "tool run uses the container seam" \
+  "$(log | grep '^run ' | head -1)" \
+  "run --rm $seam_base $seam_layers piw:default mise ls"
 
 printf '== piw build (default image)\n'
 reset_log
 piw build >/dev/null 2>&1
-assert_contains "builds piw:default from the root Dockerfile" "$(log)" \
-  "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX"
 default_label="$(piw_fn default_plan_hash)"
-assert_contains "writes the default plan label" "$(log)" "--label piw.plan=$default_label"
+assert_output "builds piw:default from the root Dockerfile with the plan label" \
+  "$(log | grep '^build ' | head -1)" \
+  "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX --label piw.plan=$default_label"
 
 printf '== piw launch (exact argv)\n'
 mkdir -p "$WORK/proj"
@@ -249,36 +278,17 @@ out="$(piw "$WORK/proj" 2>&1)"
 status=$?
 assert_status "launch exits 0" "$status" "0"
 run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
-expected_run="run --rm -it --add-host host.docker.internal:host-gateway"
-expected_run+=" --user $(id -u):$(id -g)"
-expected_run+=" -e HOME=/home/pi"
-expected_run+=" -e YADM_HOME=$TEST_HOME"
-expected_run+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
-expected_run+=" -e npm_config_cache=/tmp/.npm-cache"
-expected_run+=" -e npm_config_ignore_scripts=true"
-expected_run+=" -v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
-expected_run+=" -v $SANDBOX/.local/store:/home/pi/.local:z"
-expected_run+=" -v $SANDBOX/.local/mise:/home/pi/.config/mise:z"
-expected_run+=" -v $SANDBOX/.local/app:/opt/pi:z"
-expected_run+=" -v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z"
-expected_run+=" -v $SANDBOX/skills:/home/pi/.pi/agent/skills:z,ro"
-expected_run+=" -v $SANDBOX/agents:/home/pi/.pi/agent/agents:z,ro"
-expected_run+=" -v $SANDBOX/skills/system/workflow/APPEND_SYSTEM.md:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro"
-expected_run+=" -v $WORK/proj:$WORK/proj:z"
-expected_run+=" -v $SANDBOX/.local/layers:/opt/piw/layers:z,ro"
-expected_run+=" -w $WORK/proj piw:default pi"
-assert_status "launch argv is exact" "$run_line" "$expected_run"
-assert_not_contains "no Anthropic key allowlist flag" "$run_line" "-e ANTHROPIC_API_KEY"
-assert_not_contains "no OpenAI key allowlist flag" "$run_line" "-e OPENAI_API_KEY"
-assert_not_contains "no Gemini key allowlist flag" "$run_line" "-e GEMINI_API_KEY"
+assert_output "launch argv is exact" "$run_line" \
+  "run --rm -it $seam_base -v $WORK/proj:$WORK/proj:z $seam_layers -w $WORK/proj piw:default pi"
 
 printf '== piw launch passes the env file\n'
 printf 'ANTHROPIC_API_KEY=test-key\n' > "$SANDBOX/.local/env"
 sync_label
 reset_log
 out="$(ANTHROPIC_API_KEY=host-only piw "$WORK/proj" 2>&1)"
-assert_contains "passes the env file" "$(log)" "--env-file $SANDBOX/.local/env"
-assert_not_contains "does not forward a host API key" "$(log)" "-e ANTHROPIC_API_KEY"
+assert_output "passes the env file and does not forward a host API key" \
+  "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)" \
+  "run --rm -it ${seam_base/ -v / --env-file $SANDBOX/.local/env -v } -v $WORK/proj:$WORK/proj:z $seam_layers -w $WORK/proj piw:default pi"
 rm -f "$SANDBOX/.local/env"
 
 printf '== piw --mode readonly\n'
@@ -286,40 +296,73 @@ sync_label
 reset_log
 out="$(piw --mode readonly "$WORK/proj" 2>&1)"
 status=$?
-assert_status "readonly launch exits 0" "$status" "0"
-assert_contains "readonly workspace is read-only" "$(log)" "-v $WORK/proj:$WORK/proj:z,ro"
-assert_contains "readonly store is read-only" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z,ro"
-assert_contains "readonly mise config is read-only" "$(log)" "-v $SANDBOX/.local/mise:/home/pi/.config/mise:z,ro"
-assert_contains "readonly Agent Skills dir is read-only" "$(log)" "-v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z,ro"
-assert_contains "readonly mounts the mode config read-only" "$(log)" "-v $SANDBOX/.local/agent/extensions/pi-permission-system/config.readonly.json:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z,ro"
-assert_contains "readonly adds no network" "$(log)" "--network none"
-assert_contains "readonly keeps the agent directory writable" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z "
-assert_not_contains "readonly does not make the agent directory read-only" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z,ro"
+readonly_run="run --rm -it --add-host host.docker.internal:host-gateway"
+readonly_run+=" --user $(id -u):$(id -g)"
+readonly_run+=" -e HOME=/home/pi"
+readonly_run+=" -e YADM_HOME=$TEST_HOME"
+readonly_run+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
+readonly_run+=" -e npm_config_cache=/tmp/.npm-cache"
+readonly_run+=" -e npm_config_ignore_scripts=true"
+readonly_run+=" --network none"
+readonly_run+=" -v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
+readonly_run+=" -v $SANDBOX/.local/store:/home/pi/.local:z,ro"
+readonly_run+=" -v $SANDBOX/.local/mise:/home/pi/.config/mise:z,ro"
+readonly_run+=" -v $SANDBOX/.local/app:/opt/pi:z"
+readonly_run+=" -v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z,ro"
+readonly_run+=" -v $SANDBOX/skills:/home/pi/.pi/agent/skills:z,ro"
+readonly_run+=" -v $SANDBOX/agents:/home/pi/.pi/agent/agents:z,ro"
+readonly_run+=" -v $SANDBOX/skills/system/workflow/APPEND_SYSTEM.md:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro"
+readonly_run+=" -v $SANDBOX/.local/agent/extensions/pi-permission-system/config.readonly.json:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z,ro"
+readonly_run+=" -v $WORK/proj:$WORK/proj:z,ro"
+readonly_run+=" $seam_layers"
+readonly_run+=" -w $WORK/proj piw:default pi"
+assert_output "readonly launch argv is exact" \
+  "$(printf 'status=%s\n%s' "$status" "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)")" \
+  "status=0
+$readonly_run"
 
 printf '== piw build (missing Dockerfile)\n'
 mv "$SANDBOX/Dockerfile" "$WORK/Dockerfile.bak"
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-assert_status "build fails without the Dockerfile" "$status" "1"
-assert_contains "build names the missing file" "$out" "Dockerfile not found"
+assert_output "build fails without the Dockerfile and names it" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: Dockerfile not found at $SANDBOX/Dockerfile
+  The default image builds from the repository root Dockerfile."
 mv "$WORK/Dockerfile.bak" "$SANDBOX/Dockerfile"
 
 printf '== piw --help\n'
 out="$(piw --help 2>&1)"
 assert_status "help exits 0" "$?" "0"
-for cmd in build "tool install" "tool remove" "tool list" \
-  "layer add" "layer remove" "layer list" "layer show" "layer update" \
-  doctor link unlink generate-catalog update --version; do
-  assert_contains "help lists 'piw $cmd'" "$out" "piw $cmd"
-done
-assert_contains "help explains link" "$out" "Put piw on PATH"
-assert_contains "help explains unlink" "$out" "Take piw off PATH"
+assert_output "help lists the command set and explains link and unlink" \
+  "$(printf '%s\n' "$out" | grep '^  piw ')" \
+  "$(cat <<'HELP'
+  piw [<path>]                 Launch in the current directory or <path>
+  piw build                    Build the default image and the layer image
+  piw tool install <spec>...   Install tools into the shared store
+  piw tool remove <spec>...    Remove tools from the shared store
+  piw tool list                List tools in the shared store
+  piw layer add <name|apt:...> Adopt a shipped layer, or scaffold a new one
+  piw layer remove <name>      Remove a layer from the manifest
+  piw layer list               List shipped and active layers
+  piw layer show <name>        Show a layer's contents
+  piw layer update <name>      Update an adopted layer
+  piw doctor                   Diagnose the harness
+  piw link [dir]               Put piw on PATH (symlink into dir)
+  piw unlink [dir]             Take piw off PATH (remove the symlink)
+  piw generate-catalog         Regenerate the skills catalog
+  piw update                   Pull, report drift, rebuild, and update pi
+  piw --version                Print the version
+  piw --help                   Show this help
+HELP
+)"
 
 printf '== piw --version\n'
 out="$(piw --version 2>&1)"
 assert_status "version exits 0" "$?" "0"
-if [[ "$out" =~ ^piw\ [0-9]+\.[0-9]+ ]]; then
+if [[ "$out" =~ ^piw\ [0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   ok "--version prints piw <version>"
 else
   bad "--version prints piw <version> (got: $out)"
@@ -330,37 +373,42 @@ mkdir -p "$WORK/proj"
 sync_label
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "piw <path> launches" "$?" "0"
-assert_contains "path launch runs pi" "$(log)" " $WORK/proj pi"
+assert_contains "piw <path> launches in the workspace" "$(log)" \
+  "-w $WORK/proj piw:default pi"
 reset_log
 out="$(piw 2>&1)"
-assert_status "bare piw launches" "$?" "0"
-assert_contains "bare piw uses the current directory" "$(log)" " -w $SANDBOX piw:default pi"
+assert_contains "bare piw uses the current directory" "$(log)" \
+  "-w $SANDBOX piw:default pi"
 out="$(piw launch 2>&1)"
 status=$?
-if [[ "$status" -ne 0 ]]; then ok "'launch' is not a command word"; else bad "'launch' is not a command word"; fi
+assert_status "'launch' is not a command word" "$status" "1"
 assert_contains "'launch' is read as a workspace path" "$out" "Workspace not found"
 
 printf '== parser: a flag on the wrong command errors\n'
-out="$(piw doctor --no-cache 2>&1)"
-assert_status "doctor --no-cache exits 1" "$?" "1"
-assert_contains "names the command" "$out" "doctor"
-assert_contains "names the offending flag" "$out" "--no-cache"
-out="$(piw build --resume 2>&1)"
-assert_status "build --resume exits 1" "$?" "1"
-assert_contains "build names the offending flag" "$out" "--resume"
-out="$(piw tool list --dry-run 2>&1)"
-assert_status "tool list --dry-run exits 1" "$?" "1"
-assert_contains "tool names the offending flag" "$out" "--dry-run"
-out="$(piw doctor --mode permissive 2>&1)"
-assert_status "doctor --mode exits 1" "$?" "1"
-assert_contains "doctor names --mode" "$out" "--mode"
+while IFS='|' read -r invocation command flag; do
+  out="$(piw $invocation $flag 2>&1)"
+  status=$?
+  assert_output "rejects '$flag' on '$command'" \
+    "$(printf 'status=%s\n%s' "$status" "$out")" \
+    "status=1
+ERROR: '$flag' is not a flag of the '$command' command.
+  Run 'piw --help' for the command set and each command's flags."
+done <<'CASES'
+doctor|doctor|--no-cache
+build|build|--resume
+tool list|tool|--dry-run
+doctor|doctor|--mode
+CASES
 
 printf '== parser: retired flags are gone\n'
 for flag in --build-only --install-only --install --uninstall; do
   out="$(piw "$flag" 2>&1)"
-  assert_status "$flag exits 1" "$?" "1"
-  assert_contains "$flag is rejected" "$out" "$flag"
+  status=$?
+  assert_output "$flag is rejected" \
+    "$(printf 'status=%s\n%s' "$status" "$out")" \
+    "status=1
+ERROR: '$flag' is not a flag of the 'launch' command.
+  Run 'piw --help' for the command set and each command's flags."
 done
 if grep -qE 'build-only|install-only|--install|--uninstall' "$SANDBOX/piw"; then
   bad "piw no longer names the retired flags"
@@ -384,44 +432,57 @@ assert_absent "unlink removes the symlink" "$bindir/piw"
 printf '== starters seed once\n'
 rm -f "$SANDBOX/.local/piw.conf" "$SANDBOX/.local/mise/config.toml"
 piw link "$WORK/bin-seed" >/dev/null 2>&1
-assert_exists "install seeds .local/piw.conf" "$SANDBOX/.local/piw.conf"
-assert_exists "install seeds .local/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
-if diff -q "$SANDBOX/seed/piw.conf" "$SANDBOX/.local/piw.conf" >/dev/null; then
-  ok "piw.conf starts as a copy of the starter"
+if [[ -f "$SANDBOX/.local/piw.conf" && -f "$SANDBOX/.local/mise/config.toml" ]]; then
+  ok "install seeds both starters"
 else
-  bad "piw.conf starts as a copy of the starter"
+  bad "install seeds both starters"
 fi
-if diff -q "$SANDBOX/seed/mise/config.toml" "$SANDBOX/.local/mise/config.toml" >/dev/null; then
-  ok "mise config starts as a copy of the starter"
+if diff -q "$SANDBOX/seed/piw.conf" "$SANDBOX/.local/piw.conf" >/dev/null \
+  && diff -q "$SANDBOX/seed/mise/config.toml" \
+    "$SANDBOX/.local/mise/config.toml" >/dev/null; then
+  ok "both starters begin as copies of the seed"
 else
-  bad "mise config starts as a copy of the starter"
+  bad "both starters begin as copies of the seed"
 fi
 
 # An edited live file must survive every later run.
 printf '# edited by the user\n[layers]\nrun:mine\n' > "$SANDBOX/.local/piw.conf"
 printf '# edited by the user\n[tools]\n' > "$SANDBOX/.local/mise/config.toml"
 piw link "$WORK/bin-seed2" >/dev/null 2>&1
-assert_contains "keeps an edited piw.conf" "$(cat "$SANDBOX/.local/piw.conf")" "run:mine"
-assert_contains "keeps an edited mise config" "$(cat "$SANDBOX/.local/mise/config.toml")" "# edited by the user"
+assert_output "keeps edited starters" \
+  "$(cat "$SANDBOX/.local/piw.conf"; printf -- '---\n'; cat "$SANDBOX/.local/mise/config.toml")" \
+  "# edited by the user
+[layers]
+run:mine
+---
+# edited by the user
+[tools]"
 
 # Launch seeds the same two files.
 rm -f "$SANDBOX/.local/piw.conf" "$SANDBOX/.local/mise/config.toml"
 sync_label
 piw "$WORK/proj" >/dev/null 2>&1
-assert_exists "launch seeds .local/piw.conf" "$SANDBOX/.local/piw.conf"
-assert_exists "launch seeds .local/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
+if [[ -f "$SANDBOX/.local/piw.conf" && -f "$SANDBOX/.local/mise/config.toml" ]]; then
+  ok "launch seeds both starters"
+else
+  bad "launch seeds both starters"
+fi
 
 printf '== manifest resolvers\n'
-assert_status "piw.conf default path" "$(piw_fn resolve_piw_conf)" "$SANDBOX/.local/piw.conf"
-assert_status "absolute PIW_CONF wins" \
-  "$(PIW_CONF=/tmp/piw-elsewhere.conf piw_fn resolve_piw_conf)" "/tmp/piw-elsewhere.conf"
-assert_status "relative PIW_CONF sits under the harness" \
-  "$(PIW_CONF=sub/piw.conf piw_fn resolve_piw_conf)" "$SANDBOX/sub/piw.conf"
-assert_status "mise config default path" "$(piw_fn resolve_mise_config)" "$SANDBOX/.local/mise/config.toml"
-assert_status "absolute PIW_MISE_CONFIG wins" \
-  "$(PIW_MISE_CONFIG=/tmp/mise-elsewhere.toml piw_fn resolve_mise_config)" "/tmp/mise-elsewhere.toml"
-assert_status "relative PIW_MISE_CONFIG sits under the harness" \
-  "$(PIW_MISE_CONFIG=sub/mise.toml piw_fn resolve_mise_config)" "$SANDBOX/sub/mise.toml"
+assert_output "manifest and mise config resolvers" \
+  "$(printf '%s\n' \
+    "$(piw_fn resolve_piw_conf)" \
+    "$(PIW_CONF=/tmp/piw-elsewhere.conf piw_fn resolve_piw_conf)" \
+    "$(PIW_CONF=sub/piw.conf piw_fn resolve_piw_conf)" \
+    "$(piw_fn resolve_mise_config)" \
+    "$(PIW_MISE_CONFIG=/tmp/mise-elsewhere.toml piw_fn resolve_mise_config)" \
+    "$(PIW_MISE_CONFIG=sub/mise.toml piw_fn resolve_mise_config)")" \
+  "$SANDBOX/.local/piw.conf
+/tmp/piw-elsewhere.conf
+$SANDBOX/sub/piw.conf
+$SANDBOX/.local/mise/config.toml
+/tmp/mise-elsewhere.toml
+$SANDBOX/sub/mise.toml"
 
 printf '== manifest parser\n'
 FIX="$WORK/manifest"
@@ -440,47 +501,49 @@ npm:pi-intercom
 git:https://host/repo#v1
 CONF
 out="$(PIW_CONF="$FIX/good.conf" piw_fn parse_piw_conf 2>&1)"
-assert_status "good manifest exits 0" "$?" "0"
-assert_contains "entry under [layers]" "$out" $'layers\tapt:zsh gdb'
-assert_contains "strips a trailing comment" "$out" $'layers\trun:my-setup'
-assert_contains "entry under [pi]" "$out" $'pi\tnpm:pi-intercom'
-assert_contains "keeps # inside a value" "$out" $'pi\tgit:https://host/repo#v1'
-assert_not_contains "drops comments" "$out" "a comment"
+status=$?
+assert_output "good manifest parses and strips comments" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "$(printf 'status=0\nlayers\t%s\nlayers\t%s\npi\t%s\npi\t%s\n' \
+    'apt:zsh gdb' 'run:my-setup' 'npm:pi-intercom' 'git:https://host/repo#v1')"
 
 printf '[layers]\napt:zsh\n[layers]\napt:gdb\n' > "$FIX/merge.conf"
 out="$(PIW_CONF="$FIX/merge.conf" piw_fn parse_piw_conf 2>&1)"
-assert_contains "duplicate sections merge (first)" "$out" $'layers\tapt:zsh'
-assert_contains "duplicate sections merge (second)" "$out" $'layers\tapt:gdb'
+assert_output "duplicate sections merge" "$out" \
+  "$(printf 'layers\t%s\nlayers\t%s\n' 'apt:zsh' 'apt:gdb')"
 
 printf 'orphan:entry\n' > "$FIX/orphan.conf"
 out="$(PIW_CONF="$FIX/orphan.conf" piw_fn parse_piw_conf 2>"$FIX/err")"
 status=$?
-assert_status "entry before a section exits non-zero" "$status" "2"
-assert_status "entry error writes nothing to stdout" "$out" ""
-assert_contains "entry error names the file and line" "$(cat "$FIX/err")" "$FIX/orphan.conf:1"
-assert_contains "entry error states the reason" "$(cat "$FIX/err")" "entry before any section"
+assert_output "an entry before a section stops and names the file and line" \
+  "$(printf 'status=%s\nstdout=%s\nstderr=%s' "$status" "$out" "$(cat "$FIX/err")")" \
+  "status=2
+stdout=
+stderr=$FIX/orphan.conf:1: entry before any section"
 
 printf '[layers\napt:zsh\n' > "$FIX/bad-header.conf"
 out="$(PIW_CONF="$FIX/bad-header.conf" piw_fn parse_piw_conf 2>"$FIX/err")"
 status=$?
-assert_status "malformed header exits non-zero" "$status" "2"
-assert_status "header error writes nothing to stdout" "$out" ""
-assert_contains "header error names the file and line" "$(cat "$FIX/err")" "$FIX/bad-header.conf:1"
-assert_contains "header error states the reason" "$(cat "$FIX/err")" "malformed section header"
+assert_output "a malformed header stops and names the file and line" \
+  "$(printf 'status=%s\nstdout=%s\nstderr=%s' "$status" "$out" "$(cat "$FIX/err")")" \
+  "status=2
+stdout=
+stderr=$FIX/bad-header.conf:1: malformed section header"
 
 printf '# only a comment\n\n   \n' > "$FIX/empty.conf"
 out="$(PIW_CONF="$FIX/empty.conf" piw_fn parse_piw_conf 2>&1)"
-assert_status "comment-only manifest exits 0" "$?" "0"
-assert_status "comment-only manifest emits nothing" "$out" ""
+assert_output "a comment-only manifest emits nothing" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" "status=0"
 
 printf '[layers]\r\napt:zsh\r\n' > "$FIX/crlf.conf"
 out="$(PIW_CONF="$FIX/crlf.conf" piw_fn parse_piw_conf 2>&1)"
-assert_contains "CRLF entry parses clean" "$out" $'layers\tapt:zsh'
+assert_output "CRLF entries parse clean" "$out" \
+  "$(printf 'layers\t%s\n' 'apt:zsh')"
 
 # The shipped starter must parse to nothing.
 out="$(PIW_CONF="$SANDBOX/seed/piw.conf" piw_fn parse_piw_conf 2>&1)"
-assert_status "shipped starter exits 0" "$?" "0"
-assert_status "shipped starter emits nothing" "$out" ""
+assert_output "the shipped starter parses to nothing" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" "status=0"
 
 printf '== layers: plan composition\n'
 LAYERS="$SANDBOX/.local/layers"
@@ -491,10 +554,8 @@ mkdir -p "$LAYERS/aptonly"
 printf 'zsh\ngdb\n' > "$LAYERS/aptonly/apt"
 printf '[layers]\nrun:aptonly\n' > "$SANDBOX/.local/piw.conf"
 plan="$(piw_fn compose_plan 2>&1)"
-assert_contains "apt-only layer emits its packages" "$plan" "zsh"
-assert_contains "apt-only layer emits every package" "$plan" "gdb"
-assert_not_contains "apt-only layer emits no COPY" "$plan" "COPY"
-assert_not_contains "apt-only layer emits no script" "$plan" "install.sh"
+assert_output "an apt-only layer composes one apt step and no script" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n' zsh gdb)"
 
 # Several layers compose in the declared order.
 mkdir -p "$LAYERS/first" "$LAYERS/second"
@@ -502,38 +563,29 @@ printf '#!/bin/sh\n' > "$LAYERS/first/install.sh"
 printf '#!/bin/sh\n' > "$LAYERS/second/install.sh"
 printf '[layers]\nrun:first\nrun:second\n' > "$SANDBOX/.local/piw.conf"
 plan="$(piw_fn compose_plan 2>&1)"
-first_line="$(printf '%s\n' "$plan" | grep -n '# layer first' | cut -d: -f1)"
-second_line="$(printf '%s\n' "$plan" | grep -n '# layer second' | cut -d: -f1)"
-if [[ -n "$first_line" && -n "$second_line" && "$first_line" -lt "$second_line" ]]; then
-  ok "layers compose in the declared order"
-else
-  bad "layers compose in the declared order (first=$first_line second=$second_line)"
-fi
+assert_output "layers compose in the declared order" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n\n# layer second\nCOPY second/ /tmp/piw-layer-second/\nRUN bash /tmp/piw-layer-second/install.sh \\\n && rm -rf /tmp/piw-layer-second\n')"
 
 # Consecutive apt declarations coalesce into one operation.
 printf '[layers]\napt:zsh\napt:gdb\nrun:first\n' > "$SANDBOX/.local/piw.conf"
 printf 'ripgrep\n' > "$LAYERS/first/apt"
 plan="$(piw_fn compose_plan 2>&1)"
-count="$(printf '%s\n' "$plan" | grep -c 'apt-get install')"
-assert_status "consecutive apt declarations coalesce" "$count" "1"
-assert_contains "coalesced group keeps a manifest package" "$plan" "gdb"
-assert_contains "coalesced group keeps a layer package" "$plan" "ripgrep"
+assert_output "consecutive apt declarations coalesce" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n' zsh gdb ripgrep)"
 
 # A non-apt step between apt declarations keeps them separate.
 printf '[layers]\napt:zsh\nrun:first\napt:gdb\n' > "$SANDBOX/.local/piw.conf"
 plan="$(piw_fn compose_plan 2>&1)"
-count="$(printf '%s\n' "$plan" | grep -c 'apt-get install')"
-assert_status "a non-apt step splits apt groups" "$count" "2"
+assert_output "a non-apt step splits apt groups" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n' zsh ripgrep gdb)"
 
 # Archives become one ADD --checksum each.
 mkdir -p "$LAYERS/arch"
 printf 'https://example.test/x.tar.gz abc123def456 /tmp/x.tar.gz\n' > "$LAYERS/arch/archives"
 printf '[layers]\nrun:arch\n' > "$SANDBOX/.local/piw.conf"
 plan="$(piw_fn compose_plan 2>&1)"
-assert_contains "archive becomes ADD --checksum" "$plan" \
-  "ADD --checksum=sha256:abc123def456 https://example.test/x.tar.gz /tmp/x.tar.gz"
-assert_not_contains "no hand-written checksum check" "$plan" "sha256sum"
-assert_contains "plan states the Dockerfile syntax" "$plan" "# syntax=docker/dockerfile:1.6"
+assert_output "an archive becomes one ADD --checksum" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# archive\nADD --checksum=sha256:%s %s %s\n' abc123def456 https://example.test/x.tar.gz /tmp/x.tar.gz)"
 
 # A malformed archive line stops before Docker.
 mkdir -p "$LAYERS/badarch"
@@ -542,22 +594,28 @@ printf '[layers]\nrun:badarch\n' > "$SANDBOX/.local/piw.conf"
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-if [[ "$status" -ne 0 ]]; then ok "malformed archive exits non-zero"; else bad "malformed archive exits non-zero (status $status)"; fi
-assert_contains "malformed archive names the file" "$out" "badarch/archives"
-assert_status "malformed archive invokes no docker" "$(log)" ""
+assert_output "a malformed archive stops before Docker and names the file" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+ERROR: Malformed archive line in $SANDBOX/.local/layers/badarch/archives: https://example.test/x.tar.gz abc /tmp/x extra
+  Expected: <url> <sha256> <destination>"
 
 # An unknown [layers] prefix stops.
 printf '[layers]\nbogus:thing\n' > "$SANDBOX/.local/piw.conf"
 out="$(piw_fn resolve_layers 2>&1)"
 status=$?
-assert_status "unknown prefix stops" "$status" "1"
-assert_contains "unknown prefix names the entry" "$out" "bogus:thing"
+assert_output "an unknown prefix stops and names the entry" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: Unknown [layers] entry 'bogus:thing' in $SANDBOX/.local/piw.conf.
+  Use 'apt:<pkg> [<pkg>...]' or 'run:<name>'."
 
 # An empty run: entry stops.
 printf '[layers]\nrun:\n' > "$SANDBOX/.local/piw.conf"
 out="$(piw_fn resolve_layers 2>&1)"
 status=$?
-assert_status "empty run entry stops" "$status" "1"
+assert_status "an empty run entry stops" "$status" "1"
 
 # The plan hash changes when a layer file changes.
 printf '[layers]\nrun:first\n' > "$SANDBOX/.local/piw.conf"
@@ -573,18 +631,23 @@ fi
 # A missing manifest stops and names the path.
 out="$(PIW_CONF="$WORK/absent-piw.conf" piw_fn resolve_layers 2>&1)"
 status=$?
-assert_status "missing manifest stops" "$status" "1"
-assert_contains "missing manifest names the path" "$out" "$WORK/absent-piw.conf"
+assert_output "a missing manifest stops and names the path" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: Layer manifest not found: $WORK/absent-piw.conf
+  Run 'piw link' or launch piw to seed the starter manifest."
 
 # A missing run: layer stops before Docker and names the entry and the path.
 printf '[layers]\nrun:ghost\n' > "$SANDBOX/.local/piw.conf"
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-if [[ "$status" -ne 0 ]]; then ok "missing layer exits non-zero"; else bad "missing layer exits non-zero (status $status)"; fi
-assert_contains "missing layer names the entry" "$out" "run:ghost"
-assert_contains "missing layer names the expected path" "$out" "$SANDBOX/.local/layers/ghost"
-assert_status "missing layer invokes no docker" "$(log)" ""
+assert_output "a missing layer stops before Docker and names entry and path" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+ERROR: Layer 'ghost' not found: $SANDBOX/.local/layers/ghost
+  Declared as 'run:ghost' in $SANDBOX/.local/piw.conf."
 
 printf '== layers: build\n'
 # A dry run prints the plan and invokes no Docker.
@@ -592,34 +655,34 @@ printf '[layers]\nrun:first\n' > "$SANDBOX/.local/piw.conf"
 reset_log
 out="$(piw build --dry-run 2>&1)"
 status=$?
-assert_status "dry-run exits 0" "$status" "0"
-assert_contains "dry-run prints the base" "$out" "FROM piw:default"
-assert_contains "dry-run prints the layer" "$out" "# layer first"
-assert_contains "dry-run prints the global store step" "$out" "mise install"
-assert_contains "dry-run prints the layer store step" "$out" \
-  "mise -C /opt/piw/layers/first install"
-assert_status "dry-run invokes no docker" "$(log)" ""
+assert_output "dry run prints the plan and invokes no Docker" \
+  "$(printf 'status=%s\ndocker=%s\n%s' "$status" "$(log)" \
+    "$(printf '%s\n' "$out" | grep -E 'FROM piw:default|# layer first|mise install|mise -C|Nothing executed|Build plan')")" \
+  "status=0
+docker=
+INFO: (dry-run) Build plan:
+FROM piw:default
+# layer first
+(dry-run) Would install the global store tools: mise install
+(dry-run) Would install layer 'first' store tools: mise -C /opt/piw/layers/first install
+INFO: (dry-run) Nothing executed."
 
 # With layers, piw builds piw:local from stdin with the layers context.
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-assert_status "build with layers exits 0" "$status" "0"
-assert_contains "builds piw:local from stdin" "$(log)" "build -f - -t piw:local"
-assert_contains "writes the plan label" "$(log)" "--label piw.plan="
-assert_contains "uses .local/layers as context" "$(log)" "$SANDBOX/.local/layers"
-plan_label="$(grep -o 'piw.plan=[0-9a-f]*' "$PIW_TEST_DOCKER_LOG" | head -1 | cut -d= -f2)"
-if [[ "$plan_label" =~ ^[0-9a-f]{64}$ ]]; then
-  ok "plan label is a sha256"
-else
-  bad "plan label is a sha256 (got: $plan_label)"
-fi
+plan_label="$(piw_fn plan_hash)"
+assert_output "builds piw:local from stdin with the plan label" \
+  "$(printf 'status=%s\n%s' "$status" "$(grep '^build ' "$PIW_TEST_DOCKER_LOG" | grep ' -t piw:local ')")" \
+  "status=0
+build -f - -t piw:local --label piw.plan=$plan_label $SANDBOX/.local/layers"
 
 # --no-cache reaches the local build.
 reset_log
 piw build --no-cache >/dev/null 2>&1
-assert_contains "no-cache reaches the local build" "$(log)" \
-  "--no-cache $SANDBOX/.local/layers"
+assert_output "no-cache reaches the local build" \
+  "$(grep '^build ' "$PIW_TEST_DOCKER_LOG" | grep ' -t piw:local ')" \
+  "build -f - -t piw:local --label piw.plan=$plan_label --no-cache $SANDBOX/.local/layers"
 
 # With no layers, piw builds no user image.
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
@@ -637,20 +700,13 @@ printf '[layers]\nrun:alpha\nrun:beta\n' > "$SANDBOX/.local/piw.conf"
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-assert_status "build with active layers exits 0" "$status" "0"
-assert_contains "installs the global store" "$(log)" "piw:local mise install"
-assert_contains "installs the alpha layer store" "$(log)" "mise -C /opt/piw/layers/alpha install"
-assert_contains "installs the beta layer store" "$(log)" "mise -C /opt/piw/layers/beta install"
-assert_not_contains "does not install an inactive layer" "$(log)" "/opt/piw/layers/inactive"
-global_line="$(grep -n -- ' mise install' "$PIW_TEST_DOCKER_LOG" | head -1 | cut -d: -f1)"
-alpha_line="$(grep -n -- 'mise -C /opt/piw/layers/alpha install' "$PIW_TEST_DOCKER_LOG" | head -1 | cut -d: -f1)"
-beta_line="$(grep -n -- 'mise -C /opt/piw/layers/beta install' "$PIW_TEST_DOCKER_LOG" | head -1 | cut -d: -f1)"
-if [[ -n "$global_line" && -n "$alpha_line" && -n "$beta_line" \
-  && "$global_line" -lt "$alpha_line" && "$alpha_line" -lt "$beta_line" ]]; then
-  ok "store steps run in order: global, alpha, beta"
-else
-  bad "store steps run in order (global=$global_line alpha=$alpha_line beta=$beta_line)"
-fi
+assert_output "build installs the global and active-layer stores in order" \
+  "$(printf 'status=%s\n%s' "$status" \
+    "$(log | grep '^run ' | sed 's/.* piw:\(default\|local\) //')")" \
+  "status=0
+mise install
+mise -C /opt/piw/layers/alpha install
+mise -C /opt/piw/layers/beta install"
 
 printf '== store: survives a rebuild\n'
 printf 'marker\n' > "$SANDBOX/.local/store/marker"
@@ -659,9 +715,11 @@ piw build >/dev/null 2>&1
 assert_exists "store contents survive a rebuild" "$SANDBOX/.local/store/marker"
 assert_contains "rebuild mounts the existing store" "$(log)" \
   "-v $SANDBOX/.local/store:/home/pi/.local:z"
-assert_contains "rebuild reinstalls the global store" "$(log)" " mise install"
-assert_contains "rebuild reinstalls the layer store" "$(log)" \
-  "mise -C /opt/piw/layers/alpha install"
+assert_output "rebuild reinstalls the global and layer stores" \
+  "$(log | grep '^run ' | sed 's/.* piw:\(default\|local\) //')" \
+  "mise install
+mise -C /opt/piw/layers/alpha install
+mise -C /opt/piw/layers/beta install"
 
 printf '== layers: launch uses the image the manifest needs\n'
 # With layers: piw:local and the full plan hash.
@@ -673,9 +731,8 @@ PIW_TEST_IMAGES="piw:default piw:local"
 PIW_TEST_LABELS="piw:local=$local_label"
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "launch with layers exits 0" "$?" "0"
-run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
-assert_contains "launch with layers uses piw:local" "$run_line" "piw:local"
+assert_contains "launch with layers uses piw:local" \
+  "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)" "piw:local"
 
 # Without layers: piw:default and the default Dockerfile hash.
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
@@ -684,9 +741,8 @@ PIW_TEST_IMAGES="piw:default"
 PIW_TEST_LABELS="piw:default=$default_label"
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "launch without layers exits 0" "$?" "0"
-run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
-assert_contains "launch without layers uses piw:default" "$run_line" "piw:default"
+assert_contains "launch without layers uses piw:default" \
+  "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)" "piw:default"
 
 printf '== launch: staleness check\n'
 # A matching label proceeds.
@@ -696,26 +752,39 @@ PIW_TEST_IMAGES="piw:default"
 PIW_TEST_LABELS="piw:default=$matching_label"
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "matching label exits 0" "$?" "0"
-assert_contains "matching label launches" "$(log)" "piw:default pi"
+assert_contains "a matching label launches" "$(log)" "piw:default pi"
 
 # A mismatched label refuses, names the fix, and never builds.
 PIW_TEST_LABELS="piw:default=deadbeef"
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "mismatched label exits 1" "$?" "1"
-assert_contains "mismatched label names staleness" "$out" "stale"
-assert_contains "mismatched label names the fix" "$out" "piw build"
-assert_not_contains "mismatched label invokes no build" "$(log)" "build"
+status=$?
+assert_output "a mismatched label refuses, names the fix, and never builds" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+INFO: pi 9.9.9 present.
+ERROR: Image 'piw:default' is stale.
+  The image was not built from the current plan.
+  Expected plan hash: $matching_label
+  Image plan hash:    deadbeef
+  Run 'piw build' to rebuild the image."
 
 # A missing label refuses.
 PIW_TEST_LABELS=""
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "missing label exits 1" "$?" "1"
-assert_contains "missing label names staleness" "$out" "stale"
-assert_contains "missing label names the fix" "$out" "piw build"
-assert_not_contains "missing label invokes no build" "$(log)" "build"
+status=$?
+assert_output "a missing label refuses, names the fix, and never builds" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+INFO: pi 9.9.9 present.
+ERROR: Image 'piw:default' is stale.
+  The image was not built from the current plan.
+  Expected plan hash: $matching_label
+  Image plan hash:    <none>
+  Run 'piw build' to rebuild the image."
 
 # A required piw:local that is missing refuses and names piw build.
 printf '[layers]\nrun:alpha\n' > "$SANDBOX/.local/piw.conf"
@@ -723,10 +792,14 @@ PIW_TEST_IMAGES="piw:default"
 PIW_TEST_LABELS=""
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
-assert_status "missing piw:local exits 1" "$?" "1"
-assert_contains "missing piw:local names the image" "$out" "piw:local"
-assert_contains "missing piw:local names the fix" "$out" "piw build"
-assert_not_contains "missing piw:local invokes no build" "$(log)" "build"
+status=$?
+assert_output "a missing piw:local refuses, names the image and the fix" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+INFO: pi 9.9.9 present.
+ERROR: Required image 'piw:local' is missing.
+  Run 'piw build' to build it."
 
 # Leave the manifest with no layers for the later launch tests.
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
@@ -735,35 +808,34 @@ printf '== default Dockerfile\n'
 df="$ROOT/Dockerfile"
 assert_exists "Dockerfile at the repo root" "$df"
 df_body="$(cat "$df" 2>/dev/null || true)"
-assert_status "syntax directive is line 1" "$(sed -n '1p' "$df")" "# syntax=docker/dockerfile:1.6"
-assert_contains "uses the Node 24 trixie base" "$df_body" "FROM node:24-trixie-slim"
-assert_not_contains "does not pin the base digest" "$df_body" "node:24-trixie-slim@"
+assert_output "the syntax directive and base are the decided ones" \
+  "$(sed -n '1p' "$df"; grep -m1 '^FROM ' "$df")" \
+  "# syntax=docker/dockerfile:1.6
+FROM node:24-trixie-slim"
 
 # The apt set must match the decided 19 exactly, so an extra or a missing
 # package fails the suite.
 apt_set="$(sed -n '/--no-install-recommends/,/&& rm -rf/p' "$df" | grep -vE 'RUN|rm -rf' | awk '{print $1}' | grep -v '^$' | sort | tr '\n' ' ')"
 apt_expected="bind9-dnsutils build-essential ca-certificates curl file git jq less lsof openssh-client pkg-config procps python3 shellcheck tree unzip wget xz-utils zip "
-if [[ "$apt_set" == "$apt_expected" ]]; then
-  ok "apt set matches the decided 19 exactly"
-else
-  bad "apt set differs (got: $apt_set)"
-fi
+assert_status "apt set matches the decided 19 exactly" "$apt_set" "$apt_expected"
 
 # Each pin must sit on the ADD that names its URL, so a swapped digest fails.
-mise_block="$(grep -A1 'ADD --checksum=sha256:a31542ee4d660b048d9ddc8f60ed024bff13bd292c08fecde5739ef7a5721dbc' "$df")"
-assert_contains "fetches mise with its pin" "$mise_block" "https://github.com/jdx/mise/releases/download/v2026.9.17/mise-v2026.9.17-linux-x64.tar.xz"
-yq_block="$(grep -A1 'ADD --checksum=sha256:38b907b21b1b04327fb9481c595331d925a67c6ee1aabd0ef419d0b7d12dfb3d' "$df")"
-assert_contains "fetches yq with its pin" "$yq_block" "https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64.tar.gz"
-uv_block="$(grep -A1 'ADD --checksum=sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd' "$df")"
-assert_contains "fetches uv with its pin" "$uv_block" "https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
+assert_output "each pinned download sits on its ADD" \
+  "$(grep -oE 'sha256:[0-9a-f]+|https://github.com/[^ ]+' "$df" | paste -d' ' - -)" \
+  "sha256:a31542ee4d660b048d9ddc8f60ed024bff13bd292c08fecde5739ef7a5721dbc https://github.com/jdx/mise/releases/download/v2026.9.17/mise-v2026.9.17-linux-x64.tar.xz
+sha256:38b907b21b1b04327fb9481c595331d925a67c6ee1aabd0ef419d0b7d12dfb3d https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64.tar.gz
+sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
 
-assert_contains "points mise at the mounted config" "$df_body" "MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml"
-assert_not_contains "drops the superseded mise path" "$df_body" "MISE_GLOBAL_CONFIG_FILE=/home/pi/.local/mise.toml"
+assert_output "mise points at the mounted config, not the superseded path" \
+  "$(grep -o 'MISE_GLOBAL_CONFIG_FILE=[^ ]*' "$df")" \
+  "MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml"
 
 # The rejected decisions stay rejected.
-assert_not_contains "does not strip mise" "$df_body" "strip /usr/local/bin/mise"
-assert_not_contains "does not ship git-issues" "$df_body" "git-issues"
-assert_not_contains "does not install pi" "$df_body" "npm install"
+bad_names=()
+for name in "strip /usr/local/bin/mise" git-issues "npm install"; do
+  grep -qF "$name" "$df_body" && bad_names+=("$name")
+done
+assert_status "rejected decisions stay rejected" "${#bad_names[@]}" "0"
 
 printf '== no retired names\n'
 # The pattern is split so this test file does not match its own search.
@@ -774,16 +846,21 @@ else
 fi
 
 printf '== seed: settings.json holds the pi defaults\n'
-settings="$(cat "$SANDBOX/seed/settings.json")"
-assert_contains "settings enables skill commands" "$settings" '"enableSkillCommands"'
-for pkg in \
-  npm:pi-web-access \
-  npm:@gotgenes/pi-permission-system \
-  npm:pi-intercom \
-  npm:pi-time-awareness \
-  npm:@gotgenes/pi-subagents; do
-  assert_contains "settings declares $pkg" "$settings" "$pkg"
-done
+assert_output "the seed settings.json holds the pi defaults" \
+  "$(cat "$SANDBOX/seed/settings.json")" \
+  "$(cat <<'SETTINGS'
+{
+  "enableSkillCommands": true,
+  "packages": [
+    "npm:pi-web-access",
+    "npm:@gotgenes/pi-permission-system",
+    "npm:pi-intercom",
+    "npm:pi-time-awareness",
+    "npm:@gotgenes/pi-subagents"
+  ]
+}
+SETTINGS
+)"
 assert_absent "seed/extensions.txt is gone" "$SANDBOX/seed/extensions.txt"
 
 printf '== settings seed once\n'
@@ -793,8 +870,8 @@ piw "$WORK/proj" >/dev/null 2>&1
 assert_exists "launch seeds settings.json" "$SANDBOX/.local/agent/settings.json"
 printf '{"packages":["npm:custom"]}\n' > "$SANDBOX/.local/agent/settings.json"
 piw "$WORK/proj" >/dev/null 2>&1
-assert_contains "keeps an edited settings.json" \
-  "$(cat "$SANDBOX/.local/agent/settings.json")" "npm:custom"
+assert_output "keeps an edited settings.json" \
+  "$(cat "$SANDBOX/.local/agent/settings.json")" '{"packages":["npm:custom"]}'
 
 printf '== extensions machinery is gone\n'
 if grep -qE 'sync_extensions_for|_pkg_mount_dir|_pkg_installed_version' "$SANDBOX/piw"; then
@@ -810,64 +887,86 @@ printf '#!/bin/sh\n' > "$SANDBOX/.local/layers/my-own/install.sh"
 printf 'My own bits\n' > "$SANDBOX/.local/layers/my-own/README.md"
 printf '[layers]\nrun:my-own\n' > "$SANDBOX/.local/piw.conf"
 out="$(piw layer list 2>&1)"
-assert_status "layer list exits 0" "$?" "0"
-ws_row="$(printf '%s\n' "$out" | grep '^workstation')"
-my_row="$(printf '%s\n' "$out" | grep '^my-own')"
-assert_contains "list shows the shipped layer" "$ws_row" "workstation"
-assert_contains "shipped layer is available" "$ws_row" "available"
-assert_contains "list shows the active layer" "$my_row" "my-own"
-assert_contains "active layer is active" "$my_row" "active"
-assert_contains "shipped description comes from README" "$ws_row" \
-  "Full toolbox: compilers, forensics, infra"
-assert_contains "active description comes from README" "$my_row" "My own bits"
-assert_contains "list names the NAME column" "$out" "NAME"
-assert_contains "list names the STATUS column" "$out" "STATUS"
+assert_output "layer list shows shipped and active layers with descriptions" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" \
+  "status=0
+NAME           STATUS     DESCRIPTION
+my-own         active     My own bits
+updatable      available  Updatable layer
+workstation    available  Full toolbox: compilers, forensics, infra"
 
 out="$(piw layer show workstation 2>&1)"
-assert_status "layer show exits 0" "$?" "0"
-assert_contains "show names the shipped source" "$out" "Source: shipped"
-assert_contains "show lists an apt package" "$out" "clang"
-assert_contains "show lists an archive" "$out" "https://example.test/x.tar.gz"
-assert_contains "show reports mise.toml" "$out" "mise.toml: yes"
-assert_contains "show reports install.sh" "$out" "install.sh: yes"
+assert_output "layer show prints the shipped layer's contents" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" \
+  "status=0
+Layer: workstation
+Source: shipped
+Directory: $SANDBOX/layers/workstation
+
+apt packages:
+  clang
+  nmap
+
+archives:
+  https://example.test/x.tar.gz deadbeef /tmp/x.tar.gz
+
+mise.toml: yes
+install.sh: yes"
 
 printf '== layers: add adopts a shipped layer\n'
 rm -rf "$SANDBOX/.local/layers"
 printf '# starter\n[layers]\n# none\n\n[pi]\nnpm:pi-intercom\n' > "$SANDBOX/.local/piw.conf"
 out="$(piw layer add workstation 2>&1)"
-assert_status "layer add exits 0" "$?" "0"
-assert_exists "adopt copies the layer directory" "$SANDBOX/.local/layers/workstation"
-assert_exists "adopt writes the stamp" "$SANDBOX/.local/layers/workstation/.piw-origin"
-assert_contains "adopt appends run:<name>" "$(cat "$SANDBOX/.local/piw.conf")" "run:workstation"
-assert_contains "add prints the first way forward" "$out" "by hand"
-assert_contains "add prints the second way forward" "$out" "workspace"
-stamp_lines="$(wc -l < "$SANDBOX/.local/layers/workstation/.piw-origin")"
-assert_status "stamp is one line" "$stamp_lines" "1"
-if [[ "$(cat "$SANDBOX/.local/layers/workstation/.piw-origin")" =~ ^[0-9a-f]{64}$ ]]; then
-  ok "stamp holds a sha256"
+status=$?
+assert_output "adopting a shipped layer reports both ways forward" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=0
+Adopted shipped layer 'workstation' into $SANDBOX/.local/layers/workstation.
+  Wrote the .piw-origin stamp and added 'run:workstation' to $SANDBOX/.local/piw.conf.
+
+Two ways forward:
+  1. Edit the layer files by hand under .local/layers/.
+  2. Launch piw with the harness directory as the workspace, then edit
+     the same files from inside the container."
+
+if [[ -d "$SANDBOX/.local/layers/workstation" \
+  && -f "$SANDBOX/.local/layers/workstation/.piw-origin" ]]; then
+  ok "adopt copies the layer directory and its stamp"
 else
-  bad "stamp holds a sha256"
+  bad "adopt copies the layer directory and its stamp"
 fi
-conf="$(cat "$SANDBOX/.local/piw.conf")"
-assert_contains "keeps the [pi] section" "$conf" "npm:pi-intercom"
-assert_contains "keeps the starter comment" "$conf" "# starter"
-line_layer="$(printf '%s\n' "$conf" | grep -n 'run:workstation' | cut -d: -f1)"
-line_pi="$(printf '%s\n' "$conf" | grep -n '^\[pi\]' | cut -d: -f1)"
-if [[ -n "$line_layer" && -n "$line_pi" && "$line_layer" -lt "$line_pi" ]]; then
-  ok "appends inside [layers], before [pi]"
+stamp_file="$SANDBOX/.local/layers/workstation/.piw-origin"
+stamp="$(cat "$stamp_file")"
+if [[ "$(wc -l < "$stamp_file")" -eq 1 && "$stamp" =~ ^[0-9a-f]{64}$ ]]; then
+  ok "the origin stamp is one sha256 line"
 else
-  bad "appends inside [layers], before [pi] (layer=$line_layer pi=$line_pi)"
+  bad "the origin stamp is one sha256 line (got: $stamp)"
 fi
+assert_output "adopt appends run:<name> inside [layers], keeping the rest" \
+  "$(cat "$SANDBOX/.local/piw.conf")" \
+  "# starter
+[layers]
+# none
+
+run:workstation
+[pi]
+npm:pi-intercom"
+
 out="$(piw layer add workstation 2>&1)"
-assert_status "re-adding an adopted layer exits 1" "$?" "1"
-assert_contains "re-add names layer update" "$out" "piw layer update workstation"
+status=$?
+assert_output "re-adding an adopted layer names layer update" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: Layer 'workstation' is already present at $SANDBOX/.local/layers/workstation.
+  Use 'piw layer update workstation' to update it."
 
 # A manifest without a trailing newline must not glue the new entry onto the
 # last line.
 printf '# starter\n[layers]\nrun:first' > "$SANDBOX/.local/piw.conf"
 piw layer add apt:zsh >/dev/null 2>&1
 conf="$(cat "$SANDBOX/.local/piw.conf")"
-if printf '%s\n' "$conf" | grep -qx 'apt:zsh' && printf '%s\n' "$conf" | grep -qx 'run:first'; then
+if printf '%s\n' "$conf" | grep -qx 'apt:zsh' \
+  && printf '%s\n' "$conf" | grep -qx 'run:first'; then
   ok "appends after a file with no trailing newline"
 else
   bad "appends after a file with no trailing newline"
@@ -876,23 +975,53 @@ fi
 printf '== layers: add scaffolds without a shipped layer\n'
 rm -rf "$SANDBOX/.local/layers/my-own"
 out="$(piw layer add my-own 2>&1)"
-assert_status "scaffold exits 0" "$?" "0"
-assert_exists "scaffold creates the directory" "$SANDBOX/.local/layers/my-own"
-assert_exists "scaffold creates install.sh" "$SANDBOX/.local/layers/my-own/install.sh"
-assert_contains "scaffold install.sh is a commented starter" \
-  "$(cat "$SANDBOX/.local/layers/my-own/install.sh")" "# Example:"
-assert_contains "scaffold appends run:<name>" "$(cat "$SANDBOX/.local/piw.conf")" "run:my-own"
+status=$?
+assert_output "scaffolding a new layer reports both ways forward" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=0
+Scaffolded layer 'my-own' at $SANDBOX/.local/layers/my-own.
+  Added 'run:my-own' to $SANDBOX/.local/piw.conf.
+
+Two ways forward:
+  1. Edit the layer files by hand under .local/layers/.
+  2. Launch piw with the harness directory as the workspace, then edit
+     the same files from inside the container."
+assert_output "the scaffold install.sh is a commented starter" \
+  "$(cat "$SANDBOX/.local/layers/my-own/install.sh")" \
+  "$(cat <<'STARTER'
+#!/usr/bin/env bash
+# Layer install script. It runs as root inside the image, at build time.
+#
+# apt packages and archives belong in the `apt` and `archives` files beside
+# this script. Use this script for anything they cannot express.
+#
+# Every command must be non-interactive and safe to rerun.
+set -euo pipefail
+
+# Example:
+#   install -m 0755 ./tool /usr/local/bin/tool
+STARTER
+)"
+assert_contains "scaffold appends run:<name>" \
+  "$(cat "$SANDBOX/.local/piw.conf")" "run:my-own"
 
 printf '== layers: add apt: appends the line\n'
 piw layer add apt:zsh gdb >/dev/null 2>&1
-assert_contains "appends the apt entry as-is" "$(cat "$SANDBOX/.local/piw.conf")" "apt:zsh gdb"
+assert_contains "appends the apt entry as-is" \
+  "$(cat "$SANDBOX/.local/piw.conf")" "apt:zsh gdb"
 
 printf '== layers: remove drops the entry, keeps the directory\n'
 out="$(piw layer remove my-own 2>&1)"
-assert_status "remove exits 0" "$?" "0"
-assert_not_contains "removes the run: entry" "$(cat "$SANDBOX/.local/piw.conf")" "run:my-own"
+status=$?
+assert_output "remove drops the run entry, keeps the directory, and says so" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=0
+Removed 'my-own' from $SANDBOX/.local/piw.conf.
+Kept the layer directory: $SANDBOX/.local/layers/my-own
+  Remove it by hand if you no longer need it."
+assert_not_contains "removes the run: entry" \
+  "$(cat "$SANDBOX/.local/piw.conf")" "run:my-own"
 assert_exists "keeps the layer directory" "$SANDBOX/.local/layers/my-own"
-assert_contains "remove says it kept the directory" "$out" "Kept the layer directory"
 
 printf '== layers: update reports the five drift cases\n'
 UPD="$SANDBOX/layers/updatable"
@@ -903,8 +1032,12 @@ rm -rf "$SANDBOX/.local/layers/updatable"
 mkdir -p "$SANDBOX/.local/layers/updatable"
 printf 'alpha\n' > "$SANDBOX/.local/layers/updatable/apt"
 out="$(piw layer update updatable 2>&1)"
-assert_status "no stamp: exits 0" "$?" "0"
-assert_contains "no stamp: reports not adopted" "$out" "was not adopted"
+status=$?
+assert_output "a layer with no stamp is reported, not guessed at" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=0
+Layer 'updatable' was not adopted by piw (no .piw-origin stamp).
+  Nothing to do. A hand-copied layer is left alone."
 assert_absent "no stamp: writes nothing" "$SANDBOX/.local/layers/updatable/.piw-origin"
 
 # 3. Identical: already up to date.
@@ -912,16 +1045,22 @@ rm -rf "$SANDBOX/.local/layers/updatable"
 printf '[layers]\nrun:updatable\n' > "$SANDBOX/.local/piw.conf"
 piw layer add updatable >/dev/null 2>&1
 out="$(piw layer update updatable 2>&1)"
-assert_status "identical: exits 0" "$?" "0"
-assert_contains "identical: already up to date" "$out" "already up to date"
+assert_output "an untouched adopted layer is already up to date" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" \
+  "status=0
+Layer 'updatable' is already up to date."
 
 # 4. The copy matches its stamp: apply the update.
 printf 'beta\n' >> "$UPD/apt"
 out="$(piw layer update updatable 2>&1)"
-assert_status "matches stamp: exits 0" "$?" "0"
-assert_contains "matches stamp: applies the update" "$out" "Updated layer"
-assert_contains "matches stamp: copies the new content" \
-  "$(cat "$SANDBOX/.local/layers/updatable/apt")" "beta"
+assert_output "an untouched copy takes the shipped update" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" \
+  "status=0
+Updated layer 'updatable' from the shipped copy.
+  Rewrote the .piw-origin stamp."
+assert_output "the update copies the new content" \
+  "$(cat "$SANDBOX/.local/layers/updatable/apt")" "alpha
+beta"
 git -C "$SANDBOX" checkout -- layers/updatable
 
 # 5. The copy differs from its stamp: print the diff, write nothing.
@@ -931,21 +1070,29 @@ piw layer add updatable >/dev/null 2>&1
 printf 'local-change\n' >> "$SANDBOX/.local/layers/updatable/apt"
 printf 'upstream-change\n' >> "$UPD/apt"
 out="$(piw layer update updatable 2>&1)"
-assert_status "local change: exits 0" "$?" "0"
-assert_contains "local change: prints the diff" "$out" "local-change"
-assert_contains "local change: diff shows the shipped change" "$out" "upstream-change"
-assert_contains "local change: names the override" "$out" "piw layer update updatable --replace"
-active="$(cat "$SANDBOX/.local/layers/updatable/apt")"
-assert_contains "local change: writes nothing (keeps local)" "$active" "local-change"
-assert_not_contains "local change: writes nothing (no upstream)" "$active" "upstream-change"
+status=$?
+selected="$(printf '%s\n' "$out" | grep -E 'has local changes|local-change|upstream-change|piw layer update updatable --replace')"
+assert_output "an edited copy shows the diff and names the override" \
+  "$(printf 'status=%s\n%s' "$status" "$selected")" \
+  "status=0
+Layer 'updatable' has local changes since adoption.
+-local-change
++upstream-change
+    piw layer update updatable --replace"
+assert_output "an edited copy writes nothing" \
+  "$(cat "$SANDBOX/.local/layers/updatable/apt")" "alpha
+local-change"
 
 # 5b. --replace overrides rule 5.
 out="$(piw layer update updatable --replace 2>&1)"
-assert_status "replace: exits 0" "$?" "0"
-assert_contains "replace: applies the update" "$out" "Updated layer"
-active="$(cat "$SANDBOX/.local/layers/updatable/apt")"
-assert_not_contains "replace: drops the local change" "$active" "local-change"
-assert_contains "replace: brings the shipped change" "$active" "upstream-change"
+assert_output "replace applies the update" \
+  "$(printf 'status=%s\n%s' "$?" "$out")" \
+  "status=0
+Updated layer 'updatable' from the shipped copy.
+  Rewrote the .piw-origin stamp."
+assert_output "replace brings the shipped content and drops the local change" \
+  "$(cat "$SANDBOX/.local/layers/updatable/apt")" "alpha
+upstream-change"
 git -C "$SANDBOX" checkout -- layers/updatable
 
 printf '== update: four steps\n'
@@ -960,30 +1107,49 @@ printf '{"packages":["npm:custom"]}\n' > "$SANDBOX/.local/agent/settings.json"
 out="$(piw update 2>&1)"
 status=$?
 assert_status "update exits 0" "$status" "0"
-assert_contains "update pulls" "$(cat "$PIW_TEST_GIT_LOG")" "pull --ff-only"
+assert_output "update pulls with ff-only" \
+  "$(cat "$PIW_TEST_GIT_LOG")" "git -C $SANDBOX pull --ff-only"
 assert_contains "update reports seeded drift" "$out" "DIFFERS from the seed"
-assert_contains "update calls cmd_build" "$(log)" "build -f $SANDBOX/Dockerfile -t piw:default"
+assert_output "update rebuilds the default image" \
+  "$(log | grep '^build ' | head -1)" \
+  "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX --label piw.plan=$(piw_fn default_plan_hash)"
 assert_contains "update runs pi update --all" "$(log)" "piw:default pi update --all"
 
 # --force passes through to pi update.
 : > "$PIW_TEST_GIT_LOG"
 reset_log
 out="$(piw update --force 2>&1)"
-assert_status "update --force exits 0" "$?" "0"
-assert_contains "update --force passes --force" "$(log)" "pi update --all --force"
+assert_contains "update --force passes --force" "$(log)" \
+  "piw:default pi update --all --force"
 
 # --dry-run prints the four steps and executes none.
 : > "$PIW_TEST_GIT_LOG"
 reset_log
 out="$(piw update --dry-run 2>&1)"
 status=$?
-assert_status "update --dry-run exits 0" "$status" "0"
-assert_contains "dry-run prints step 1" "$out" "1. Pull the harness"
-assert_contains "dry-run prints step 2" "$out" "2. Seeded config drift"
-assert_contains "dry-run prints step 3" "$out" "3. Rebuild"
-assert_contains "dry-run prints step 4" "$out" "4. Update pi"
-assert_status "dry-run invokes no docker" "$(log)" ""
-assert_status "dry-run pulls nothing" "$(cat "$PIW_TEST_GIT_LOG")" ""
+assert_output "update --dry-run prints the four steps and executes none" \
+  "$(printf 'status=%s\ndocker=%s\ngit=%s\n%s' "$status" "$(log)" "$(cat "$PIW_TEST_GIT_LOG")" "$out")" \
+  "$(cat <<'DRY'
+status=0
+docker=
+git=
+piw update
+
+1. Pull the harness
+   (dry-run) Would run: git pull --ff-only
+
+2. Seeded config drift (a diff is a report, not a failure)
+   (dry-run) Would report settings.json, models.json, permissions, piw.conf, and mise/config.toml
+
+3. Rebuild
+   (dry-run) Would run: piw build
+
+4. Update pi
+   (dry-run) Would run in piw:default: pi update --all
+
+✓ (dry-run) Nothing executed. Run without --dry-run to apply.
+DRY
+)"
 
 # A divergent pull fails loudly and stops before the build.
 : > "$PIW_TEST_GIT_LOG"
@@ -992,46 +1158,76 @@ export PIW_TEST_PULL_FAIL=1
 out="$(piw update 2>&1)"
 status=$?
 unset PIW_TEST_PULL_FAIL
-assert_status "divergent pull exits 1" "$status" "1"
-assert_contains "divergent pull says so" "$out" "git pull --ff-only failed"
-assert_status "divergent pull invokes no build" "$(log)" ""
+assert_output "a divergent pull fails loudly and stops before the build" \
+  "$(printf 'status=%s\nbuilds=%s\n%s' "$status" "$(log | grep '^build ')" "$out")" \
+  "status=1
+builds=
+piw update
+
+1. Pull the harness
+   git pull --ff-only
+fatal: Not possible to fast-forward, aborting.
+ERROR: git pull --ff-only failed.
+  The branch diverged from the remote, or local changes overlap.
+  Resolve it by hand, then retry. piw does not merge."
 
 printf '== doctor: four checks, drift is a report\n'
 rm -rf "$SANDBOX/.local/layers"
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
 PIW_TEST_IMAGES="piw:default"
 out="$(piw doctor 2>&1)"
-assert_status "doctor exits 0 when checks 1-3 pass" "$?" "0"
-assert_contains "doctor has check 1" "$out" "1. Docker"
-assert_contains "doctor has check 2" "$out" "2. Image"
-assert_contains "doctor has check 3" "$out" "3. Store"
-assert_contains "doctor has check 4" "$out" "4. Seeds"
-assert_contains "doctor states the exit code rule" "$out" "Exit code rule"
+status=$?
+assert_output "doctor reports four checks and the exit-code rule" \
+  "$(printf 'status=%s\n%s' "$status" \
+    "$(printf '%s\n' "$out" | grep -E '^(piw doctor|1\. Docker|2\. Image|3\. Store|4\. Seeds|Exit code rule)')")" \
+  "status=0
+piw doctor
+1. Docker
+2. Image
+3. Store
+4. Seeds (a diff is a report, not a failure)
+Exit code rule: 0 when checks 1-3 pass, 1 when any of them fails."
 
 # A seeded diff is reported and does not fail.
 printf '{"packages":["npm:custom"]}\n' > "$SANDBOX/.local/agent/settings.json"
 out="$(piw doctor 2>&1)"
-assert_status "a seeded diff does not fail doctor" "$?" "0"
-assert_contains "doctor reports the seeded diff" "$out" "DIFFERS from the seed"
+status=$?
+if [[ "$status" == 0 && "$out" == *"DIFFERS from the seed"* ]]; then
+  ok "a seeded diff is reported and does not fail doctor"
+else
+  bad "a seeded diff is reported and does not fail doctor (status $status)"
+fi
 
 # Check 3: a declared tool that mise does not list fails; one that it lists
 # passes. The stub prints PIW_TEST_MISE_LS for `mise ls`.
 export PIW_TEST_MISE_LS=""
 printf '[tools]\n"npm:typescript" = "latest"\n' > "$SANDBOX/.local/mise/config.toml"
 out="$(piw doctor 2>&1)"
-assert_status "a missing store tool fails doctor" "$?" "1"
-assert_contains "doctor names the missing tool" "$out" "MISSING: npm:typescript"
+status=$?
+if [[ "$status" == 1 && "$out" == *"MISSING: npm:typescript"* ]]; then
+  ok "a missing store tool fails doctor and is named"
+else
+  bad "a missing store tool fails doctor and is named (status $status)"
+fi
 PIW_TEST_MISE_LS="npm:typescript 7.0.2"
 out="$(piw doctor 2>&1)"
-assert_status "an installed store tool passes doctor" "$?" "0"
-assert_contains "doctor reports the installed tool" "$out" "installed: npm:typescript"
+status=$?
+if [[ "$status" == 0 && "$out" == *"installed: npm:typescript"* ]]; then
+  ok "an installed store tool passes doctor and is reported"
+else
+  bad "an installed store tool passes doctor and is reported (status $status)"
+fi
 PIW_TEST_MISE_LS=""
 
 # Check 2: a missing image fails.
 PIW_TEST_IMAGES=""
 out="$(piw doctor 2>&1)"
-assert_status "a missing image fails doctor" "$?" "1"
-assert_contains "doctor names the missing image" "$out" "MISSING"
+status=$?
+if [[ "$status" == 1 && "$out" == *"MISSING"* ]]; then
+  ok "a missing image fails doctor and is named"
+else
+  bad "a missing image fails doctor and is named (status $status)"
+fi
 PIW_TEST_IMAGES=""
 
 printf '== sandbox stays clean\n'
@@ -1041,9 +1237,11 @@ else
   bad "piw mutated the tracked tree:"
   git -C "$SANDBOX" status --porcelain | sed 's/^/    /'
 fi
-assert_absent "no .pi/ in the sandbox" "$SANDBOX/.pi"
-assert_absent "no extensions/ in the sandbox" "$SANDBOX/extensions"
-assert_absent "no root env in the sandbox" "$SANDBOX/.env"
+stray=()
+for p in .pi extensions .env; do
+  [[ -e "$SANDBOX/$p" ]] && stray+=("$p")
+done
+assert_status "no stray root artifacts" "${#stray[@]}" "0"
 
 # ── Result ───────────────────────────────────────────────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
