@@ -706,7 +706,8 @@ assert_output "build installs the global and active-layer stores in order" \
   "status=0
 mise install
 mise -C /opt/piw/layers/alpha install
-mise -C /opt/piw/layers/beta install"
+mise -C /opt/piw/layers/beta install
+bash /home/pi/.pi/agent/skills/generate-catalog.sh"
 
 printf '== store: survives a rebuild\n'
 printf 'marker\n' > "$SANDBOX/.local/store/marker"
@@ -719,7 +720,8 @@ assert_output "rebuild reinstalls the global and layer stores" \
   "$(log | grep '^run ' | sed 's/.* piw:\(default\|local\) //')" \
   "mise install
 mise -C /opt/piw/layers/alpha install
-mise -C /opt/piw/layers/beta install"
+mise -C /opt/piw/layers/beta install
+bash /home/pi/.pi/agent/skills/generate-catalog.sh"
 
 printf '== layers: launch uses the image the manifest needs\n'
 # With layers: piw:local and the full plan hash.
@@ -1229,6 +1231,68 @@ else
   bad "a missing image fails doctor and is named (status $status)"
 fi
 PIW_TEST_IMAGES=""
+
+printf '== catalog: hidden skills only\n'
+# The fixture lives outside the sandbox, so the generated tree never touches
+# the tracked sandbox. The four misc skills are marked hidden here to prove
+# that the generator walks every bucket, including misc.
+CATFIX="$WORK/catalog"
+mkdir -p "$CATFIX/skills/system/hidden-skill" \
+  "$CATFIX/skills/system/visible-skill" \
+  "$CATFIX/skills/vendor/acme/skills/misc/alpha" \
+  "$CATFIX/skills/vendor/acme/skills/misc/beta" \
+  "$CATFIX/skills/vendor/acme/skills/misc/gamma" \
+  "$CATFIX/skills/vendor/acme/skills/misc/delta"
+cp "$ROOT/skills/generate-catalog.sh" "$CATFIX/skills/generate-catalog.sh"
+
+printf -- '---\nname: hidden-skill\ndescription: A hidden skill the catalog must list.\ndisable-model-invocation: true\n---\n' \
+  > "$CATFIX/skills/system/hidden-skill/SKILL.md"
+printf -- '---\nname: visible-skill\ndescription: A visible skill the catalog must omit.\n---\n' \
+  > "$CATFIX/skills/system/visible-skill/SKILL.md"
+for n in alpha beta gamma delta; do
+  printf -- '---\nname: misc-%s\ndescription: The %s skill in the misc bucket.\ndisable-model-invocation: true\n---\n' \
+    "$n" "$n" > "$CATFIX/skills/vendor/acme/skills/misc/$n/SKILL.md"
+done
+
+catalog_one="$(bash "$CATFIX/skills/generate-catalog.sh" 2>/dev/null)"
+catalog_two="$(bash "$CATFIX/skills/generate-catalog.sh" 2>/dev/null)"
+assert_contains "the catalog lists a hidden skill" "$catalog_one" '`hidden-skill`'
+assert_not_contains "the catalog omits a visible skill" "$catalog_one" 'visible-skill'
+for n in alpha beta gamma delta; do
+  assert_contains "the four misc skills appear: $n" "$catalog_one" "misc-$n"
+done
+assert_contains "an entry names the path" "$catalog_one" '`system/hidden-skill/SKILL.md`'
+assert_output "two runs are byte-identical" "$catalog_two" "$catalog_one"
+entry_total="$(printf '%s\n' "$catalog_one" | grep -c '^- \*\*' || true)"
+path_total="$(printf '%s\n' "$catalog_one" | grep -c 'SKILL\.md`)$' || true)"
+empty_total="$(printf '%s\n' "$catalog_one" | grep -c ' -  (' || true)"
+assert_status "the catalog holds the five hidden skills" "$entry_total" "5"
+assert_status "every entry has a path" "$path_total" "$entry_total"
+assert_status "no entry has an empty description" "$empty_total" "0"
+
+printf '== catalog: a missing description fails loudly\n'
+ERRFIX="$WORK/catalog-broken"
+mkdir -p "$ERRFIX/skills/system/broken"
+cp "$ROOT/skills/generate-catalog.sh" "$ERRFIX/skills/generate-catalog.sh"
+printf -- '---\nname: broken\ndisable-model-invocation: true\n---\n' \
+  > "$ERRFIX/skills/system/broken/SKILL.md"
+out="$(bash "$ERRFIX/skills/generate-catalog.sh" 2>&1)"
+status=$?
+assert_output "a missing description exits non-zero and names the skill" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: broken has no readable description (system/broken/SKILL.md)"
+
+printf '== piw generate-catalog runs in the container\n'
+reset_log
+out="$(piw generate-catalog 2>&1)"
+status=$?
+assert_status "generate-catalog exits 0" "$status" "0"
+assert_contains "generate-catalog runs the generator in the container" \
+  "$(log)" "bash /home/pi/.pi/agent/skills/generate-catalog.sh"
+assert_not_contains "generate-catalog does not call host python3" "$(log)" "python3"
+assert_exists "generate-catalog writes the catalog on the host" \
+  "$SANDBOX/skills/catalog.md"
 
 printf '== sandbox stays clean\n'
 if [[ -z "$(git -C "$SANDBOX" status --porcelain)" ]]; then

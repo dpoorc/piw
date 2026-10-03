@@ -1667,14 +1667,27 @@ cmd_doctor() {
 }
 
 # ── Command: regenerate skills catalog ────────────────────────────────────────
+# The generator runs in the container, where python3 exists. The skills tree
+# mounts read-only there, so the container cannot write catalog.md. Capture the
+# generator's stdout and write the file on the host.
 cmd_generate_catalog() {
   local script="$SCRIPT_DIR/skills/generate-catalog.sh"
   if [[ ! -f "$script" ]]; then
     echo "ERROR: generate-catalog.sh not found at $script" >&2
     exit 1
   fi
+
+  ensure_image
+
   echo "Regenerating skills catalog…"
-  bash "$script"
+  local tmp
+  tmp="$(mktemp)"
+  if ! _in_container bash /home/pi/.pi/agent/skills/generate-catalog.sh >"$tmp"; then
+    rm -f "$tmp"
+    echo "ERROR: Catalog generation failed in the container." >&2
+    exit 1
+  fi
+  mv "$tmp" "$SCRIPT_DIR/skills/catalog.md"
 }
 
 # ── Command: update harness, images, and pi ──────────────────────────────────

@@ -1,144 +1,147 @@
 #!/usr/bin/env bash
-# generate-catalog.sh — scan all skills and produce skills/catalog.md
+# generate-catalog.sh - write the catalog of hidden skills.
 #
 # Usage:
-#   ./skills/generate-catalog.sh            # regenerate catalog.md
-#   ./skills/generate-catalog.sh <path>      # write to <path> instead
+#   generate-catalog.sh            # write the catalog to stdout
+#   generate-catalog.sh <path>     # write the catalog to <path>
 #
-# Scans skills/system/ and skills/vendor/ for SKILL.md files,
-# extracts frontmatter metadata, and writes a unified catalog.
-#
-# Future: wire into piw build (piw generate-catalog) and/or git hooks.
+# The script scans skills/system/ and skills/vendor/ for SKILL.md files. It
+# emits only the skills marked `disable-model-invocation: true`, because pi
+# already shows the visible skills in the system prompt. It reads the
+# frontmatter with python3 and the standard library only. A hidden skill whose
+# description cannot be read is an error that names the skill. The output is
+# sorted, so two runs are byte-identical.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CATALOG="${1:-$SCRIPT_DIR/catalog.md}"
+OUTPUT="${1:-}"
 
-# ── helpers ──────────────────────────────────────────────────────────────────
+generate() {
+  python3 - "$SCRIPT_DIR" <<'PY'
+import json
+import os
+import re
+import sys
 
-# Extract a frontmatter field from a SKILL.md using Python YAML parser.
-# Handles folded (>), literal (|), and plain scalar values.
-_yaml_field() {
-  local file="$1" field="$2"
-  python3 -c "
-import yaml, sys
-with open('$file') as f:
-    content = f.read()
-parts = content.split('---', 2)
-if len(parts) >= 2:
-    data = yaml.safe_load(parts[1])
-    val = data.get('$field', '')
-    if val:
-        print(str(val).replace(chr(10), ' '))
-" 2>/dev/null || echo ""
+KEY = re.compile(r"^([A-Za-z0-9_-]+):[ \t]*(.*)$")
+BLOCK = (">", "|", ">-", "|-", ">+", "|+")
+
+
+def parse_frontmatter(text):
+    """Return the frontmatter as a dict. Raise ValueError when it is broken.
+
+    The fields are simple: `key: value`, or a folded (`>`) or literal (`|`)
+    block. No third-party parser is needed.
+    """
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    end = None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end = i
+            break
+    if end is None:
+        raise ValueError("unterminated frontmatter")
+    fields = lines[1:end]
+    data = {}
+    i = 0
+    while i < len(fields):
+        match = KEY.match(fields[i])
+        if not match:
+            i += 1
+            continue
+        key = match.group(1)
+        value = match.group(2).strip()
+        if value in BLOCK:
+            block = []
+            i += 1
+            while i < len(fields) and (
+                fields[i].strip() == "" or fields[i][0] in (" ", "\t")
+            ):
+                block.append(fields[i])
+                i += 1
+            indents = [len(x) - len(x.lstrip()) for x in block if x.strip()]
+            trim = min(indents) if indents else 0
+            parts = [x[trim:].strip() for x in block]
+            value = " ".join(p for p in parts if p)
+        elif len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+            try:
+                value = json.loads(value)
+            except ValueError:
+                value = value[1:-1]
+        elif len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+            value = value[1:-1]
+        data[key] = value
+        i += 1
+    return data
+
+
+def skill_files(root):
+    files = []
+    for base in ("system", "vendor"):
+        top = os.path.join(root, base)
+        if not os.path.isdir(top):
+            continue
+        for dirpath, _dirnames, filenames in os.walk(top):
+            if "SKILL.md" in filenames:
+                files.append(os.path.join(dirpath, "SKILL.md"))
+    files.sort()
+    return files
+
+
+def main():
+    root = sys.argv[1]
+    entries = []
+    for path in skill_files(root):
+        rel = os.path.relpath(path, root)
+        fallback = os.path.basename(os.path.dirname(path))
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                text = handle.read()
+        except OSError as exc:
+            sys.stderr.write(
+                "ERROR: %s is unreadable: %s (%s)\n" % (fallback, exc, rel)
+            )
+            return 1
+        try:
+            data = parse_frontmatter(text)
+        except ValueError as exc:
+            sys.stderr.write("ERROR: %s: %s (%s)\n" % (fallback, exc, rel))
+            return 1
+        if str(data.get("disable-model-invocation", "")).strip().lower() != "true":
+            continue
+        name = data.get("name") or fallback
+        description = " ".join(str(data.get("description", "")).split())
+        if not description:
+            sys.stderr.write(
+                "ERROR: %s has no readable description (%s)\n" % (name, rel)
+            )
+            return 1
+        entries.append((rel, name, description))
+
+    out = sys.stdout
+    out.write("# Skills catalog\n\n")
+    out.write("Skills hidden from the system prompt. The system prompt shows the\n")
+    out.write("other skills. Load a hidden skill with `/skill:<name>`.\n\n")
+    out.write("Paths are relative to the skills root (`~/.pi/agent/skills/`).\n\n")
+    for rel, name, description in entries:
+        out.write("- **`%s`** - %s (`%s`)\n" % (name, description, rel))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PY
 }
 
-# Check if a skill file has disable-model-invocation: true
-_is_hidden() {
-  local file="$1"
-  grep -q 'disable-model-invocation: *true' "$file" 2>/dev/null
-}
-
-# Determine if a skill references setup-matt-pocock-skills (needs a tracker)
-_needs_tracker() {
-  local file="$1"
-  grep -q 'setup-matt-pocock-skills' "$file" 2>/dev/null
-}
-
-# ── write catalog header ────────────────────────────────────────────────────
-
-cat > "$CATALOG" << 'HEADER'
-# Skills catalog
-
-All available skills in this harness, organized by source and theme.
-Invoke any skill with `/skill:<name>`.
-
-HEADER
-
-# ── scan system/ skills (built-in) ──────────────────────────────────────────
-
-echo "## System (built-in)" >> "$CATALOG"
-echo "" >> "$CATALOG"
-
-has_system=false
-for skill_dir in "$SCRIPT_DIR"/system/*/; do
-  skill_file="${skill_dir}SKILL.md"
-  [[ -f "$skill_file" ]] || continue
-
-  name="$(_yaml_field "$skill_file" "name")"
-  desc="$(_yaml_field "$skill_file" "description")"
-  hidden=$(_is_hidden "$skill_file" && echo "user-invoked" || echo "model-activated")
-
-  [[ -z "$name" ]] && name="$(basename "$skill_dir")"
-
-  echo "- **\`$name\`** — $desc *($hidden)*" >> "$CATALOG"
-  has_system=true
-done
-
-if [[ "$has_system" == "false" ]]; then
-  echo "*(none)*" >> "$CATALOG"
+if [[ -n "$OUTPUT" ]]; then
+  tmp="${OUTPUT}.tmp.$$"
+  trap 'rm -f "$tmp"' EXIT
+  generate >"$tmp"
+  mv "$tmp" "$OUTPUT"
+  trap - EXIT
+  echo "Wrote $OUTPUT" >&2
+else
+  generate
 fi
-echo "" >> "$CATALOG"
-
-# ── scan vendor/ skills (external collections) ──────────────────────────────
-
-for vendor_dir in "$SCRIPT_DIR"/vendor/*/; do
-  vendor_name="$(basename "$vendor_dir")"
-  vendor_skills="$vendor_dir/skills"
-
-  if [[ ! -d "$vendor_skills" ]]; then
-    # Some vendors may have skills at a different path — skip
-    continue
-  fi
-
-  echo "## Vendor: $vendor_name" >> "$CATALOG"
-  echo "" >> "$CATALOG"
-
-  # Only include skills from promoted buckets. Non-promoted buckets
-  # (in-progress, misc, deprecated) are filtered out.
-  # To configure per vendor, create vendor/<name>/.promoted-buckets
-  # with one bucket name per line.
-  promoted_file="$vendor_dir/.promoted-buckets"
-  if [[ -f "$promoted_file" ]]; then
-    mapfile -t buckets < "$promoted_file"
-  else
-    # Default: Matt Pocock's convention
-    buckets=(engineering productivity)
-  fi
-
-  has_vendor=false
-  for bucket in "${buckets[@]}"; do
-    bucket_dir="$vendor_skills/$bucket"
-    [[ ! -d "$bucket_dir" ]] && continue
-
-    echo "### $bucket" >> "$CATALOG"
-    echo "" >> "$CATALOG"
-
-    while IFS= read -r -d '' skill_file; do
-      name="$(_yaml_field "$skill_file" "name")"
-      desc="$(_yaml_field "$skill_file" "description")"
-      hidden=$(_is_hidden "$skill_file" && echo "user-invoked" || echo "model-activated")
-      tracker=$(_needs_tracker "$skill_file" && echo " ⚠ needs tracker" || echo "")
-
-      [[ -z "$name" ]] && name="$(basename "$(dirname "$skill_file")")"
-
-      echo "- **\`$name\`** — $desc *(${hidden}${tracker})*" >> "$CATALOG"
-      has_vendor=true
-    done < <(find "$bucket_dir" -name 'SKILL.md' -print0)
-
-    echo "" >> "$CATALOG"
-  done
-
-  if [[ "$has_vendor" == "false" ]]; then
-    echo "*(none)*" >> "$CATALOG"
-    echo "" >> "$CATALOG"
-  fi
-done
-
-# ── done ────────────────────────────────────────────────────────────────────
-
-entry_count=$(grep -c '^- \*\*' "$CATALOG" 2>/dev/null || echo 0)
-section_count=$(grep -c '^## ' "$CATALOG" 2>/dev/null || echo 0)
-section_count=$((section_count))
-echo "Wrote $CATALOG"
-echo "  Skills: $entry_count across $section_count sections"

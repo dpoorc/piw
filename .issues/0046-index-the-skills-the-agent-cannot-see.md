@@ -1,7 +1,7 @@
 ---
 id: 46
 title: Index the skills the agent cannot see
-status: open
+status: closed
 priority: medium
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 42
 created: "2026-10-03"
 updated: "2026-10-03"
+closed: "2026-10-03"
 ---
 
 ## Parent
