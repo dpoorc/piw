@@ -28,4 +28,10 @@ if [[ "${args[0]:-}" == "image" && "${args[1]:-}" == "inspect" ]]; then
   exit 1
 fi
 
+# `docker run ... mise ls` prints PIW_TEST_MISE_LS, so doctor can be tested
+# without a real mise.
+if [[ "${args[0]:-}" == "run" && "${args[-2]:-}" == "mise" && "${args[-1]:-}" == "ls" ]]; then
+  [[ -n "${PIW_TEST_MISE_LS:-}" ]] && printf '%s\n' "$PIW_TEST_MISE_LS"
+fi
+
 exit 0

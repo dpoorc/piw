@@ -8,27 +8,34 @@
 #   one command that brings everything current.
 #
 # Usage:
-#   piw                         Launch in the current directory
-#   piw <path>                  Launch with workspace
-#   piw -r, --resume            Launch with session picker
-#   piw build                   Build the default image and the layer image
-#   piw build --no-cache        Full rebuild (ignore Docker cache)
-#   piw build --dry-run         Print the generated plan (no executions)
-#   piw update                  Pull + rebuild + upgrade pi + sync extensions
-#   piw update --build-only     Pull + rebuild (skip pi/extensions)
-#   piw update --install-only   Pull + sync pi/extensions (skip build)
-#   piw update --force          Reinstall all extensions
-#   piw update --dry-run        Show what would change (no executions)
-#   piw doctor                  Diagnose harness setup
-#   piw generate-catalog        Regenerate skills catalog from SKILL.md files
+#   piw [<path>]                 Launch in the current directory or <path>
+#     --mode <name>              Permission mode (permissive, restricted, readonly)
+#     -r, --resume               Launch with the session picker
+#   piw build                    Build the default image and the layer image
+#     --no-cache                 Full rebuild (ignore the Docker cache)
+#     --dry-run                  Print the generated plan (no executions)
 #   piw tool install <spec>...   Install tools into the shared store
-#   piw tool list               List tools in the shared store
-#   piw tool remove <spec>...   Remove tools from the shared store
-#   piw --install [dir]         Install piw symlink into PATH
-#   piw --uninstall [dir]       Remove piw symlink from PATH
-#   piw --mode <name>           Launch with a permission mode (default: permissive)
-#                              Available: permissive, restricted, readonly
-#   piw --help                  Show this help
+#   piw tool remove <spec>...    Remove tools from the shared store
+#   piw tool list                List tools in the shared store
+#   piw layer add <name|apt:...> Adopt a shipped layer, or scaffold a new one
+#   piw layer remove <name>      Remove a layer from the manifest
+#   piw layer list               List shipped and active layers
+#   piw layer show <name>        Show a layer's contents
+#   piw layer update <name>      Update an adopted layer
+#     --replace                  Overwrite local changes to an adopted layer
+#   piw doctor                   Diagnose the harness
+#   piw link [dir]               Put piw on PATH (symlink into dir)
+#   piw unlink [dir]             Take piw off PATH (remove the symlink)
+#   piw generate-catalog         Regenerate the skills catalog
+#   piw update                   Pull, rebuild, and upgrade pi
+#     --no-cache                 Full rebuild (ignore the Docker cache)
+#     --force                    Force the update
+#     --dry-run                  Show what would change (no executions)
+#   piw --version                Print the version
+#   piw --help                   Show this help
+#
+#   link and unlink put piw on or off PATH. Each one makes or removes a
+#   symlink to this script in a directory such as ~/.local/bin.
 #
 # Environment:
 #   Secrets are read from .local/env (if present) and passed to the
@@ -46,6 +53,7 @@ set -euo pipefail
 # ── Constants ─────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 IMAGE_PREFIX="piw"
+PIW_VERSION="0.1.0"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 show_help() {
@@ -293,7 +301,7 @@ resolve_layers() {
 
   if [[ ! -f "$conf" ]]; then
     echo "ERROR: Layer manifest not found: $conf" >&2
-    echo "  Run 'piw --install' to seed the starter manifest." >&2
+    echo "  Run 'piw link' or launch piw to seed the starter manifest." >&2
     return 1
   fi
 
@@ -692,6 +700,7 @@ _npm_latest_version() {
 ensure_pi() {
   local mode="${1:-require}"
   local dry_run="${2:-false}"
+  local force="${3:-false}"
   local installed latest pi_host
 
   ensure_image "$dry_run"
@@ -715,7 +724,7 @@ ensure_pi() {
     echo "INFO: pi $installed present (offline — cannot check npm)."
     return 0
   fi
-  if [[ "$mode" == "upgrade" && -n "$installed" && "$installed" == "$latest" ]]; then
+  if [[ "$mode" == "upgrade" && "$force" != "true" && -n "$installed" && "$installed" == "$latest" ]]; then
     echo "INFO: pi $installed is current."
     return 0
   fi
@@ -743,186 +752,19 @@ ensure_pi() {
   fi
 }
 
-# ── Utility: mount directory for an extension source ─────────────────────────
-#   npm:<name>        → $config_dir/npm/node_modules/<name>
-#   git:<host>/<path> → $config_dir/git/<host>/<path> (@tag suffix stripped)
-_pkg_mount_dir() {
-  local config_dir="$1"
-  local pkg="$2"
-  case "$pkg" in
-  npm:*) echo "$config_dir/npm/node_modules/${pkg#npm:}" ;;
-  git:*)
-    local path="${pkg#git:}"
-    path="${path#https://}"
-    path="${path#git@}"
-    path="${path%%@*}"
-    path="${path//:/}"
-    echo "$config_dir/git/$path"
-    ;;
-  *) echo "" ;;
-  esac
-}
-
-# ── Utility: installed extension version (host-side read; git: → "") ────────
-_pkg_installed_version() {
-  local dir="$1"
-  local pkg_json="$dir/package.json"
-  if [[ ! -f "$pkg_json" ]]; then
-    echo ""
-    return
-  fi
-  sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$pkg_json" | head -1
-}
-
-# ── Utility: install one extension via pi install (throwaway container) ──────
-_pi_install_one() {
-  local pkg="$1"
-  local pi_host
-  pi_host="$(resolve_pi_host_dir)"
-
-  # Deterministic preflight: the mounted CLI must exist before we spawn a
-  # container that would otherwise fail with an opaque exec error.
-  if [[ ! -x "$pi_host/node_modules/.bin/pi" ]]; then
-    echo "ERROR: pi is not installed in the app mount ($pi_host)." >&2
-    echo "  Run 'piw update' or 'piw build' first (ensure_pi installs it)." >&2
-    return 1
-  fi
-
-  # Invoke via absolute path — never depends on PATH resolution inside the
-  # container (the /opt/pi node_modules/.bin entry would be found only
-  # when the mount is populated, which the preflight just guaranteed).
-  container_run -- /opt/pi/node_modules/.bin/pi install "$pkg"
-}
-
-# ── Utility: sync extensions from extensions.txt into the config mount ──────
-# force=false — install missing, upgrade outdated npm extensions
-# force=true  — reinstall every listed extension
-sync_extensions_for() {
-  local force="${1:-false}"
-  local dry_run="${2:-false}"
-  local packages_file="$SCRIPT_DIR/seed/extensions.txt"
-  local config_dir
-  config_dir="$(resolve_config_dir)"
-
-  if [[ ! -f "$packages_file" ]]; then
-    echo "INFO: No extensions.txt found. Nothing to sync."
-    return
-  fi
-
-  # Read extensions, skip blank lines and comments
-  local -a packages=()
-  while IFS= read -r line; do
-    line="${line/#"${line%%[![:space:]]*}"/}"
-    line="${line/%"${line##*[![:space:]]}"/}"
-    [[ -z "$line" ]] && continue
-    [[ "$line" == \#* ]] && continue
-    packages+=("$line")
-  done <"$packages_file"
-
-  if [[ ${#packages[@]} -eq 0 ]]; then
-    echo "INFO: No extensions listed in extensions.txt."
-    return
-  fi
-
-  ensure_image "$dry_run"
-  ensure_pi require "$dry_run"
-
-  local exit_code=0 installed=0 upgraded=0 skipped=0 failed=0
-
-  echo "Syncing extensions…"
-
-  for pkg in "${packages[@]}"; do
-    local dir ver latest verb
-    dir="$(_pkg_mount_dir "$config_dir" "$pkg")"
-
-    if [[ "$force" == "true" ]]; then
-      verb="reinstall"
-    elif [[ "$pkg" == npm:* ]]; then
-      ver="$(_pkg_installed_version "$dir")"
-      latest="$(_npm_latest_version "${pkg#npm:}")"  # strip pi's npm: URI scheme
-      if [[ -z "$ver" ]]; then
-        verb="install"
-      elif [[ -n "$latest" && "$ver" != "$latest" ]]; then
-        verb="upgrade ($ver → $latest)"
-      else
-        verb="current ($ver)"
-      fi
-    elif [[ -d "$dir" ]]; then
-      verb="present (git)"
-    else
-      verb="install"
-    fi
-
-    case "$verb" in
-    current*|present*)
-      echo "  ✓ $pkg ($verb)"
-      ((skipped+=1))
-      ;;
-    install)
-      if [[ "$dry_run" == "true" ]]; then
-        echo "  → $pkg (would install)"
-        ((installed+=1))
-        continue
-      fi
-      printf "  Installing %s… " "$pkg"
-      if _pi_install_one "$pkg"; then
-        echo "done"
-        ((installed+=1))
-      else
-        echo "failed" >&2
-        ((failed+=1))
-        exit_code=1
-      fi
-      ;;
-    *)
-      # upgrade/ reinstall buckets
-      if [[ "$dry_run" == "true" ]]; then
-        echo "  → $pkg ($verb — would run)"
-        ((upgraded+=1))
-        continue
-      fi
-      printf "  %s %s… " "$( [[ "$verb" == "reinstall" ]] && echo Reinstalling || echo Upgrading)" "$pkg"
-      if _pi_install_one "$pkg"; then
-        echo "done"
-        ((upgraded+=1))
-      else
-        echo "failed" >&2
-        ((failed+=1))
-        exit_code=1
-      fi
-      ;;
-    esac
-  done
-
-  echo ""
-  echo "  Summary: $installed installed, $upgraded upgraded, $skipped current, $failed failed"
-  if [[ "$exit_code" -ne 0 ]]; then
-    echo "WARNING: One or more extensions failed to sync." >&2
-  fi
-  return "$exit_code"
-}
-
 # ── Command: shared tool store ────────────────────────────────────────────────
-# Specs dispatch to the manager that owns each ecosystem. Every install runs
+# mise carries every store tool, so every spec goes to mise. Each command runs
 # inside the container and lands in the mounted store.
 _tool_install() {
   if [[ $# -eq 0 ]]; then
     echo "ERROR: piw tool install needs at least one spec." >&2
-    echo "  Example: piw tool install npm:typescript uv:ruff" >&2
+    echo "  Example: piw tool install npm:typescript pypi:ruff" >&2
     exit 1
   fi
   local spec
   for spec in "$@"; do
     echo "INFO: Installing $spec into the tool store…"
-    case "$spec" in
-    npm:*) _in_container npm install --global --prefix /home/pi/.local "${spec#npm:}" ;;
-    uv:*) _in_container env UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool install --force "${spec#uv:}" ;;
-    cargo:*) _in_container cargo install --root /home/pi/.local "${spec#cargo:}" ;;
-    go:*) _in_container env GOBIN=/home/pi/.local/bin go install "${spec#go:}" ;;
-    mise:*) _in_container mise use -g "${spec#mise:}" ;;
-    bin:*) _in_container mise use -g "github:${spec#bin:}" ;;
-    *) _in_container mise use -g "$spec" ;;
-    esac
+    _in_container mise use -g "$spec"
   done
 }
 
@@ -933,39 +775,12 @@ _tool_remove() {
   fi
   local spec
   for spec in "$@"; do
-    case "$spec" in
-    npm:*) _in_container npm uninstall --global --prefix /home/pi/.local "${spec#npm:}" ;;
-    uv:*) _in_container uv tool uninstall "${spec#uv:}" ;;
-    cargo:*) _in_container cargo uninstall --root /home/pi/.local "${spec#cargo:}" ;;
-    go:*)
-      echo "ERROR: go install has no uninstall." >&2
-      echo "  Remove the binary under $(resolve_tools_dir)/bin by hand." >&2
-      exit 1
-      ;;
-    mise:*) _in_container mise unuse -g "${spec#mise:}" ;;
-    bin:*) _in_container mise unuse -g "github:${spec#bin:}" ;;
-    *) _in_container mise unuse -g "$spec" ;;
-    esac
+    _in_container mise unuse -g "$spec"
   done
 }
 
 _tool_list() {
-  _in_container sh -c '
-    echo "== binaries"
-    ls -1 /home/pi/.local/bin 2>/dev/null || true
-    echo
-    echo "== npm"
-    npm ls --global --prefix /home/pi/.local --depth=0 2>/dev/null || true
-    echo
-    echo "== uv"
-    UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool list 2>/dev/null || true
-    echo
-    echo "== cargo"
-    cargo install --list --root /home/pi/.local 2>/dev/null || true
-    echo
-    echo "== mise"
-    mise ls 2>/dev/null || true
-  '
+  _in_container mise ls
 }
 
 # ── Command: manage the shared tool store ────────────────────────────────────
@@ -973,15 +788,394 @@ cmd_tool() {
   local sub="${1:-list}"
   [[ $# -gt 0 ]] && shift
   case "$sub" in
-  install) _tool_install "$@" ;;
-  remove) _tool_remove "$@" ;;
-  list) _tool_list ;;
+  install)
+    ensure_image
+    _tool_install "$@"
+    ;;
+  remove)
+    ensure_image
+    _tool_remove "$@"
+    ;;
+  list)
+    ensure_image
+    _tool_list
+    ;;
   *)
     echo "ERROR: Unknown 'piw tool' subcommand: $sub" >&2
     echo "Usage: piw tool install <spec>... | list | remove <spec>..." >&2
     exit 1
     ;;
   esac
+}
+
+# ── Utility: hash a layer directory, ignoring the origin stamp ───────────────
+layer_hash() {
+  local dir="$1"
+  [[ -d "$dir" ]] || return 0
+  {
+    while IFS= read -r -d '' f; do
+      rel="${f#"$dir"/}"
+      [[ "$rel" == ".piw-origin" ]] && continue
+      printf -- '-- %s --\n' "$rel"
+      cat "$f"
+    done < <(find "$dir" \( -type f -o -type l \) -print0 2>/dev/null | LC_ALL=C sort -z)
+  } | sha256sum | awk '{print $1}'
+}
+
+# ── Utility: first non-empty line of a layer's README.md ────────────────────
+layer_description() {
+  local dir="$1"
+  [[ -f "$dir/README.md" ]] || return 0
+  awk 'NF { sub(/^[[:space:]]+/, ""); print; exit }' "$dir/README.md"
+}
+
+# ── Utility: active layer names from the [layers] section ───────────────────
+active_layer_names() {
+  local parsed
+  parsed="$(parse_piw_conf)" || return 1
+  local section entry
+  while IFS=$'\t' read -r section entry; do
+    [[ "$section" == "layers" ]] || continue
+    case "$entry" in
+    run:*) printf '%s\n' "${entry#run:}" ;;
+    esac
+  done <<<"$parsed"
+}
+
+# ── Utility: append one entry to the [layers] section ───────────────────────
+# The writer adds a section when it is absent. It inserts at the end of the
+# last [layers] section, so unrelated lines stay byte-for-byte unchanged.
+_append_layer_entry() {
+  local entry="$1"
+  local conf
+  conf="$(resolve_piw_conf)"
+  mkdir -p "$(dirname "$conf")"
+
+  if [[ ! -f "$conf" ]]; then
+    printf '[layers]\n%s\n' "$entry" > "$conf"
+    return 0
+  fi
+
+  local last
+  last="$(awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    /^[[:space:]]*\[/ {
+      body = $0
+      sub(/[[:space:]]+#.*$/, "", body)
+      body = trim(body)
+      if (body == "[layers]") last = NR
+    }
+    END { if (last) print last }
+  ' "$conf")"
+
+  if [[ -z "$last" ]]; then
+    printf '\n[layers]\n%s\n' "$entry" >> "$conf"
+    return 0
+  fi
+
+  local end
+  end="$(awk -v start="$last" 'NR > start && /^[[:space:]]*\[/ { print NR; exit }' "$conf")"
+  if [[ -z "$end" ]]; then
+    # A file without a trailing newline would glue the entry onto the last line.
+    if [[ -n "$(tail -c 1 "$conf")" ]]; then
+      printf '\n' >> "$conf"
+    fi
+    printf '%s\n' "$entry" >> "$conf"
+  else
+    local tmp
+    tmp="$(mktemp)"
+    head -n "$((end - 1))" "$conf" > "$tmp"
+    printf '%s\n' "$entry" >> "$tmp"
+    tail -n "+$end" "$conf" >> "$tmp"
+    mv "$tmp" "$conf"
+  fi
+}
+
+# ── Utility: write a commented starter install.sh ────────────────────────────
+_scaffold_install() {
+  local file="$1"
+  [[ -f "$file" ]] && return 0
+  cat > "$file" <<'STARTER'
+#!/usr/bin/env bash
+# Layer install script. It runs as root inside the image, at build time.
+#
+# apt packages and archives belong in the `apt` and `archives` files beside
+# this script. Use this script for anything they cannot express.
+#
+# Every command must be non-interactive and safe to rerun.
+set -euo pipefail
+
+# Example:
+#   install -m 0755 ./tool /usr/local/bin/tool
+STARTER
+  chmod +x "$file"
+}
+
+# ── Utility: the two ways forward after a layer is added ─────────────────────
+_layer_add_hint() {
+  echo ""
+  echo "Two ways forward:"
+  echo "  1. Edit the layer files by hand under .local/layers/."
+  echo "  2. Launch piw with the harness directory as the workspace, then edit"
+  echo "     the same files from inside the container."
+}
+
+# ── Command: list shipped and active layers ──────────────────────────────────
+cmd_layer_list() {
+  local shipped_dir="$SCRIPT_DIR/layers"
+  local active_dir="$SCRIPT_DIR/.local/layers"
+  local conf
+  conf="$(resolve_piw_conf)"
+
+  declare -A layer_status=()
+  declare -A layer_desc=()
+
+  local d name
+  if [[ -d "$shipped_dir" ]]; then
+    while IFS= read -r -d '' d; do
+      name="$(basename "$d")"
+      layer_status["$name"]="available"
+      layer_desc["$name"]="$(layer_description "$d")"
+    done < <(find "$shipped_dir" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null | LC_ALL=C sort -z)
+  fi
+
+  local active_names=""
+  if [[ -f "$conf" ]]; then
+    active_names="$(active_layer_names)" || return 1
+  fi
+
+  local n
+  while IFS= read -r n; do
+    [[ -n "$n" ]] || continue
+    [[ -d "$active_dir/$n" ]] || continue
+    layer_status["$n"]="active"
+    if [[ -z "${layer_desc[$n]:-}" ]]; then
+      layer_desc["$n"]="$(layer_description "$active_dir/$n")"
+    fi
+  done <<<"$active_names"
+
+  if [[ ${#layer_status[@]} -eq 0 ]]; then
+    echo "No layers found."
+    return 0
+  fi
+
+  printf '%-14s %-10s %s\n' "NAME" "STATUS" "DESCRIPTION"
+  for name in $(printf '%s\n' "${!layer_status[@]}" | LC_ALL=C sort); do
+    printf '%-14s %-10s %s\n' "$name" "${layer_status[$name]}" "${layer_desc[$name]:-}"
+  done
+}
+
+# ── Command: show one layer's contents ───────────────────────────────────────
+cmd_layer_show() {
+  local name="$1"
+  local shipped_dir="$SCRIPT_DIR/layers/$name"
+  local active_dir="$SCRIPT_DIR/.local/layers/$name"
+  local dir source
+  if [[ -d "$active_dir" ]]; then
+    dir="$active_dir"
+    source="adopted"
+  elif [[ -d "$shipped_dir" ]]; then
+    dir="$shipped_dir"
+    source="shipped"
+  else
+    echo "ERROR: Layer not found: $name" >&2
+    echo "  Looked for $active_dir and $shipped_dir." >&2
+    exit 1
+  fi
+
+  echo "Layer: $name"
+  echo "Source: $source"
+  echo "Directory: $dir"
+  echo ""
+
+  local item found
+  echo "apt packages:"
+  found="false"
+  while IFS= read -r item; do
+    [[ -n "$item" ]] || continue
+    printf '  %s\n' "$item"
+    found="true"
+  done < <(_layer_apt_packages "$dir/apt")
+  [[ "$found" == "true" ]] || echo "  (none)"
+
+  echo ""
+  echo "archives:"
+  found="false"
+  while IFS= read -r item; do
+    [[ -n "$item" ]] || continue
+    printf '  %s\n' "$item"
+    found="true"
+  done < <(_layer_archives "$dir/archives")
+  [[ "$found" == "true" ]] || echo "  (none)"
+
+  echo ""
+  [[ -f "$dir/mise.toml" ]] && echo "mise.toml: yes" || echo "mise.toml: no"
+  [[ -f "$dir/install.sh" ]] && echo "install.sh: yes" || echo "install.sh: no"
+}
+
+# ── Command: add a layer (adopt, scaffold, or append apt:) ───────────────────
+cmd_layer_add() {
+  local arg="${1:-}"
+  if [[ -z "$arg" ]]; then
+    echo "ERROR: 'piw layer add' needs a name or an apt: entry." >&2
+    exit 1
+  fi
+
+  # apt:<pkg> [<pkg>...] is one manifest line, appended as-is.
+  if [[ "$arg" == apt:* ]]; then
+    local entry="$*"
+    _append_layer_entry "$entry"
+    echo "Added '$entry' to $(resolve_piw_conf)."
+    _layer_add_hint
+    return 0
+  fi
+
+  local name="$arg"
+  if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "ERROR: Invalid layer name '$name'." >&2
+    echo "  A layer name uses letters, digits, dot, dash, and underscore." >&2
+    exit 1
+  fi
+
+  local shipped_dir="$SCRIPT_DIR/layers/$name"
+  local active_dir="$SCRIPT_DIR/.local/layers/$name"
+
+  if [[ -d "$active_dir" ]]; then
+    echo "ERROR: Layer '$name' is already present at $active_dir." >&2
+    echo "  Use 'piw layer update $name' to update it." >&2
+    exit 1
+  fi
+
+  mkdir -p "$(dirname "$active_dir")"
+  if [[ -d "$shipped_dir" ]]; then
+    cp -R "$shipped_dir" "$active_dir"
+    layer_hash "$shipped_dir" > "$active_dir/.piw-origin"
+    _append_layer_entry "run:$name"
+    echo "Adopted shipped layer '$name' into $active_dir."
+    echo "  Wrote the .piw-origin stamp and added 'run:$name' to $(resolve_piw_conf)."
+  else
+    mkdir -p "$active_dir"
+    _scaffold_install "$active_dir/install.sh"
+    _append_layer_entry "run:$name"
+    echo "Scaffolded layer '$name' at $active_dir."
+    echo "  Added 'run:$name' to $(resolve_piw_conf)."
+  fi
+
+  _layer_add_hint
+}
+
+# ── Command: remove a layer entry from the manifest ──────────────────────────
+cmd_layer_remove() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    echo "ERROR: 'piw layer remove' needs a name." >&2
+    exit 1
+  fi
+  local conf
+  conf="$(resolve_piw_conf)"
+  if [[ ! -f "$conf" ]]; then
+    echo "ERROR: Layer manifest not found: $conf" >&2
+    exit 1
+  fi
+
+  local tmp rc=0
+  tmp="$(mktemp)"
+  awk -v target="run:$name" -v target2="apt:$name" '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    BEGIN { section = ""; removed = 0 }
+    /^[[:space:]]*\[/ {
+      body = $0
+      sub(/[[:space:]]+#.*$/, "", body)
+      body = trim(body)
+      section = substr(body, 2, length(body) - 2)
+      print
+      next
+    }
+    {
+      line = $0
+      if (line ~ /^[[:space:]]*#/ || line ~ /^[[:space:]]*$/) { print; next }
+      body = line
+      sub(/[[:space:]]+#.*$/, "", body)
+      body = trim(body)
+      if (section == "layers" && (body == target || body == target2)) { removed = 1; next }
+      print
+    }
+    END { if (!removed) exit 3 }
+  ' "$conf" > "$tmp" || rc=$?
+
+  if [[ "$rc" -eq 3 ]]; then
+    rm -f "$tmp"
+    echo "ERROR: No 'run:$name' or 'apt:$name' entry in $conf." >&2
+    exit 1
+  elif [[ "$rc" -ne 0 ]]; then
+    rm -f "$tmp"
+    echo "ERROR: Could not parse $conf." >&2
+    exit 1
+  fi
+
+  mv "$tmp" "$conf"
+  echo "Removed '$name' from $(resolve_piw_conf)."
+  local dir="$SCRIPT_DIR/.local/layers/$name"
+  if [[ -d "$dir" ]]; then
+    echo "Kept the layer directory: $dir"
+    echo "  Remove it by hand if you no longer need it."
+  fi
+}
+
+# ── Command: update an adopted layer from its shipped copy ───────────────────
+cmd_layer_update() {
+  local name="${1:-}"
+  local replace="${2:-false}"
+  if [[ -z "$name" ]]; then
+    echo "ERROR: 'piw layer update' needs a name." >&2
+    exit 1
+  fi
+
+  local active_dir="$SCRIPT_DIR/.local/layers/$name"
+  local shipped_dir="$SCRIPT_DIR/layers/$name"
+  local stamp="$active_dir/.piw-origin"
+
+  if [[ ! -d "$active_dir" ]]; then
+    echo "ERROR: Layer '$name' is not active: $active_dir" >&2
+    exit 1
+  fi
+  if [[ ! -d "$shipped_dir" ]]; then
+    echo "ERROR: No shipped layer '$name' at $shipped_dir to update from." >&2
+    exit 1
+  fi
+  if [[ ! -f "$stamp" ]]; then
+    echo "Layer '$name' was not adopted by piw (no .piw-origin stamp)."
+    echo "  Nothing to do. A hand-copied layer is left alone."
+    return 0
+  fi
+
+  local active_hash shipped_hash
+  active_hash="$(layer_hash "$active_dir")"
+  shipped_hash="$(layer_hash "$shipped_dir")"
+
+  if [[ "$active_hash" == "$shipped_hash" ]]; then
+    echo "Layer '$name' is already up to date."
+    return 0
+  fi
+
+  local origin
+  origin="$(head -1 "$stamp")"
+  if [[ "$active_hash" != "$origin" && "$replace" != "true" ]]; then
+    echo "Layer '$name' has local changes since adoption."
+    echo "  The update would overwrite them. Diff below (local -> shipped):"
+    echo ""
+    diff -ru --exclude='.piw-origin' "$active_dir" "$shipped_dir" || true
+    echo ""
+    echo "  To overwrite the local changes, run:"
+    echo "    piw layer update $name --replace"
+    return 0
+  fi
+
+  rm -rf "$active_dir"
+  cp -R "$shipped_dir" "$active_dir"
+  layer_hash "$shipped_dir" > "$active_dir/.piw-origin"
+  echo "Updated layer '$name' from the shipped copy."
+  echo "  Rewrote the .piw-origin stamp."
 }
 
 # ── Command: launch pi in Docker ──────────────────────────────────────────────
@@ -1089,6 +1283,39 @@ _build_local() {
   echo "INFO: Build complete: ${IMAGE_PREFIX}:local"
 }
 
+# ── Utility: populate the store with the global and active-layer tools ───────
+# mise reads the global config from MISE_GLOBAL_CONFIG_FILE and a layer's
+# mise.toml with -C. Both installs run in the image just built and write to the
+# mounted store (.local/store at /home/pi/.local), so they survive a rebuild.
+# A dry run prints the steps and runs no container.
+install_store() {
+  local image="$1"
+  local dry_run="${2:-false}"
+  local steps kind name
+
+  if ! steps="$(resolve_layers)"; then
+    return 1
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "(dry-run) Would install the global store tools: mise install"
+    while IFS=$'\t' read -r kind name _; do
+      [[ "$kind" == "run" ]] || continue
+      echo "(dry-run) Would install layer '$name' store tools: mise -C /opt/piw/layers/$name install"
+    done <<<"$steps"
+    return 0
+  fi
+
+  echo "INFO: Installing the global store tools…"
+  container_run --image "$image" -- mise install
+
+  while IFS=$'\t' read -r kind name _; do
+    [[ "$kind" == "run" ]] || continue
+    echo "INFO: Installing store tools for layer '$name'…"
+    container_run --image "$image" -- mise -C "/opt/piw/layers/$name" install
+  done <<<"$steps"
+}
+
 # ── Command: build the default image and the composed layer image ────────────
 cmd_build() {
   local no_cache="${1:-false}"
@@ -1117,26 +1344,29 @@ cmd_build() {
       exit 1
     fi
     echo ""
+    install_store "${IMAGE_PREFIX}:default" "true"
     echo "INFO: (dry-run) Nothing executed."
     return 0
   fi
 
   _build_single "$no_cache"
 
+  local image="${IMAGE_PREFIX}:default"
   if [[ -n "$steps" ]]; then
     mkdir -p "$SCRIPT_DIR/.local/layers"
     _build_local "$no_cache"
+    image="${IMAGE_PREFIX}:local"
   fi
 
-  # pi is mount-level: provision once, then sync extensions
+  # Populate the store in the image just built, then provision pi.
+  install_store "$image"
   ensure_pi require
-  sync_extensions_for
 
   cmd_generate_catalog  # refresh catalog, skills may have changed
 }
 
-# ── Command: install piw symlink into PATH ────────────────────────────────────
-cmd_install() {
+# ── Command: put piw on PATH (link a symlink into a directory) ────────────────
+cmd_link() {
   local target_dir="${1:-$HOME/.local/bin}"
   local link_path="$target_dir/piw"
   local piw_path="$SCRIPT_DIR/piw"
@@ -1147,7 +1377,7 @@ cmd_install() {
     local current
     current="$(readlink "$link_path")"
     if [[ "$current" == "$piw_path" ]]; then
-      echo "✓ piw already installed at $link_path"
+      echo "✓ piw already linked at $link_path"
     else
       ln -sf "$piw_path" "$link_path"
       echo "✓ Updated symlink: $link_path → $piw_path (was → $current)"
@@ -1157,7 +1387,7 @@ cmd_install() {
     exit 1
   else
     ln -s "$piw_path" "$link_path"
-    echo "✓ Installed: $link_path → $piw_path"
+    echo "✓ Linked: $link_path → $piw_path"
   fi
 
   # Seed configs and create the namespace (same as launch does)
@@ -1175,11 +1405,11 @@ cmd_install() {
   fi
 
   echo ""
-  echo "✓ piw installed. Run 'piw' to launch."
+  echo "✓ piw linked. Run 'piw' to launch."
 }
 
-# ── Command: remove piw symlink from PATH ────────────────────────────────────
-cmd_uninstall() {
+# ── Command: take piw off PATH (remove the symlink) ───────────────────────────
+cmd_unlink() {
   local target_dir="${1:-$HOME/.local/bin}"
   local link_path="$target_dir/piw"
   local piw_path="$SCRIPT_DIR/piw"
@@ -1212,188 +1442,164 @@ cmd_uninstall() {
   fi
 }
 
-# ── Command: diagnose harness setup ──────────────────────────────────────────
-cmd_doctor() {
-  local errors=0
+# ── Utility: declared store tools from a mise config ─────────────────────────
+# Reads the [tools] keys. A key may be bare (`jq`) or quoted (`"npm:x"`).
+_declared_tools() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  awk '
+    function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+    BEGIN { section = "" }
+    /^[[:space:]]*\[/ {
+      body = $0
+      sub(/[[:space:]]*#.*$/, "", body)
+      body = trim(body)
+      section = (body == "[tools]") ? "tools" : ""
+      next
+    }
+    {
+      line = $0
+      if (line ~ /^[[:space:]]*#/ || line ~ /^[[:space:]]*$/) next
+      if (section != "tools") next
+      eq = index(line, "=")
+      if (eq == 0) next
+      key = trim(substr(line, 1, eq - 1))
+      gsub(/^"|"$/, "", key)
+      if (key != "") print key
+    }
+  ' "$file"
+}
 
-  echo "piw doctor - diagnosing the harness"
+# ── Utility: the short tool name that a store install directory uses ─────────
+# ── Utility: report one seeded file against its seed (never fails) ───────────
+_doctor_seed_diff() {
+  local label="$1" live="$2" seed="$3"
+  if [[ ! -f "$seed" ]]; then
+    echo "   $label: no seed shipped"
+    return 0
+  fi
+  if [[ ! -f "$live" ]]; then
+    echo "   $label: not seeded yet"
+    return 0
+  fi
+  if diff -q "$seed" "$live" &>/dev/null; then
+    echo "   $label: matches the seed"
+    return 0
+  fi
+  echo "   $label: DIFFERS from the seed"
+  diff -u "$seed" "$live" | sed 's/^/     /' || true
+}
+
+# ── Command: diagnose the harness ────────────────────────────────────────────
+# Four checks. Checks 1 to 3 decide the exit code. Check 4 reports drift as a
+# diff and never fails: the seeded files belong to the user.
+#
+# Exit code: 0 when checks 1 to 3 pass, 1 when any of them fails.
+cmd_doctor() {
+  local failures=0
+  echo "piw doctor"
   echo ""
 
-  # ── Docker ──
-  echo "── Docker ──"
+  # 1. Docker and the daemon.
+  echo "1. Docker"
   if command -v docker &>/dev/null; then
-    echo "  ✓ docker found at $(command -v docker)"
+    echo "   docker: $(command -v docker)"
     if docker info &>/dev/null 2>&1; then
-      echo "  ✓ Docker daemon is running"
+      echo "   daemon: reachable"
     else
-      echo "  ✗ Docker daemon is not running (or permission denied)"
-      ((errors+=1))
+      echo "   daemon: NOT reachable"
+      ((failures += 1))
     fi
   else
-    echo "  ✗ docker not found on PATH"
-    ((errors+=1))
+    echo "   docker: NOT on PATH"
+    ((failures += 1))
   fi
+  echo ""
 
-  # ── Docker image ──
-  local image_tag="${IMAGE_PREFIX}:default"
-  if docker image inspect "$image_tag" &>/dev/null 2>&1; then
-    echo "  ✓ Docker image built: $image_tag"
+  # 2. Image. piw:local wins when it exists, else piw:default.
+  echo "2. Image"
+  local image="${IMAGE_PREFIX}:default"
+  if docker image inspect "${IMAGE_PREFIX}:local" &>/dev/null 2>&1; then
+    image="${IMAGE_PREFIX}:local"
+  fi
+  if docker image inspect "$image" &>/dev/null 2>&1; then
+    echo "   $image: present"
   else
-    echo "  ⚠ Docker image not yet built (auto-built on first launch)"
+    echo "   $image: MISSING"
+    ((failures += 1))
   fi
+  echo ""
 
-  # ── Environment ──
-  echo "── Environment ──"
-  if [[ -f "$SCRIPT_DIR/.local/env" ]]; then
-    echo "  ✓ .local/env file exists"
-    if grep -qP '^[A-Z_]+=\s*$' "$SCRIPT_DIR/.local/env" 2>/dev/null; then
-      echo "  ⚠ Some variables in .local/env are empty (placeholders?)"
+  # 3. Store agrees with the manifest.
+  echo "3. Store"
+  local store_failures=0
+  local -a declared=()
+  local spec
+  while IFS= read -r spec; do
+    [[ -n "$spec" ]] && declared+=("global:$spec")
+  done < <(_declared_tools "$(resolve_mise_config)")
+
+  local steps="" kind name dir
+  if [[ -f "$(resolve_piw_conf)" ]]; then
+    if steps="$(resolve_layers 2>/dev/null)"; then
+      while IFS=$'\t' read -r kind name dir; do
+        [[ "$kind" == "run" ]] || continue
+        while IFS= read -r spec; do
+          [[ -n "$spec" ]] && declared+=("$name:$spec")
+        done < <(_declared_tools "$dir/mise.toml")
+      done <<<"$steps"
+    else
+      echo "   manifest could not be resolved: $(resolve_piw_conf)"
+      ((store_failures += 1))
     fi
-  else
-    echo "  ⚠ .local/env not found (copy .env.example to .local/env)"
   fi
 
-  # Secrets live in .local/env and pass to the container with --env-file.
-  local found_keys=0
-  if [[ -f "$SCRIPT_DIR/.local/env" ]]; then
-    found_keys="$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*_API_KEY=.+' "$SCRIPT_DIR/.local/env" 2>/dev/null || true)"
-  fi
-  if [[ "${found_keys:-0}" -gt 0 ]]; then
-    echo "  ✓ $found_keys API key(s) in .local/env"
+  if [[ ${#declared[@]} -eq 0 ]]; then
+    echo "   no tools declared"
+  elif ! docker image inspect "$image" &>/dev/null 2>&1; then
+    echo "   cannot check: image $image is missing"
+    ((store_failures += 1))
   else
-    echo "  ⚠ No API keys found (add at least one to .local/env)"
+    # Ask mise, do not guess its install layout.
+    local installed_list
+    installed_list="$(container_run --image "$image" -- mise ls 2>/dev/null || true)"
+    local item scope tool
+    for item in "${declared[@]}"; do
+      scope="${item%%:*}"
+      tool="${item#*:}"
+      if grep -Fq -- "$tool" <<<"$installed_list"; then
+        echo "   installed: $tool ($scope)"
+      else
+        echo "   MISSING: $tool ($scope)"
+        ((store_failures += 1))
+      fi
+    done
   fi
+  [[ "$store_failures" -gt 0 ]] && ((failures += 1))
+  echo ""
 
-  # ── Config directory ──
-  echo "── Config ──"
+  # 4. Seeds. A diff is a report, never a failure.
+  echo "4. Seeds (a diff is a report, not a failure)"
   local config_dir
   config_dir="$(resolve_config_dir)"
-  if [[ -d "$config_dir" ]]; then
-    echo "  ✓ Config directory: $config_dir"
-    [[ -f "$config_dir/settings.json" ]] && echo "  ✓ settings.json" || echo "  ⚠ No settings.json (seeded on first launch)"
-    [[ -f "$config_dir/models.json" ]] && echo "  ✓ models.json" || echo "  ⚠ No models.json (seeded on first launch)"
-  else
-    echo "  ⚠ Config directory not found (created on first launch)"
-  fi
-
-  # ── Skills & Extensions ──
-  echo "── Skills & Extensions ──"
-  if [[ -d "$SCRIPT_DIR/skills/system/workflow" ]]; then
-    echo "  ✓ Workflow skill: skills/system/workflow"
-    [[ -f "$SCRIPT_DIR/skills/system/workflow/SKILL.md" ]] && echo "  ✓   SKILL.md" || echo "  ⚠   Missing SKILL.md"
-    [[ -f "$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md" ]] && echo "  ✓   APPEND_SYSTEM.md" || echo "  ⚠   Missing APPEND_SYSTEM.md"
-  else
-    echo "  ⚠ Workflow skill directory not found: skills/system/workflow"
-  fi
-  [[ -d "$SCRIPT_DIR/skills/system" ]] && echo "  ✓ skills/system directory" || echo "  ⚠ skills/system not found (optional)"
-  local live_ext_dir
-  live_ext_dir="$(resolve_config_dir)/extensions/pi-permission-system"
-  [[ -d "$live_ext_dir" ]] && echo "  ✓ Live extension directory" || echo "  ⚠ Live extension directory not found (seeded on first launch)"
-
-  # ── Pi (app mount) ──
-  echo "── Pi (app mount .local/app) ──"
-  local pi_installed pi_latest
-  pi_installed="$(_pi_installed_version "$(resolve_pi_host_dir)")"
-  pi_latest="$(_npm_latest_version "$PI_NPM_PKG")"
-  if [[ -n "$pi_installed" ]]; then
-    echo "  ✓ pi installed: $pi_installed"
-    if [[ -n "$pi_latest" && "$pi_installed" != "$pi_latest" ]]; then
-      echo "  ⚠ Update available: $pi_latest (run 'piw update')"
-      ((errors+=1))
-    elif [[ -n "$pi_latest" ]]; then
-      echo "  ✓ Latest version: $pi_latest"
-    else
-      echo "  ⚠ Cannot check latest version (npm unreachable?)"
-    fi
-  else
-    echo "  ✗ pi not installed in app mount (launch piw or run 'piw update')"
-    ((errors+=1))
-  fi
-
-  # ── Extensions (seed manifest vs config mount) ──
-  echo "── Extensions ──"
-  if [[ -f "$SCRIPT_DIR/seed/extensions.txt" ]]; then
-    echo "  ✓ seed/extensions.txt found"
-    local checked=0 missing=0 outdated=0
-    while IFS= read -r line; do
-      line="${line/#"${line%%[![:space:]]*}"/}"
-      line="${line/%"${line##*[![:space:]]}"/}"
-      [[ -z "$line" ]] && continue
-      [[ "$line" == \#* ]] && continue
-      checked=$((checked + 1))
-      local edir ever elate
-      edir="$(_pkg_mount_dir "$config_dir" "$line")"
-      if [[ "$line" == npm:* ]]; then
-        ever="$(_pkg_installed_version "$edir")"
-        if [[ -z "$ever" ]]; then
-          echo "  ✗ $line (missing — run 'piw update')"
-          ((missing+=1))
-        else
-          elate="$(_npm_latest_version "${line#npm:}")"  # strip pi's npm: URI scheme
-          if [[ -n "$elate" && "$ever" != "$elate" ]]; then
-            echo "  ⚠ $line $ever → $elate (run 'piw update')"
-            ((outdated+=1))
-          else
-            echo "  ✓ $line $ever"
-          fi
-        fi
-      elif [[ -z "$edir" || ! -d "$edir" ]]; then
-        echo "  ✗ $line (missing — run 'piw update')"
-        ((missing+=1))
-      else
-        echo "  ✓ $line (git)"
-      fi
-    done <"$SCRIPT_DIR/seed/extensions.txt"
-    echo "  Extensions: $((checked - missing))/$checked current, $outdated outdated"
-    if [[ "$missing" -gt 0 || "$outdated" -gt 0 ]]; then
-      echo "  ⚠ Run 'piw update' to sync extensions"
-    fi
-  else
-    echo "  ⚠ No extensions.txt found"
-  fi
-
-  # ── Skills catalog freshness ──
-  echo "── Skills catalog ──"
-  local catalog_script="$SCRIPT_DIR/skills/generate-catalog.sh"
-  local catalog_file="$SCRIPT_DIR/skills/catalog.md"
-  if [[ -f "$catalog_script" ]] && [[ -f "$catalog_file" ]]; then
-    local tmp_catalog
-    tmp_catalog="$(mktemp)"
-    bash "$catalog_script" "$tmp_catalog" &>/dev/null
-    if diff -q "$tmp_catalog" "$catalog_file" &>/dev/null; then
-      echo "  ✓ skills/catalog.md is fresh"
-    else
-      echo "  ⚠ skills/catalog.md is stale (run 'piw generate-catalog')"
-      ((errors+=1))
-    fi
-    rm -f "$tmp_catalog"
-  elif [[ ! -f "$catalog_script" ]]; then
-    echo "  ⚠ generate-catalog.sh not found"
-  else
-    echo "  ⚠ skills/catalog.md not found"
-  fi
-
-  # ── Repository ──
-  echo "── Repository ──"
-  if git -C "$SCRIPT_DIR" rev-parse --git-dir &>/dev/null 2>&1; then
-    echo "  ✓ Git repository"
-    if [[ -z "$(git -C "$SCRIPT_DIR" status --porcelain 2>/dev/null)" ]]; then
-      echo "  ✓ Working tree clean"
-    else
-      echo "  ⚠ Uncommitted changes"
-    fi
-  else
-    echo "  ⚠ Not a git repository"
-  fi
-
-  # ── Summary ──
+  _doctor_seed_diff "settings.json" "$config_dir/settings.json" "$SCRIPT_DIR/seed/settings.json"
+  _doctor_seed_diff "models.json" "$config_dir/models.json" "$SCRIPT_DIR/seed/models.json"
+  local s
+  for s in "$SCRIPT_DIR"/seed/permissions/config*.json; do
+    [[ -f "$s" ]] || continue
+    _doctor_seed_diff "permissions/$(basename "$s")" \
+      "$config_dir/extensions/pi-permission-system/$(basename "$s")" "$s"
+  done
+  _doctor_seed_diff "piw.conf" "$(resolve_piw_conf)" "$SCRIPT_DIR/seed/piw.conf"
+  _doctor_seed_diff "mise/config.toml" "$(resolve_mise_config)" "$SCRIPT_DIR/seed/mise/config.toml"
   echo ""
-  if [[ $errors -eq 0 ]]; then
-    echo "✓ All checks passed. Run 'piw' to launch."
-  else
-    echo "✗ $errors issue(s) found. Review the items above."
-    return 1
+
+  echo "Exit code rule: 0 when checks 1-3 pass, 1 when any of them fails."
+  echo "                Check 4 never changes the exit code."
+  if [[ "$failures" -eq 0 ]]; then
+    return 0
   fi
+  return 1
 }
 
 # ── Command: regenerate skills catalog ────────────────────────────────────────
@@ -1407,13 +1613,11 @@ cmd_generate_catalog() {
   bash "$script"
 }
 
-# ── Command: update harness, images, pi, and extensions ──────────────────────
+# ── Command: update harness, images, and pi ──────────────────────────────────
 cmd_update() {
   local no_cache="${1:-false}"
-  local build_only="${2:-false}"
-  local install_only="${3:-false}"
-  local dry_run="${4:-false}"
-  local force="${5:-false}"
+  local dry_run="${2:-false}"
+  local force="${3:-false}"
 
   # 1) Pull harness updates (ff-only; never stash). Fail → abort.
   if [[ "$dry_run" != "true" ]]; then
@@ -1437,19 +1641,15 @@ cmd_update() {
   if [[ "$dry_run" != "true" ]]; then
     bootstrap_starters
   fi
-  if [[ "$install_only" != "true" ]]; then
-    if [[ "$dry_run" == "true" ]]; then
-      echo "(dry-run) Would rebuild piw:default"
-    else
-      _build_single "$no_cache"
-    fi
+  if [[ "$dry_run" == "true" ]]; then
+    echo "(dry-run) Would rebuild piw:default"
+  else
+    _build_single "$no_cache"
   fi
 
-  # 3) Mount-level maintenance: pi (upgrade) + extensions (sync)
-  if [[ "$build_only" != "true" ]]; then
-    ensure_pi upgrade "$dry_run"
-    sync_extensions_for "$force" "$dry_run"
-  fi
+  # 3) Mount-level maintenance: pi (upgrade). Extensions belong to pi's own
+  #    package manager; piw does not sync them here.
+  ensure_pi upgrade "$dry_run" "$force"
 
   echo ""
   if [[ "$dry_run" == "true" ]]; then
@@ -1467,113 +1667,262 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   return 0
 fi
 
-# ── Main ──────────────────────────────────────────────────────────────────────
-COMMAND=""
-NO_CACHE="false"
-RESUME="false"
-FORCE="false"
-DRY_RUN="false"
-BUILD_ONLY="false"
-INSTALL_ONLY="false"
-MODE="${PIW_MODE:-permissive}"
-POSITIONAL=()
+# ── Parser: reject a flag the command does not accept ────────────────────────
+reject_flag() {
+  local cmd="$1" flag="$2"
+  echo "ERROR: '$flag' is not a flag of the '$cmd' command." >&2
+  echo "  Run 'piw --help' for the command set and each command's flags." >&2
+  exit 1
+}
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  --no-cache)
-    NO_CACHE="true"
-    shift
-    ;;
-  -r | --resume)
-    RESUME="true"
-    shift
-    ;;
-  --force)
-    FORCE="true"
-    shift
-    ;;
-  --dry-run)
-    DRY_RUN="true"
-    shift
-    ;;
-  --build-only)
-    BUILD_ONLY="true"
-    shift
-    ;;
-  --install-only)
-    INSTALL_ONLY="true"
-    shift
-    ;;
-  --mode)
-    if [[ -z "${2:-}" ]]; then
-      echo "ERROR: --mode requires an argument" >&2
+# ── Parser: the launch command (the default case) ────────────────────────────
+parse_launch() {
+  local mode="${PIW_MODE:-permissive}"
+  local resume="false"
+  local -a positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --mode)
+      if [[ -z "${2:-}" ]]; then
+        echo "ERROR: --mode requires an argument." >&2
+        exit 1
+      fi
+      mode="$2"
+      shift 2
+      ;;
+    -r | --resume)
+      resume="true"
+      shift
+      ;;
+    --)
+      shift
+      positional+=("$@")
+      break
+      ;;
+    -*)
+      reject_flag launch "$1"
+      ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+    esac
+  done
+  if [[ ${#positional[@]} -gt 1 ]]; then
+    echo "ERROR: Launch accepts at most one workspace path." >&2
+    exit 1
+  fi
+  cmd_launch "${positional[0]:-$(pwd)}" "$resume" "$mode"
+}
+
+# ── Parser: piw build ────────────────────────────────────────────────────────
+parse_build() {
+  local no_cache="false"
+  local dry_run="false"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --no-cache) no_cache="true"; shift ;;
+    --dry-run) dry_run="true"; shift ;;
+    -*) reject_flag build "$1" ;;
+    *)
+      echo "ERROR: 'piw build' takes no arguments: $1" >&2
       exit 1
-    fi
-    MODE="$2"
-    shift 2
-    ;;
-  --install | --uninstall)
-    if [[ -n "$COMMAND" ]]; then
-      echo "ERROR: $1 cannot be combined with the '$COMMAND' command." >&2
-      exit 1
-    fi
-    COMMAND="${1#--}"
-    shift
-    ;;
-  --help | -h)
-    show_help
-    ;;
-  build | update | install | uninstall | doctor | generate-catalog | tool)
-    # Only the first command word counts. Every later word is an argument to
-    # it, so "piw tool install x" reaches cmd_tool, not cmd_install.
-    if [[ -n "$COMMAND" ]]; then
-      POSITIONAL+=("$1")
-    else
-      COMMAND="$1"
-    fi
-    shift
-    ;;
-  -*)
-    echo "ERROR: Unknown option: $1" >&2
-    echo "Usage: piw [--resume|-r] [--mode <name>] [--install|--uninstall] [--help]" >&2
+      ;;
+    esac
+  done
+  cmd_build "$no_cache" "$dry_run"
+}
+
+# ── Parser: piw tool ─────────────────────────────────────────────────────────
+parse_tool() {
+  local sub="${1:-list}"
+  [[ $# -gt 0 ]] && shift
+  case "$sub" in
+  install | remove | list) ;;
+  -*) reject_flag tool "$sub" ;;
+  *)
+    echo "ERROR: Unknown 'piw tool' subcommand: $sub" >&2
+    echo "Usage: piw tool install <spec>... | list | remove <spec>..." >&2
     exit 1
     ;;
+  esac
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+    -*) reject_flag tool "$arg" ;;
+    esac
+  done
+  cmd_tool "$sub" "$@"
+}
+
+# ── Parser: piw layer ────────────────────────────────────────────────────────
+parse_layer() {
+  local sub="${1:-list}"
+  [[ $# -gt 0 ]] && shift
+  case "$sub" in
+  list)
+    [[ $# -eq 0 ]] || { echo "ERROR: 'piw layer list' takes no arguments." >&2; exit 1; }
+    cmd_layer_list
+    ;;
+  show)
+    [[ $# -eq 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer show' needs one layer name." >&2; exit 1; }
+    cmd_layer_show "$1"
+    ;;
+  add)
+    [[ $# -ge 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer add' needs a name or an apt: entry." >&2; exit 1; }
+    local arg
+    for arg in "$@"; do
+      case "$arg" in
+      -*) reject_flag layer "$arg" ;;
+      esac
+    done
+    cmd_layer_add "$@"
+    ;;
+  remove)
+    [[ $# -eq 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer remove' needs one layer name." >&2; exit 1; }
+    cmd_layer_remove "$1"
+    ;;
+  update)
+    local name=""
+    local replace="false"
+    local arg
+    for arg in "$@"; do
+      case "$arg" in
+      --replace) replace="true" ;;
+      -*) reject_flag layer "$arg" ;;
+      *)
+        if [[ -n "$name" ]]; then
+          echo "ERROR: 'piw layer update' takes one layer name." >&2
+          exit 1
+        fi
+        name="$arg"
+        ;;
+      esac
+    done
+    [[ -n "$name" ]] || { echo "ERROR: 'piw layer update' needs one layer name." >&2; exit 1; }
+    cmd_layer_update "$name" "$replace"
+    ;;
+  -*) reject_flag layer "$sub" ;;
   *)
-    POSITIONAL+=("$1")
-    shift
+    echo "ERROR: Unknown 'piw layer' subcommand: $sub" >&2
+    echo "Usage: piw layer add <name|apt:...> | remove <name> | list | show <name> | update <name> [--replace]" >&2
+    exit 1
     ;;
   esac
-done
+}
 
-# Validate flag combinations
-if [[ "$BUILD_ONLY" == "true" && "$INSTALL_ONLY" == "true" ]]; then
-  echo "ERROR: --build-only and --install-only are mutually exclusive" >&2
-  exit 1
-fi
-
-case "$COMMAND" in
-build)
-  cmd_build "$NO_CACHE" "$DRY_RUN"
-  ;;
-update)
-  cmd_update "$NO_CACHE" "$BUILD_ONLY" "$INSTALL_ONLY" "$DRY_RUN" "$FORCE"
-  ;;
-install)
-  cmd_install "${POSITIONAL[0]:-}"
-  ;;
-uninstall)
-  cmd_uninstall "${POSITIONAL[0]:-}"
-  ;;
-doctor)
+# ── Parser: piw doctor ───────────────────────────────────────────────────────
+parse_doctor() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -*) reject_flag doctor "$1" ;;
+    *)
+      echo "ERROR: 'piw doctor' takes no arguments: $1" >&2
+      exit 1
+      ;;
+    esac
+  done
   cmd_doctor
-  ;;
-generate-catalog)
+}
+
+# ── Parser: piw link and piw unlink ──────────────────────────────────────────
+parse_link() {
+  local -a positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -*) reject_flag link "$1" ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+    esac
+  done
+  [[ ${#positional[@]} -le 1 ]] || { echo "ERROR: 'piw link' takes at most one directory." >&2; exit 1; }
+  cmd_link "${positional[0]:-}"
+}
+
+parse_unlink() {
+  local -a positional=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -*) reject_flag unlink "$1" ;;
+    *)
+      positional+=("$1")
+      shift
+      ;;
+    esac
+  done
+  [[ ${#positional[@]} -le 1 ]] || { echo "ERROR: 'piw unlink' takes at most one directory." >&2; exit 1; }
+  cmd_unlink "${positional[0]:-}"
+}
+
+# ── Parser: piw generate-catalog ─────────────────────────────────────────────
+parse_generate_catalog() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -*) reject_flag generate-catalog "$1" ;;
+    *)
+      echo "ERROR: 'piw generate-catalog' takes no arguments: $1" >&2
+      exit 1
+      ;;
+    esac
+  done
   cmd_generate_catalog
-  ;;
-tool)
-  cmd_tool "${POSITIONAL[@]}"
-  ;;
-*)
-  cmd_launch "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"
-  ;;
-esac
+}
+
+# ── Parser: piw update ───────────────────────────────────────────────────────
+parse_update() {
+  local no_cache="false"
+  local force="false"
+  local dry_run="false"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --no-cache) no_cache="true"; shift ;;
+    --force) force="true"; shift ;;
+    --dry-run) dry_run="true"; shift ;;
+    -*) reject_flag update "$1" ;;
+    *)
+      echo "ERROR: 'piw update' takes no arguments: $1" >&2
+      exit 1
+      ;;
+    esac
+  done
+  cmd_update "$no_cache" "$dry_run" "$force"
+}
+
+# ── Main: pick the command, then parse its flags ─────────────────────────────
+main() {
+  # Two options stand alone, before any command.
+  case "${1:-}" in
+  -h | --help) show_help ;;
+  --version)
+    printf 'piw %s\n' "$PIW_VERSION"
+    exit 0
+    ;;
+  esac
+
+  # A known command word selects the command. Anything else is a launch.
+  local command="launch"
+  if [[ $# -gt 0 ]]; then
+    case "$1" in
+    build | tool | layer | doctor | link | unlink | generate-catalog | update)
+      command="$1"
+      shift
+      ;;
+    esac
+  fi
+
+  case "$command" in
+  launch) parse_launch "$@" ;;
+  build) parse_build "$@" ;;
+  tool) parse_tool "$@" ;;
+  layer) parse_layer "$@" ;;
+  doctor) parse_doctor "$@" ;;
+  link) parse_link "$@" ;;
+  unlink) parse_unlink "$@" ;;
+  generate-catalog) parse_generate_catalog "$@" ;;
+  update) parse_update "$@" ;;
+  esac
+}
+
+main "$@"
