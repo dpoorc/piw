@@ -142,36 +142,59 @@ You are inside a Docker container running pi.
 The workspace directory is the only host path accessible inside the
 container. System paths (/var/log, /etc, /run, /sys, /proc) are
 container-local and reflect the container state, not the host.
-Tools such as systemctl, journalctl, dmesg, and sshd are not
-available.
 
-- **SELinux** — The host enforces it. Bind mounts use the `:z` flag.
-  Handled; you don't need to worry about it.
-- **Network** — `host.docker.internal` resolves to the Docker host.
-- **User** — You run as the host user's UID. `/home/pi` is your home.
+- **SELinux** - The host enforces it. Bind mounts use the `:z` flag.
+  Handled; you do not need to worry about it.
+- **Network** - `host.docker.internal` resolves to the Docker host.
+- **User** - You run as the host user's UID. `/home/pi` is your home.
   Pi config is at `/home/pi/.pi/agent/`, bind-mounted from the host.
-- **Workspace** — The current directory is a bind-mount. Changes are
+- **Workspace** - The current directory is a bind-mount. Changes are
   reflected on the host immediately.
-- **No systemd, no Docker-in-Docker** — You cannot start system
-  services or run nested containers.
+- **No nested containers or system services** - You cannot start
+  system services or run nested containers.
 
-### Skill discovery
+### The container is not the host
 
-- `~/.pi/agent/skills/ready/` — Tier 1 skills. You see their names
-  and descriptions in the system prompt. Read when relevant.
-- `~/.pi/agent/skills/index/` — Tier 2 skills with
-  `disable-model-invocation: true`. Hidden from system prompt.
-  Load via `/skill:name` or explicit request.
-- `APPEND_SYSTEM.md` — This file's compressed sibling, always in
-  your system prompt. This SKILL.md is the full reference.
+Some tasks need host-side functionality a container cannot reach:
+live packet capture, radio and Bluetooth I/O, WiFi injection, and the
+host network stack. Tools installed here still work on files and on
+the container's own interfaces. The usual answer is to capture on the
+host and bring the result into the workspace. When a task needs the
+host, say so rather than reporting an empty result as a finding.
 
-### Variants
+### Installed tools
 
-This container runs a specific variant (core, devops, etc.).
+The base image is deliberately small. Everything else lives in the
+store, managed by mise, and the store's bin directory is on `PATH`.
+Ask rather than assume:
+
+- `mise ls` - every tool the store provides, with versions
+- `mise which <tool>` - where a tool came from
+- `command -v <tool>` - whether a tool is on `PATH`
+- `mise search <term>` - what mise could install
+
+When you need a tool that is not present, do not work around it
+silently and do not install it yourself. Propose it, and name the
+layer the tool belongs in. See section 4.
+
+### Skills
+
+Skills live under `~/.pi/agent/skills/`. The `system/` tree holds the
+harness's own skills. The `vendor/` tree holds third-party skills.
+Every skill is invocable with `/skill:name`.
+
+Skills marked `disable-model-invocation: true` are **not** in your
+system prompt. They cost nothing per turn, so the harness uses that
+mark for anything you are unlikely to need. The catalog at
+`skills/catalog.md` lists them with their paths. Read it when a task
+might match a skill you have not seen, and again after a compaction,
+because a summary can drop it.
+
+An active layer may carry notes at `/opt/piw/layers/<name>/README.md`.
 
 ## 4. Iterative Improvement
 
-The harness environment is not static — tools get added, variants
+The harness environment is not static - tools get added, layers
 get refined, processes get streamlined. You can (and should) propose
 changes when you see a gap, but proposals follow a structured path.
 
@@ -206,7 +229,7 @@ When you flag an improvement, state:
 | **Proposal** | Specific change (tool, config, skill edit, process tweak).
 | **Alternatives considered** | What else could solve it? Why this one?
 | **Cost** | Approximate size, dependencies, build impact.
-| **Target** | Which variant(s) does it belong in?
+| **Target** | Which layer does it belong in?
 
 Format concisely — a few lines per element, not paragraphs.
 

@@ -1,7 +1,7 @@
 ---
 id: 47
 title: Describe the environment to the agent
-status: open
+status: closed
 priority: medium
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 44
 created: "2026-10-03"
 updated: "2026-10-03"
+closed: "2026-10-03"
 ---
 
 ## Parent
