@@ -93,6 +93,17 @@
 
 ## Completed
 
+### 2026-10-03 session
+
+- **piw identity and defaults decided (map #13).** Fourteen decisions
+  closed, from the repo shape and the user manifest to the CLI surface,
+  layers, and the minimum base image. The implementation is split into
+  nine tracer-bullet slices (#39-#47). See
+  [.issues/0013](.issues/0013-piw-identity-and-defaults-wayfinder-map.md).
+  Four decisions were amended by **Migration of today's variants** and one
+  by **Default extensions**; the map records each amendment inline, and the
+  amending ticket carries the detail.
+
 ### 2026-09-16 session
 
 - **Base image moved to Debian 13 (trixie)** — `node:24-trixie-slim`
