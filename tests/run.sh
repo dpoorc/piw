@@ -69,6 +69,10 @@ chmod +x "$STUB/npm"
 export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
 : > "$PIW_TEST_DOCKER_LOG"
 
+# Which images `docker image inspect` reports as present. Space-separated.
+# Empty means no image exists, so a launch falls back to piw:default.
+export PIW_TEST_IMAGES=""
+
 # A controlled home keeps the host git identity and host git config out of the
 # runs, so the exact container argv is deterministic.
 TEST_HOME="$WORK/home"
@@ -345,6 +349,161 @@ assert_contains "CRLF entry parses clean" "$out" $'layers\tapt:zsh'
 out="$(PIW_CONF="$SANDBOX/seed/piw.conf" piw_fn parse_piw_conf 2>&1)"
 assert_status "shipped starter exits 0" "$?" "0"
 assert_status "shipped starter emits nothing" "$out" ""
+
+printf '== layers: plan composition\n'
+LAYERS="$SANDBOX/.local/layers"
+
+# A layer with apt and no script needs no COPY and no install.
+rm -rf "$LAYERS"
+mkdir -p "$LAYERS/aptonly"
+printf 'zsh\ngdb\n' > "$LAYERS/aptonly/apt"
+printf '[layers]\nrun:aptonly\n' > "$SANDBOX/.local/piw.conf"
+plan="$(piw_fn compose_plan 2>&1)"
+assert_contains "apt-only layer emits its packages" "$plan" "zsh"
+assert_contains "apt-only layer emits every package" "$plan" "gdb"
+assert_not_contains "apt-only layer emits no COPY" "$plan" "COPY"
+assert_not_contains "apt-only layer emits no script" "$plan" "install.sh"
+
+# Several layers compose in the declared order.
+mkdir -p "$LAYERS/first" "$LAYERS/second"
+printf '#!/bin/sh\n' > "$LAYERS/first/install.sh"
+printf '#!/bin/sh\n' > "$LAYERS/second/install.sh"
+printf '[layers]\nrun:first\nrun:second\n' > "$SANDBOX/.local/piw.conf"
+plan="$(piw_fn compose_plan 2>&1)"
+first_line="$(printf '%s\n' "$plan" | grep -n '# layer first' | cut -d: -f1)"
+second_line="$(printf '%s\n' "$plan" | grep -n '# layer second' | cut -d: -f1)"
+if [[ -n "$first_line" && -n "$second_line" && "$first_line" -lt "$second_line" ]]; then
+  ok "layers compose in the declared order"
+else
+  bad "layers compose in the declared order (first=$first_line second=$second_line)"
+fi
+
+# Consecutive apt declarations coalesce into one operation.
+printf '[layers]\napt:zsh\napt:gdb\nrun:first\n' > "$SANDBOX/.local/piw.conf"
+printf 'ripgrep\n' > "$LAYERS/first/apt"
+plan="$(piw_fn compose_plan 2>&1)"
+count="$(printf '%s\n' "$plan" | grep -c 'apt-get install')"
+assert_status "consecutive apt declarations coalesce" "$count" "1"
+assert_contains "coalesced group keeps a manifest package" "$plan" "gdb"
+assert_contains "coalesced group keeps a layer package" "$plan" "ripgrep"
+
+# A non-apt step between apt declarations keeps them separate.
+printf '[layers]\napt:zsh\nrun:first\napt:gdb\n' > "$SANDBOX/.local/piw.conf"
+plan="$(piw_fn compose_plan 2>&1)"
+count="$(printf '%s\n' "$plan" | grep -c 'apt-get install')"
+assert_status "a non-apt step splits apt groups" "$count" "2"
+
+# Archives become one ADD --checksum each.
+mkdir -p "$LAYERS/arch"
+printf 'https://example.test/x.tar.gz abc123def456 /tmp/x.tar.gz\n' > "$LAYERS/arch/archives"
+printf '[layers]\nrun:arch\n' > "$SANDBOX/.local/piw.conf"
+plan="$(piw_fn compose_plan 2>&1)"
+assert_contains "archive becomes ADD --checksum" "$plan" \
+  "ADD --checksum=sha256:abc123def456 https://example.test/x.tar.gz /tmp/x.tar.gz"
+assert_not_contains "no hand-written checksum check" "$plan" "sha256sum"
+assert_contains "plan states the Dockerfile syntax" "$plan" "# syntax=docker/dockerfile:1.6"
+
+# A malformed archive line stops before Docker.
+mkdir -p "$LAYERS/badarch"
+printf 'https://example.test/x.tar.gz abc /tmp/x extra\n' > "$LAYERS/badarch/archives"
+printf '[layers]\nrun:badarch\n' > "$SANDBOX/.local/piw.conf"
+reset_log
+out="$(piw build 2>&1)"
+status=$?
+if [[ "$status" -ne 0 ]]; then ok "malformed archive exits non-zero"; else bad "malformed archive exits non-zero (status $status)"; fi
+assert_contains "malformed archive names the file" "$out" "badarch/archives"
+assert_status "malformed archive invokes no docker" "$(log)" ""
+
+# An unknown [layers] prefix stops.
+printf '[layers]\nbogus:thing\n' > "$SANDBOX/.local/piw.conf"
+out="$(piw_fn resolve_layers 2>&1)"
+status=$?
+assert_status "unknown prefix stops" "$status" "1"
+assert_contains "unknown prefix names the entry" "$out" "bogus:thing"
+
+# An empty run: entry stops.
+printf '[layers]\nrun:\n' > "$SANDBOX/.local/piw.conf"
+out="$(piw_fn resolve_layers 2>&1)"
+status=$?
+assert_status "empty run entry stops" "$status" "1"
+
+# The plan hash changes when a layer file changes.
+printf '[layers]\nrun:first\n' > "$SANDBOX/.local/piw.conf"
+h1="$(piw_fn plan_hash)"
+printf 'extra\n' >> "$LAYERS/first/apt"
+h2="$(piw_fn plan_hash)"
+if [[ -n "$h1" && "$h1" != "$h2" ]]; then
+  ok "plan hash changes with a layer file"
+else
+  bad "plan hash changes with a layer file"
+fi
+
+# A missing manifest stops and names the path.
+out="$(PIW_CONF="$WORK/absent-piw.conf" piw_fn resolve_layers 2>&1)"
+status=$?
+assert_status "missing manifest stops" "$status" "1"
+assert_contains "missing manifest names the path" "$out" "$WORK/absent-piw.conf"
+
+# A missing run: layer stops before Docker and names the entry and the path.
+printf '[layers]\nrun:ghost\n' > "$SANDBOX/.local/piw.conf"
+reset_log
+out="$(piw build 2>&1)"
+status=$?
+if [[ "$status" -ne 0 ]]; then ok "missing layer exits non-zero"; else bad "missing layer exits non-zero (status $status)"; fi
+assert_contains "missing layer names the entry" "$out" "run:ghost"
+assert_contains "missing layer names the expected path" "$out" "$SANDBOX/.local/layers/ghost"
+assert_status "missing layer invokes no docker" "$(log)" ""
+
+printf '== layers: build\n'
+# A dry run prints the plan and invokes no Docker.
+printf '[layers]\nrun:first\n' > "$SANDBOX/.local/piw.conf"
+reset_log
+out="$(piw build --dry-run 2>&1)"
+status=$?
+assert_status "dry-run exits 0" "$status" "0"
+assert_contains "dry-run prints the base" "$out" "FROM piw:default"
+assert_contains "dry-run prints the layer" "$out" "# layer first"
+assert_status "dry-run invokes no docker" "$(log)" ""
+
+# With layers, piw builds piw:local from stdin with the layers context.
+reset_log
+out="$(piw build 2>&1)"
+status=$?
+assert_status "build with layers exits 0" "$status" "0"
+assert_contains "builds piw:local from stdin" "$(log)" "build -f - -t piw:local"
+assert_contains "writes the plan label" "$(log)" "--label piw.plan="
+assert_contains "uses .local/layers as context" "$(log)" "$SANDBOX/.local/layers"
+plan_label="$(grep -o 'piw.plan=[0-9a-f]*' "$PIW_TEST_DOCKER_LOG" | head -1 | cut -d= -f2)"
+if [[ "$plan_label" =~ ^[0-9a-f]{64}$ ]]; then
+  ok "plan label is a sha256"
+else
+  bad "plan label is a sha256 (got: $plan_label)"
+fi
+
+# --no-cache reaches the local build.
+reset_log
+piw build --no-cache >/dev/null 2>&1
+assert_contains "no-cache reaches the local build" "$(log)" \
+  "--no-cache $SANDBOX/.local/layers"
+
+# With no layers, piw builds no user image.
+printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
+reset_log
+piw build >/dev/null 2>&1
+assert_not_contains "no layers builds no piw:local" "$(log)" "piw:local"
+
+printf '== layers: launch selects the image\n'
+PIW_TEST_IMAGES="piw:default piw:local"
+reset_log
+piw "$WORK/proj" >/dev/null 2>&1
+run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
+assert_contains "launch uses piw:local when it exists" "$run_line" "piw:local"
+PIW_TEST_IMAGES="piw:default"
+reset_log
+piw "$WORK/proj" >/dev/null 2>&1
+run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
+assert_contains "launch falls back to piw:default" "$run_line" "piw:default"
+PIW_TEST_IMAGES=""
 
 printf '== default Dockerfile\n'
 df="$ROOT/Dockerfile"

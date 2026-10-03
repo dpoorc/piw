@@ -11,8 +11,9 @@
 #   piw                         Launch in the current directory
 #   piw <path>                  Launch with workspace
 #   piw -r, --resume            Launch with session picker
-#   piw build                   Build the default image + provision mount
+#   piw build                   Build the default image and the layer image
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
+#   piw build --dry-run         Print the generated plan (no executions)
 #   piw update                  Pull + rebuild + upgrade pi + sync extensions
 #   piw update --build-only     Pull + rebuild (skip pi/extensions)
 #   piw update --install-only   Pull + sync pi/extensions (skip build)
@@ -242,6 +243,233 @@ parse_piw_conf() {
       print section "\t" body
     }
   ' "$(resolve_piw_conf)"
+}
+
+# ── Utility: read a layer's apt file into one package per line ───────────────
+# `#` comments and blank lines are ignored. A package name never contains `#`,
+# so an inline comment is stripped.
+_layer_apt_packages() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  awk '
+    {
+      line = $0
+      sub(/[[:space:]]*#.*$/, "", line)
+      gsub(/^[[:space:]]+/, "", line)
+      gsub(/[[:space:]]+$/, "", line)
+    }
+    line != "" { print line }
+  ' "$file"
+}
+
+# ── Utility: read a layer's archives file into one line per archive ──────────
+# Each line is `<url> <sha256> <destination>`. Blank lines and full-line `#`
+# comments are ignored. Inline comments are not stripped, because a URL may
+# contain `#`.
+_layer_archives() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  awk '
+    {
+      line = $0
+      gsub(/^[[:space:]]+/, "", line)
+      gsub(/[[:space:]]+$/, "", line)
+    }
+    line == "" || line ~ /^#/ { next }
+    { print line }
+  ' "$file"
+}
+
+# ── Utility: resolve the [layers] section into ordered build steps ───────────
+# Output, one step per line, tab-separated:
+#   apt<TAB><pkg> <pkg>...
+#   run<TAB><name><TAB><absolute layer directory>
+# A missing manifest or a missing `run:` directory stops here, before Docker,
+# and names the path. A missing install.sh is not an error: the script is
+# optional. Unknown prefixes are an error, never a silent skip.
+resolve_layers() {
+  local conf
+  conf="$(resolve_piw_conf)"
+
+  if [[ ! -f "$conf" ]]; then
+    echo "ERROR: Layer manifest not found: $conf" >&2
+    echo "  Run 'piw --install' to seed the starter manifest." >&2
+    return 1
+  fi
+
+  local parsed
+  if ! parsed="$(parse_piw_conf)"; then
+    return 1
+  fi
+
+  local layers_dir="$SCRIPT_DIR/.local/layers"
+  local section entry name dir
+  while IFS=$'\t' read -r section entry; do
+    [[ "$section" == "layers" ]] || continue
+    case "$entry" in
+    apt:*)
+      local pkgs="${entry#apt:}"
+      if [[ -z "${pkgs// /}" ]]; then
+        echo "ERROR: Empty [layers] entry '$entry' in $conf." >&2
+        return 1
+      fi
+      printf 'apt\t%s\n' "$pkgs"
+      ;;
+    run:*)
+      name="${entry#run:}"
+      if [[ -z "$name" ]]; then
+        echo "ERROR: Empty [layers] entry '$entry' in $conf." >&2
+        return 1
+      fi
+      if [[ ! "$name" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+        echo "ERROR: Invalid layer name '$name' in $conf." >&2
+        echo "  A layer name uses letters, digits, dot, dash, and underscore." >&2
+        return 1
+      fi
+      dir="$layers_dir/$name"
+      if [[ ! -d "$dir" ]]; then
+        echo "ERROR: Layer '$name' not found: $dir" >&2
+        echo "  Declared as '$entry' in $conf." >&2
+        return 1
+      fi
+      printf 'run\t%s\t%s\n' "$name" "$dir"
+      ;;
+    *)
+      echo "ERROR: Unknown [layers] entry '$entry' in $conf." >&2
+      echo "  Use 'apt:<pkg> [<pkg>...]' or 'run:<name>'." >&2
+      return 1
+      ;;
+    esac
+  done <<<"$parsed"
+}
+
+# ── Utility: compose the active layers into a Dockerfile on stdout ───────────
+# Consecutive apt declarations coalesce into one apt-get install. Every other
+# step is emitted in the declared order. The plan never touches disk.
+compose_plan() {
+  local steps
+  if ! steps="$(resolve_layers)"; then
+    return 1
+  fi
+
+  local -a ops=()
+  local kind name dir pkg line
+  while IFS=$'\t' read -r kind name dir; do
+    case "$kind" in
+    apt)
+      local -a manifest_pkgs=()
+      read -r -a manifest_pkgs <<<"$name"
+      for pkg in "${manifest_pkgs[@]}"; do
+        [[ -n "$pkg" ]] && ops+=("apt|$pkg")
+      done
+      ;;
+    run)
+      while IFS= read -r pkg; do
+        [[ -n "$pkg" ]] && ops+=("apt|$pkg")
+      done < <(_layer_apt_packages "$dir/apt")
+      while IFS= read -r line; do
+        [[ -n "$line" ]] && ops+=("archive|$dir/archives|$line")
+      done < <(_layer_archives "$dir/archives")
+      if [[ -f "$dir/install.sh" ]]; then
+        ops+=("layer|$name")
+      fi
+      ;;
+    esac
+  done <<<"$steps"
+
+  # ADD --checksum needs syntax 1.6 or later. The directive does not carry
+  # over from the root Dockerfile, so the generated plan states it too.
+  printf '# syntax=docker/dockerfile:1.6\n'
+  printf 'FROM %s:default\n' "$IMAGE_PREFIX"
+
+  local i=0 n=${#ops[@]} op otype
+  while [[ $i -lt $n ]]; do
+    op="${ops[$i]}"
+    otype="${op%%|*}"
+    case "$otype" in
+    apt)
+      local -a pkgs=()
+      while [[ $i -lt $n && "${ops[$i]}" == apt\|* ]]; do
+        pkgs+=("${ops[$i]#apt|}")
+        ((i += 1))
+      done
+      printf '\n# apt\n'
+      printf 'RUN apt-get update \\\n'
+      printf ' && apt-get install -y --no-install-recommends \\\n'
+      for pkg in "${pkgs[@]}"; do
+        printf '        %s \\\n' "$pkg"
+      done
+      printf ' && rm -rf /var/lib/apt/lists/*\n'
+      ;;
+    archive)
+      ((i += 1))
+      local afile aline url sha dest
+      afile="${op#archive|}"
+      afile="${afile%%|*}"
+      aline="${op#archive|}"
+      aline="${aline#*|}"
+      local -a afields=()
+      read -r -a afields <<<"$aline"
+      if [[ ${#afields[@]} -ne 3 ]]; then
+        echo "ERROR: Malformed archive line in $afile: $aline" >&2
+        echo "  Expected: <url> <sha256> <destination>" >&2
+        return 1
+      fi
+      url="${afields[0]}"
+      sha="${afields[1]}"
+      dest="${afields[2]}"
+      if [[ -z "$url" || -z "$sha" || -z "$dest" ]]; then
+        echo "ERROR: Malformed archive line in $afile: $aline" >&2
+        echo "  Expected: <url> <sha256> <destination>" >&2
+        return 1
+      fi
+      printf '\n# archive\n'
+      printf 'ADD --checksum=sha256:%s %s %s\n' "$sha" "$url" "$dest"
+      ;;
+    layer)
+      ((i += 1))
+      name="${op#layer|}"
+      printf '\n# layer %s\n' "$name"
+      printf 'COPY %s/ /tmp/piw-layer-%s/\n' "$name" "$name"
+      printf 'RUN bash /tmp/piw-layer-%s/install.sh \\\n' "$name"
+      printf ' && rm -rf /tmp/piw-layer-%s\n' "$name"
+      ;;
+    esac
+  done
+}
+
+# ── Utility: hash the build plan and every build input ───────────────────────
+# Covers the generated Dockerfile, the root Dockerfile, and every file of every
+# active layer. The image label written at build time is the only record.
+plan_hash() {
+  if [[ ! -f "$SCRIPT_DIR/Dockerfile" ]]; then
+    echo "ERROR: Dockerfile not found at $SCRIPT_DIR/Dockerfile" >&2
+    return 1
+  fi
+
+  local steps plan
+  if ! steps="$(resolve_layers)"; then
+    return 1
+  fi
+  if ! plan="$(compose_plan)"; then
+    return 1
+  fi
+
+  local kind name dir f rel
+  {
+    printf '== plan ==\n%s\n' "$plan"
+    printf '== root Dockerfile ==\n'
+    cat "$SCRIPT_DIR/Dockerfile"
+    while IFS=$'\t' read -r kind name dir; do
+      [[ "$kind" == "run" ]] || continue
+      printf '== layer %s ==\n' "$name"
+      while IFS= read -r -d '' f; do
+        rel="${f#"$dir"/}"
+        printf -- '-- %s --\n' "$rel"
+        cat "$f"
+      done < <(find "$dir" \( -type f -o -type l \) -print0 | LC_ALL=C sort -z)
+    done <<<"$steps"
+  } | sha256sum | awk '{print $1}'
 }
 
 # ── Utility: ensure the default Docker image exists ──────────────────────────
@@ -802,10 +1030,17 @@ cmd_launch() {
   local session_flag=""
   [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
 
+  # The composed image wins when it exists; otherwise the default.
+  local image="${IMAGE_PREFIX}:default"
+  if docker image inspect "${IMAGE_PREFIX}:local" &>/dev/null; then
+    image="${IMAGE_PREFIX}:local"
+  fi
+
   echo "INFO: Launching piw in $workspace (mode: $mode)$session_flag"
   container_run \
     --workspace "$workspace" \
     --mode "$mode" \
+    --image "$image" \
     --secrets \
     --interactive \
     -- pi "${pi_args[@]}"
@@ -832,12 +1067,66 @@ _build_single() {
   echo "INFO: Build complete: $image_tag"
 }
 
-# ── Command: build the default image + provision the config mount ────────────
+# ── Internal: build the composed layer image (piw:local) ─────────────────────
+_build_local() {
+  local no_cache="$1"
+  local plan hash
+  if ! plan="$(compose_plan)"; then
+    return 1
+  fi
+  if ! hash="$(plan_hash)"; then
+    return 1
+  fi
+
+  local -a build_args=(build -f - -t "${IMAGE_PREFIX}:local" --label "piw.plan=$hash")
+  if [[ "$no_cache" == "true" ]]; then
+    build_args+=(--no-cache)
+  fi
+  build_args+=("$SCRIPT_DIR/.local/layers")
+
+  echo "INFO: Building ${IMAGE_PREFIX}:local…"
+  docker "${build_args[@]}" <<<"$plan"
+  echo "INFO: Build complete: ${IMAGE_PREFIX}:local"
+}
+
+# ── Command: build the default image and the composed layer image ────────────
 cmd_build() {
   local no_cache="${1:-false}"
+  local dry_run="${2:-false}"
 
-  bootstrap_starters
+  # Seeding writes, so a dry run skips it and changes nothing.
+  if [[ "$dry_run" != "true" ]]; then
+    bootstrap_starters
+  fi
+
+  # Resolve before Docker: a missing manifest or layer stops here.
+  local steps
+  if ! steps="$(resolve_layers)"; then
+    exit 1
+  fi
+
+  # Render the plan before Docker, so a malformed archive or a bad layer
+  # stops here rather than after the default image is built.
+  if ! compose_plan >/dev/null; then
+    exit 1
+  fi
+
+  if [[ "$dry_run" == "true" ]]; then
+    echo "INFO: (dry-run) Build plan:"
+    if ! compose_plan; then
+      exit 1
+    fi
+    echo ""
+    echo "INFO: (dry-run) Nothing executed."
+    return 0
+  fi
+
   _build_single "$no_cache"
+
+  if [[ -n "$steps" ]]; then
+    mkdir -p "$SCRIPT_DIR/.local/layers"
+    _build_local "$no_cache"
+  fi
 
   # pi is mount-level: provision once, then sync extensions
   ensure_pi require
@@ -1264,7 +1553,7 @@ fi
 
 case "$COMMAND" in
 build)
-  cmd_build "$NO_CACHE"
+  cmd_build "$NO_CACHE" "$DRY_RUN"
   ;;
 update)
   cmd_update "$NO_CACHE" "$BUILD_ONLY" "$INSTALL_ONLY" "$DRY_RUN" "$FORCE"

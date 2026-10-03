@@ -5,15 +5,27 @@
 # the real piw and inspect the image, mounts, environment, and command it would
 # have handed to Docker, without needing a Docker daemon.
 #
+# `docker image inspect <tag>` reports success only when <tag> is listed in
+# PIW_TEST_IMAGES (space-separated). Every other invocation succeeds.
+#
 # The log path comes from PIW_TEST_DOCKER_LOG.
 
+args=("$@")
+
 {
-  printf '%s' "$1"
-  shift
-  for arg in "$@"; do
+  printf '%s' "${args[0]}"
+  for arg in "${args[@]:1}"; do
     printf ' %s' "$arg"
   done
   printf '\n'
 } >> "${PIW_TEST_DOCKER_LOG:?PIW_TEST_DOCKER_LOG is not set}"
+
+if [[ "${args[0]:-}" == "image" && "${args[1]:-}" == "inspect" ]]; then
+  tag="${args[2]:-}"
+  for image in ${PIW_TEST_IMAGES:-}; do
+    [[ "$image" == "$tag" ]] && exit 0
+  done
+  exit 1
+fi
 
 exit 0
