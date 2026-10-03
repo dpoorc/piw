@@ -15,7 +15,11 @@ extensions/
 build/archives/
 
 # ── Working notes ────────────────────────────────────────────────────────────
+# Handoffs live at the project root and are deleted once processed.
+# The handoff skill requires this pattern to be ignored.
+piw-handoff-*.md
 docs/handoffs/
+docs/worklog/
 
 # ── Docker bind-mount artifacts ──────────────────────────────────────────────
 skills/variant/

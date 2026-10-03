@@ -89,6 +89,28 @@ The harness ships one default image that is useful out of the box, and anyone ca
 
 - Nothing at present. Every question on this map is answered, and the remaining tickets are work: **Migrate paths into the `.local` namespace**, **Deny rules for the local state namespace**, **Tests and CI**, **Docs rewrite for publishing**, and the npm bug.
 
+## Implementation
+
+The decisions are broken into tracer-bullet slices on the tracker. Work the
+frontier: the slices with no blockers can start immediately.
+
+| Slice | Blocked by |
+|---|---|
+| [Build the default image](.issues/0039-build-the-default-image.md) | none |
+| [Establish the repo shape](.issues/0040-establish-the-repo-shape.md) | none |
+| [Parse the manifest](.issues/0041-parse-the-manifest.md) | repo shape |
+| [Rebuild the container seam](.issues/0042-rebuild-the-container-seam.md) | repo shape |
+| [Compose layers into an image](.issues/0043-compose-layers-into-an-image.md) | default image, manifest, seam |
+| [Populate the store and settle the command set](.issues/0044-populate-the-store-and-settle-the-comman.md) | layers |
+| [Refuse a stale image and update cleanly](.issues/0045-refuse-a-stale-image-and-update-cleanly.md) | store and commands |
+| [Index the skills the agent cannot see](.issues/0046-index-the-skills-the-agent-cannot-see.md) | seam |
+| [Describe the environment to the agent](.issues/0047-describe-the-environment-to-the-agent.md) | store and commands |
+
+The slices take over the scope of **Migrate paths into the `.local` namespace**,
+which stays open as their parent. **Tests and CI**, **Docs rewrite for
+publishing**, **Deny rules for the local state namespace**, and the npm bug are
+separate and remain as they are.
+
 ## Out of scope
 
 - aarch64 archives
