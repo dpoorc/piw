@@ -36,12 +36,14 @@
 #   PI_CONFIG_DIR   Override the pi state directory (default: .local/agent)
 #   PI_PI_DIR       Override the pi app directory (default: .local/app)
 #   PI_TOOLS_DIR    Override the tool store directory (default: .local/store)
+#   PIW_CONF        Override the layer manifest (default: .local/piw.conf)
+#   PIW_MISE_CONFIG Override the mise config (default: .local/mise/config.toml)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
 #
 set -euo pipefail
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 IMAGE_PREFIX="piw"
 
 # ── Help ──────────────────────────────────────────────────────────────────────
@@ -111,6 +113,28 @@ resolve_config_dir() {
   fi
 }
 
+# ── Utility: resolve the layer manifest path ─────────────────────────────────
+resolve_piw_conf() {
+  # Mirror the other resolvers: an absolute PIW_CONF wins; otherwise the
+  # value is resolved against the harness root.
+  if [[ "${PIW_CONF:-}" = /* ]]; then
+    echo "$PIW_CONF"
+  else
+    echo "$SCRIPT_DIR/${PIW_CONF:-.local/piw.conf}"
+  fi
+}
+
+# ── Utility: resolve the mise config path ────────────────────────────────────
+resolve_mise_config() {
+  # Mirror the other resolvers: an absolute PIW_MISE_CONFIG wins; otherwise
+  # the value is resolved against the harness root.
+  if [[ "${PIW_MISE_CONFIG:-}" = /* ]]; then
+    echo "$PIW_MISE_CONFIG"
+  else
+    echo "$SCRIPT_DIR/${PIW_MISE_CONFIG:-.local/mise/config.toml}"
+  fi
+}
+
 # ── Utility: source .local/env if present ────────────────────────────────────
 load_env() {
   local env_file="$SCRIPT_DIR/.local/env"
@@ -165,6 +189,70 @@ bootstrap_permissions() {
   if [[ "$seeded" == "true" ]]; then
     echo "INFO: Seeded permission configs into $live_dir"
   fi
+}
+
+# ── Utility: seed the starter manifest and mise config (never overwrite) ─────
+# Both files are user state. Write each one only when the live file is absent.
+# An established user keeps their file. A new user starts from a working copy.
+bootstrap_starters() {
+  local piw_conf mise_config
+  piw_conf="$(resolve_piw_conf)"
+  mise_config="$(resolve_mise_config)"
+
+  if [[ ! -f "$piw_conf" ]] && [[ -f "$SCRIPT_DIR/seed/piw.conf" ]]; then
+    mkdir -p "$(dirname "$piw_conf")"
+    cp "$SCRIPT_DIR/seed/piw.conf" "$piw_conf"
+    echo "INFO: Seeded $piw_conf from harness defaults."
+  fi
+  if [[ ! -f "$mise_config" ]] && [[ -f "$SCRIPT_DIR/seed/mise/config.toml" ]]; then
+    mkdir -p "$(dirname "$mise_config")"
+    cp "$SCRIPT_DIR/seed/mise/config.toml" "$mise_config"
+    echo "INFO: Seeded $mise_config from harness defaults."
+  fi
+}
+
+# ── Utility: parse the layer manifest into section<TAB>entry lines ───────────
+# POSIX awk. The manifest is line-oriented:
+#   - `#` starts a comment at the start of a line or after whitespace
+#   - blank lines and CRLF are tolerated
+#   - `[name]` starts a section; repeated sections merge
+#   - any other non-blank line is an entry
+# A malformed section header or an entry before the first section stops the
+# parse. The parser names the file and the line on stderr and exits non-zero.
+parse_piw_conf() {
+  awk '
+    function trim(s) {
+      sub(/^[[:space:]]+/, "", s)
+      sub(/[[:space:]]+$/, "", s)
+      return s
+    }
+    BEGIN { section = "" }
+    {
+      line = $0
+      if (line ~ /^[[:space:]]*#/) next
+      if (line ~ /^[[:space:]]*$/) next
+      if (line ~ /^[[:space:]]*\[/) {
+        body = line
+        sub(/[[:space:]]+#.*$/, "", body)
+        body = trim(body)
+        if (body !~ /^\[[A-Za-z0-9_.-]+\]$/) {
+          print FILENAME ":" NR ": malformed section header" > "/dev/stderr"
+          exit 2
+        }
+        section = substr(body, 2, length(body) - 2)
+        next
+      }
+      body = line
+      sub(/[[:space:]]+#.*$/, "", body)
+      body = trim(body)
+      if (body == "") next
+      if (section == "") {
+        print FILENAME ":" NR ": entry before any section" > "/dev/stderr"
+        exit 2
+      }
+      print section "\t" body
+    }
+  ' "$(resolve_piw_conf)"
 }
 
 # ── Utility: ensure the default Docker image exists ──────────────────────────
@@ -625,6 +713,7 @@ cmd_launch() {
 
   bootstrap_config "$config_dir"
   bootstrap_permissions
+  bootstrap_starters
   ensure_local_namespace
 
   # The harness ships APPEND_SYSTEM.md. A missing file means the tree is broken.
@@ -754,6 +843,7 @@ _build_single() {
 cmd_build() {
   local no_cache="${1:-false}"
 
+  bootstrap_starters
   _build_single "$no_cache"
 
   # pi is mount-level: provision once, then sync extensions
@@ -794,6 +884,7 @@ cmd_install() {
   ensure_local_namespace
   bootstrap_config "$config_dir"
   bootstrap_permissions
+  bootstrap_starters
 
   if [[ ":$PATH:" != *":$target_dir:"* ]]; then
     echo ""
@@ -1060,7 +1151,10 @@ cmd_update() {
     echo "INFO: (dry-run) Skipping git pull."
   fi
 
-  # 2) Rebuild the default image
+  # 2) Seed the starters, then rebuild the default image
+  if [[ "$dry_run" != "true" ]]; then
+    bootstrap_starters
+  fi
   if [[ "$install_only" != "true" ]]; then
     if [[ "$dry_run" == "true" ]]; then
       echo "(dry-run) Would rebuild piw:default"
@@ -1083,6 +1177,13 @@ cmd_update() {
     echo "✓ Update complete. Run 'piw' to launch."
   fi
 }
+
+# ── Source guard ─────────────────────────────────────────────────────────────
+# Sourcing defines the functions without running a command. The test suite uses
+# this to call the parser and the resolvers directly.
+if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
+  return 0
+fi
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 load_env

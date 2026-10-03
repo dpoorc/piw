@@ -66,6 +66,9 @@ export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
 : > "$PIW_TEST_DOCKER_LOG"
 
 piw() { (cd "$SANDBOX" && PATH="$STUB:$PATH" ./piw "$@"); }
+# Call a piw function directly, without running a command. The source guard in
+# piw stops before main, so only the definitions load.
+piw_fn() { (source "$SANDBOX/piw"; "$@"); }
 log() { cat "$PIW_TEST_DOCKER_LOG"; }
 reset_log() { : > "$PIW_TEST_DOCKER_LOG"; }
 
@@ -178,6 +181,106 @@ else
   bad "--install creates the symlink"
 fi
 assert_exists "install creates the namespace" "$SANDBOX/.local/store/bin"
+
+printf '== starters seed once\n'
+rm -f "$SANDBOX/.local/piw.conf" "$SANDBOX/.local/mise/config.toml"
+piw --install "$WORK/bin-seed" >/dev/null 2>&1
+assert_exists "install seeds .local/piw.conf" "$SANDBOX/.local/piw.conf"
+assert_exists "install seeds .local/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
+if diff -q "$SANDBOX/seed/piw.conf" "$SANDBOX/.local/piw.conf" >/dev/null; then
+  ok "piw.conf starts as a copy of the starter"
+else
+  bad "piw.conf starts as a copy of the starter"
+fi
+if diff -q "$SANDBOX/seed/mise/config.toml" "$SANDBOX/.local/mise/config.toml" >/dev/null; then
+  ok "mise config starts as a copy of the starter"
+else
+  bad "mise config starts as a copy of the starter"
+fi
+
+# An edited live file must survive every later run.
+printf '# edited by the user\n[layers]\nrun:mine\n' > "$SANDBOX/.local/piw.conf"
+printf '# edited by the user\n[tools]\n' > "$SANDBOX/.local/mise/config.toml"
+piw --install "$WORK/bin-seed2" >/dev/null 2>&1
+assert_contains "keeps an edited piw.conf" "$(cat "$SANDBOX/.local/piw.conf")" "run:mine"
+assert_contains "keeps an edited mise config" "$(cat "$SANDBOX/.local/mise/config.toml")" "# edited by the user"
+
+# Launch seeds the same two files.
+rm -f "$SANDBOX/.local/piw.conf" "$SANDBOX/.local/mise/config.toml"
+piw "$WORK/proj" >/dev/null 2>&1
+assert_exists "launch seeds .local/piw.conf" "$SANDBOX/.local/piw.conf"
+assert_exists "launch seeds .local/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
+
+printf '== manifest resolvers\n'
+assert_status "piw.conf default path" "$(piw_fn resolve_piw_conf)" "$SANDBOX/.local/piw.conf"
+assert_status "absolute PIW_CONF wins" \
+  "$(PIW_CONF=/tmp/piw-elsewhere.conf piw_fn resolve_piw_conf)" "/tmp/piw-elsewhere.conf"
+assert_status "relative PIW_CONF sits under the harness" \
+  "$(PIW_CONF=sub/piw.conf piw_fn resolve_piw_conf)" "$SANDBOX/sub/piw.conf"
+assert_status "mise config default path" "$(piw_fn resolve_mise_config)" "$SANDBOX/.local/mise/config.toml"
+assert_status "absolute PIW_MISE_CONFIG wins" \
+  "$(PIW_MISE_CONFIG=/tmp/mise-elsewhere.toml piw_fn resolve_mise_config)" "/tmp/mise-elsewhere.toml"
+assert_status "relative PIW_MISE_CONFIG sits under the harness" \
+  "$(PIW_MISE_CONFIG=sub/mise.toml piw_fn resolve_mise_config)" "$SANDBOX/sub/mise.toml"
+
+printf '== manifest parser\n'
+FIX="$WORK/manifest"
+mkdir -p "$FIX"
+
+cat > "$FIX/good.conf" <<'CONF'
+# a comment
+   # an indented comment
+
+[layers]
+apt:zsh gdb
+run:my-setup   # trailing comment
+
+[pi]
+npm:pi-intercom
+git:https://host/repo#v1
+CONF
+out="$(PIW_CONF="$FIX/good.conf" piw_fn parse_piw_conf 2>&1)"
+assert_status "good manifest exits 0" "$?" "0"
+assert_contains "entry under [layers]" "$out" $'layers\tapt:zsh gdb'
+assert_contains "strips a trailing comment" "$out" $'layers\trun:my-setup'
+assert_contains "entry under [pi]" "$out" $'pi\tnpm:pi-intercom'
+assert_contains "keeps # inside a value" "$out" $'pi\tgit:https://host/repo#v1'
+assert_not_contains "drops comments" "$out" "a comment"
+
+printf '[layers]\napt:zsh\n[layers]\napt:gdb\n' > "$FIX/merge.conf"
+out="$(PIW_CONF="$FIX/merge.conf" piw_fn parse_piw_conf 2>&1)"
+assert_contains "duplicate sections merge (first)" "$out" $'layers\tapt:zsh'
+assert_contains "duplicate sections merge (second)" "$out" $'layers\tapt:gdb'
+
+printf 'orphan:entry\n' > "$FIX/orphan.conf"
+out="$(PIW_CONF="$FIX/orphan.conf" piw_fn parse_piw_conf 2>"$FIX/err")"
+status=$?
+assert_status "entry before a section exits non-zero" "$status" "2"
+assert_status "entry error writes nothing to stdout" "$out" ""
+assert_contains "entry error names the file and line" "$(cat "$FIX/err")" "$FIX/orphan.conf:1"
+assert_contains "entry error states the reason" "$(cat "$FIX/err")" "entry before any section"
+
+printf '[layers\napt:zsh\n' > "$FIX/bad-header.conf"
+out="$(PIW_CONF="$FIX/bad-header.conf" piw_fn parse_piw_conf 2>"$FIX/err")"
+status=$?
+assert_status "malformed header exits non-zero" "$status" "2"
+assert_status "header error writes nothing to stdout" "$out" ""
+assert_contains "header error names the file and line" "$(cat "$FIX/err")" "$FIX/bad-header.conf:1"
+assert_contains "header error states the reason" "$(cat "$FIX/err")" "malformed section header"
+
+printf '# only a comment\n\n   \n' > "$FIX/empty.conf"
+out="$(PIW_CONF="$FIX/empty.conf" piw_fn parse_piw_conf 2>&1)"
+assert_status "comment-only manifest exits 0" "$?" "0"
+assert_status "comment-only manifest emits nothing" "$out" ""
+
+printf '[layers]\r\napt:zsh\r\n' > "$FIX/crlf.conf"
+out="$(PIW_CONF="$FIX/crlf.conf" piw_fn parse_piw_conf 2>&1)"
+assert_contains "CRLF entry parses clean" "$out" $'layers\tapt:zsh'
+
+# The shipped starter must parse to nothing.
+out="$(PIW_CONF="$SANDBOX/seed/piw.conf" piw_fn parse_piw_conf 2>&1)"
+assert_status "shipped starter exits 0" "$?" "0"
+assert_status "shipped starter emits nothing" "$out" ""
 
 printf '== default Dockerfile\n'
 df="$ROOT/Dockerfile"

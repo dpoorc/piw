@@ -1,0 +1,13 @@
+# piw store tools
+#
+# mise reads this file inside the container. piw never parses it.
+# Add store tools here, or run `piw tool install <spec>`.
+#
+# Example:
+#   [tools]
+#   jq = "latest"
+#   "github:cli/cli" = "latest"
+#
+# The default image includes the base tools, so this table starts empty.
+
+[tools]
