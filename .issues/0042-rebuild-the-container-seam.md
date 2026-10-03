@@ -1,7 +1,7 @@
 ---
 id: 42
 title: Rebuild the container seam
-status: open
+status: closed
 priority: high
 labels:
     - kind:enhancement
@@ -14,6 +14,7 @@ relations:
         - 40
 created: "2026-10-03"
 updated: "2026-10-03"
+closed: "2026-10-03"
 ---
 
 ## Parent

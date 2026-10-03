@@ -8,6 +8,10 @@
 #   tests/run.sh
 set -uo pipefail
 
+# The developer shell may export piw overrides. Clear them so the suite is
+# hermetic.
+unset PI_CONFIG_DIR PI_PI_DIR PI_TOOLS_DIR PIW_CONF PIW_MISE_CONFIG PIW_MODE
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PASS=0
 FAIL=0
@@ -65,7 +69,18 @@ chmod +x "$STUB/npm"
 export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
 : > "$PIW_TEST_DOCKER_LOG"
 
-piw() { (cd "$SANDBOX" && PATH="$STUB:$PATH" ./piw "$@"); }
+# A controlled home keeps the host git identity and host git config out of the
+# runs, so the exact container argv is deterministic.
+TEST_HOME="$WORK/home"
+mkdir -p "$TEST_HOME"
+piw() {
+  (cd "$SANDBOX" && env \
+    -u PI_CONFIG_DIR -u PI_PI_DIR -u PI_TOOLS_DIR \
+    -u PIW_CONF -u PIW_MISE_CONFIG -u PIW_MODE \
+    HOME="$TEST_HOME" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    PATH="$STUB:$PATH" ./piw "$@")
+}
 # Call a piw function directly, without running a command. The source guard in
 # piw stops before main, so only the definitions load.
 piw_fn() { (source "$SANDBOX/piw"; "$@"); }
@@ -138,23 +153,72 @@ out="$(piw tool install 2>&1)"
 assert_status "install with no spec exits 1" "$?" "1"
 assert_contains "install with no spec explains itself" "$out" "needs at least one spec"
 
+printf '== piw tool runs through the container seam\n'
+reset_log
+piw tool list >/dev/null 2>&1
+assert_contains "tool run mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
+assert_contains "tool run mounts the layers read-only" "$(log)" "-v $SANDBOX/.local/layers:/opt/piw/layers:z,ro"
+assert_contains "tool run mounts the agent directory" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
+assert_contains "tool run uses the container user" "$(log)" "--user $(id -u):$(id -g)"
+assert_contains "tool run runs in the default image" "$(log)" "piw:default sh -c"
+
 printf '== piw build (default image)\n'
 reset_log
 piw build >/dev/null 2>&1
 assert_contains "builds piw:default from the root Dockerfile" "$(log)" \
   "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX"
 
-printf '== piw launch
-'
+printf '== piw launch (exact argv)\n'
 mkdir -p "$WORK/proj"
 reset_log
 out="$(piw "$WORK/proj" 2>&1)"
 status=$?
 assert_status "launch exits 0" "$status" "0"
-assert_contains "mounts the agent directory" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
-assert_contains "mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
-assert_contains "mounts the workspace" "$(log)" "-v $WORK/proj:$WORK/proj:z"
-assert_contains "runs pi in the default image" "$(log)" "-w $WORK/proj piw:default pi"
+run_line="$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)"
+expected_run="run --rm -it --add-host host.docker.internal:host-gateway"
+expected_run+=" --user $(id -u):$(id -g)"
+expected_run+=" -e HOME=/home/pi"
+expected_run+=" -e YADM_HOME=$TEST_HOME"
+expected_run+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
+expected_run+=" -e npm_config_cache=/tmp/.npm-cache"
+expected_run+=" -e npm_config_ignore_scripts=true"
+expected_run+=" -v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
+expected_run+=" -v $SANDBOX/.local/store:/home/pi/.local:z"
+expected_run+=" -v $SANDBOX/.local/mise:/home/pi/.config/mise:z"
+expected_run+=" -v $SANDBOX/.local/app:/opt/pi:z"
+expected_run+=" -v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z"
+expected_run+=" -v $SANDBOX/skills:/home/pi/.pi/agent/skills:z,ro"
+expected_run+=" -v $SANDBOX/agents:/home/pi/.pi/agent/agents:z,ro"
+expected_run+=" -v $SANDBOX/skills/system/workflow/APPEND_SYSTEM.md:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro"
+expected_run+=" -v $WORK/proj:$WORK/proj:z"
+expected_run+=" -v $SANDBOX/.local/layers:/opt/piw/layers:z,ro"
+expected_run+=" -w $WORK/proj piw:default pi"
+assert_status "launch argv is exact" "$run_line" "$expected_run"
+assert_not_contains "no Anthropic key allowlist flag" "$run_line" "-e ANTHROPIC_API_KEY"
+assert_not_contains "no OpenAI key allowlist flag" "$run_line" "-e OPENAI_API_KEY"
+assert_not_contains "no Gemini key allowlist flag" "$run_line" "-e GEMINI_API_KEY"
+
+printf '== piw launch passes the env file\n'
+printf 'ANTHROPIC_API_KEY=test-key\n' > "$SANDBOX/.local/env"
+reset_log
+out="$(ANTHROPIC_API_KEY=host-only piw "$WORK/proj" 2>&1)"
+assert_contains "passes the env file" "$(log)" "--env-file $SANDBOX/.local/env"
+assert_not_contains "does not forward a host API key" "$(log)" "-e ANTHROPIC_API_KEY"
+rm -f "$SANDBOX/.local/env"
+
+printf '== piw --mode readonly\n'
+reset_log
+out="$(piw --mode readonly "$WORK/proj" 2>&1)"
+status=$?
+assert_status "readonly launch exits 0" "$status" "0"
+assert_contains "readonly workspace is read-only" "$(log)" "-v $WORK/proj:$WORK/proj:z,ro"
+assert_contains "readonly store is read-only" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z,ro"
+assert_contains "readonly mise config is read-only" "$(log)" "-v $SANDBOX/.local/mise:/home/pi/.config/mise:z,ro"
+assert_contains "readonly Agent Skills dir is read-only" "$(log)" "-v $SANDBOX/.local/agents/skills:/home/pi/.agents/skills:z,ro"
+assert_contains "readonly mounts the mode config read-only" "$(log)" "-v $SANDBOX/.local/agent/extensions/pi-permission-system/config.readonly.json:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z,ro"
+assert_contains "readonly adds no network" "$(log)" "--network none"
+assert_contains "readonly keeps the agent directory writable" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z "
+assert_not_contains "readonly does not make the agent directory read-only" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z,ro"
 
 printf '== piw build (missing Dockerfile)\n'
 mv "$SANDBOX/Dockerfile" "$WORK/Dockerfile.bak"

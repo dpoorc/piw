@@ -30,8 +30,8 @@
 #   piw --help                  Show this help
 #
 # Environment:
-#   API keys are read from .local/env (if present) or from the host
-#   environment. See .env.example for the supported variables.
+#   Secrets are read from .local/env (if present) and passed to the
+#   container with --env-file. See .env.example for the supported variables.
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .local/agent)
 #   PI_PI_DIR       Override the pi app directory (default: .local/app)
@@ -132,17 +132,6 @@ resolve_mise_config() {
     echo "$PIW_MISE_CONFIG"
   else
     echo "$SCRIPT_DIR/${PIW_MISE_CONFIG:-.local/mise/config.toml}"
-  fi
-}
-
-# ── Utility: source .local/env if present ────────────────────────────────────
-load_env() {
-  local env_file="$SCRIPT_DIR/.local/env"
-  if [[ -f "$env_file" ]]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$env_file"
-    set +a
   fi
 }
 
@@ -311,29 +300,141 @@ ensure_local_namespace() {
   mkdir -p "$SCRIPT_DIR/.local/agents/skills"
 }
 
-# ── Utility: run a command inside the harness image ──────────────────────────
-# The image is the stable environment. Tool actions run here, never through a
-# host package manager. Leading -v/-e pairs are passed through as extra
-# mounts and env vars.
-_in_container() {
-  local -a extra=()
-  while [[ "${1:-}" == "-v" || "${1:-}" == "-e" ]]; do
-    extra+=("$1" "${2:?missing value for $1}")
-    shift 2
+# ── Utility: the single container seam ───────────────────────────────────────
+# Every container invocation in piw goes through here, so the mount map, the
+# environment, and the user identity are stated once. A caller names only what
+# it needs; it never assembles a `-v`, `--env-file`, `--network`, or `--user`
+# argument itself.
+#
+#   --workspace <dir>  Mount the workspace at the same path and use it as the
+#                      working directory. Read-only in readonly mode.
+#   --app              Mount the pi install (.local/app) at /opt/pi.
+#   --mode <name>      Permission mode (default: permissive). In readonly mode
+#                      the workspace, the store, the mise config, and the
+#                      Agent Skills directory are read-only, and the run has
+#                      no network. The agent directory stays read-write.
+#   --interactive      Add -it.
+#   --                 End of options. The rest is the container command.
+container_run() {
+  local workspace="" mode="permissive" interactive="false" secrets="false"
+  local image="${IMAGE_PREFIX}:default"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --workspace)
+      workspace="${2:?container_run: --workspace needs a directory}"
+      shift 2
+      ;;
+    --mode)
+      mode="${2:?container_run: --mode needs a name}"
+      shift 2
+      ;;
+    --image)
+      image="${2:?container_run: --image needs a tag}"
+      shift 2
+      ;;
+    --secrets)
+      secrets="true"
+      shift
+      ;;
+    --interactive)
+      interactive="true"
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      echo "ERROR: container_run: unknown option: $1" >&2
+      return 2
+      ;;
+    esac
   done
 
   ensure_local_namespace
-  docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e HOME=/home/pi \
-    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-    -e npm_config_cache=/tmp/.npm-cache \
-    -e npm_config_ignore_scripts=true \
-    -v "$(resolve_config_dir):/home/pi/.pi/agent:z" \
-    -v "$(resolve_tools_dir):/home/pi/.local:z" \
-    "${extra[@]}" \
-    "${IMAGE_PREFIX}:default" \
-    "$@"
+
+  local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
+  if [[ ! -f "$append_src" ]]; then
+    echo "ERROR: $append_src not found. The harness tree is incomplete." >&2
+    return 1
+  fi
+
+  # Read-only mode restricts the project and its store, never pi's own state.
+  # pi must write sessions, auth, and extension logs to the agent directory.
+  local store_mode="" mise_mode="" agents_mode="" workspace_mode=""
+  local -a mode_flags=()
+  if [[ "$mode" == "readonly" ]]; then
+    store_mode=",ro"
+    mise_mode=",ro"
+    agents_mode=",ro"
+    workspace_mode=",ro"
+    mode_flags+=(--network none)
+  fi
+
+  # The git identity is part of the user identity, so it lives here too.
+  local git_name git_email
+  git_name="$(git config user.name 2>/dev/null || true)"
+  git_email="$(git config user.email 2>/dev/null || true)"
+
+  local -a args=(--rm)
+  [[ "$interactive" == "true" ]] && args+=(-it)
+  args+=(
+    --add-host host.docker.internal:host-gateway
+    --user "$(id -u):$(id -g)"
+    -e HOME=/home/pi
+    -e YADM_HOME="$HOME"
+    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent
+    -e npm_config_cache=/tmp/.npm-cache
+    -e npm_config_ignore_scripts=true
+  )
+  [[ "$secrets" == "true" && -f "$SCRIPT_DIR/.local/env" ]] && args+=(--env-file "$SCRIPT_DIR/.local/env")
+  [[ -n "$git_name" ]] && args+=(-e GIT_AUTHOR_NAME="$git_name")
+  [[ -n "$git_email" ]] && args+=(-e GIT_AUTHOR_EMAIL="$git_email")
+  args+=("${mode_flags[@]}")
+
+  # Base mounts. The order follows the mount map in issue #24.
+  args+=(-v "$(resolve_config_dir):/home/pi/.pi/agent:z")
+  args+=(-v "$(resolve_tools_dir):/home/pi/.local:z${store_mode}")
+  args+=(-v "$(dirname "$(resolve_mise_config)"):/home/pi/.config/mise:z${mise_mode}")
+  args+=(-v "$(resolve_pi_host_dir):/opt/pi:z")
+  args+=(-v "$SCRIPT_DIR/.local/agents/skills:/home/pi/.agents/skills:z${agents_mode}")
+  args+=(-v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z,ro")
+  args+=(-v "$SCRIPT_DIR/agents:/home/pi/.pi/agent/agents:z,ro")
+  args+=(-v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro")
+
+  local mode_config
+  mode_config="$(resolve_mode_config "$mode")"
+  if [[ -n "$mode_config" ]]; then
+    args+=(-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z,ro")
+  fi
+
+  [[ -n "$workspace" ]] && args+=(-v "$workspace:$workspace:z${workspace_mode}")
+
+  # Optional host git config, read-only.
+  [[ -f "$HOME/.gitconfig" ]] && args+=(-v "$HOME/.gitconfig:/home/pi/.gitconfig:z,ro")
+  [[ -f "$HOME/.config/git/config" ]] && args+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
+
+  # The layer tree is always read-only: a launch may read it, never write it.
+  args+=(-v "$SCRIPT_DIR/.local/layers:/opt/piw/layers:z,ro")
+
+  [[ -n "$workspace" ]] && args+=(-w "$workspace")
+
+  args+=("$image")
+  args+=("$@")
+
+  # An interactive launch replaces the shell, so signals and the exit code
+  # pass straight to docker. Every other caller runs docker as a child.
+  if [[ "$interactive" == "true" ]]; then
+    exec docker run "${args[@]}"
+  fi
+  docker run "${args[@]}"
+}
+
+# ── Utility: run a command inside the harness image ──────────────────────────
+# The image is the stable environment. Tool actions run here, never through a
+# host package manager. Every invocation goes through the container seam.
+_in_container() {
+  container_run -- "$@"
 }
 
 # ── Utility: installed pi version (host-side read from the app dir) ─────────
@@ -353,12 +454,7 @@ _npm_latest_version() {
   if command -v npm &>/dev/null 2>&1; then
     npm view "$spec" version 2>/dev/null | tail -1 || true
   else
-    docker run --rm \
-      --user "$(id -u):$(id -g)" \
-      -e HOME=/home/pi \
-      -e npm_config_cache=/tmp/.npm-cache \
-      "${IMAGE_PREFIX}:default" \
-      npm view "$spec" version 2>/dev/null | tail -1 || true
+    container_run -- npm view "$spec" version 2>/dev/null | tail -1 || true
   fi
 }
 
@@ -368,9 +464,6 @@ _npm_latest_version() {
 ensure_pi() {
   local mode="${1:-require}"
   local dry_run="${2:-false}"
-  local config_dir
-  config_dir="$(resolve_config_dir)"
-  local image_tag="${IMAGE_PREFIX}:default"
   local installed latest pi_host
 
   ensure_image "$dry_run"
@@ -410,27 +503,13 @@ ensure_pi() {
   fi
 
   echo "INFO: Installing pi ${latest:-latest} (was: ${installed:-none}) into app mount…"
-  if ! docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e HOME=/home/pi \
-    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-    -e npm_config_cache=/tmp/.npm-cache \
-    -e npm_config_ignore_scripts=true \
-    -v "$config_dir:/home/pi/.pi/agent:z" \
-    -v "$pi_host:/opt/pi:z" \
-    "$image_tag" \
-    sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@${latest:-latest}'"; then
+  if ! container_run -- sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@${latest:-latest}'"; then
     echo "ERROR: npm install of pi failed (see output above)." >&2
     exit 1
   fi
 
   # Verify the installed CLI actually runs from the mount
-  if ! docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e HOME=/home/pi \
-    -v "$pi_host:/opt/pi:z" \
-    "$image_tag" \
-    /opt/pi/node_modules/.bin/pi --version; then
+  if ! container_run -- /opt/pi/node_modules/.bin/pi --version; then
     echo "ERROR: installed pi does not run from /opt/pi (broken mount or install)." >&2
     exit 1
   fi
@@ -469,9 +548,7 @@ _pkg_installed_version() {
 
 # ── Utility: install one extension via pi install (throwaway container) ──────
 _pi_install_one() {
-  local image_tag="$1"
-  local config_dir="$2"
-  local pkg="$3"
+  local pkg="$1"
   local pi_host
   pi_host="$(resolve_pi_host_dir)"
 
@@ -486,16 +563,7 @@ _pi_install_one() {
   # Invoke via absolute path — never depends on PATH resolution inside the
   # container (the /opt/pi node_modules/.bin entry would be found only
   # when the mount is populated, which the preflight just guaranteed).
-  docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e HOME=/home/pi \
-    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-    -v "$config_dir:/home/pi/.pi/agent:z" \
-    -v "$pi_host:/opt/pi:z" \
-    -e npm_config_cache=/tmp/.npm-cache \
-    -e npm_config_ignore_scripts=true \
-    "$image_tag" \
-    /opt/pi/node_modules/.bin/pi install "$pkg"
+  container_run -- /opt/pi/node_modules/.bin/pi install "$pkg"
 }
 
 # ── Utility: sync extensions from extensions.txt into the config mount ──────
@@ -531,7 +599,6 @@ sync_extensions_for() {
   ensure_image "$dry_run"
   ensure_pi require "$dry_run"
 
-  local image_tag="${IMAGE_PREFIX}:default"
   local exit_code=0 installed=0 upgraded=0 skipped=0 failed=0
 
   echo "Syncing extensions…"
@@ -570,7 +637,7 @@ sync_extensions_for() {
         continue
       fi
       printf "  Installing %s… " "$pkg"
-      if _pi_install_one "$image_tag" "$config_dir" "$pkg"; then
+      if _pi_install_one "$pkg"; then
         echo "done"
         ((installed+=1))
       else
@@ -587,7 +654,7 @@ sync_extensions_for() {
         continue
       fi
       printf "  %s %s… " "$( [[ "$verb" == "reinstall" ]] && echo Reinstalling || echo Upgrading)" "$pkg"
-      if _pi_install_one "$image_tag" "$config_dir" "$pkg"; then
+      if _pi_install_one "$pkg"; then
         echo "done"
         ((upgraded+=1))
       else
@@ -694,7 +761,6 @@ cmd_launch() {
   local workspace="$1"
   local resume="${2:-false}"
   local mode="${3:-permissive}"
-  local image_tag="${IMAGE_PREFIX}:default"
 
   # Workspace must exist
   if [[ ! -d "$workspace" ]]; then
@@ -708,20 +774,11 @@ cmd_launch() {
 
   # Validate the mode before any expensive work.
   validate_mode "$mode"
-  local mode_config
-  mode_config="$(resolve_mode_config "$mode")"
 
   bootstrap_config "$config_dir"
   bootstrap_permissions
   bootstrap_starters
   ensure_local_namespace
-
-  # The harness ships APPEND_SYSTEM.md. A missing file means the tree is broken.
-  local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
-  if [[ ! -f "$append_src" ]]; then
-    echo "ERROR: $append_src not found. The harness tree is incomplete." >&2
-    exit 1
-  fi
 
   # ensure_pi builds the image when missing (ensure_image) and checks the
   # pi install in the config mount.
@@ -738,84 +795,20 @@ cmd_launch() {
     exit 1
   fi
 
-  # Build Docker env-var flags from known API keys
-  local -a env_flags=()
-  local known_keys=(
-    SILICONFLOW_API_KEY
-    FIREWORKS_API_KEY
-    ANTHROPIC_API_KEY
-    OPENAI_API_KEY
-    DEEPSEEK_API_KEY
-    GEMINI_API_KEY
-    OPENROUTER_API_KEY
-    HUGGINGFACE_API_KEY
-    GROQ_API_KEY
-    MISTRAL_API_KEY
-    XAI_API_KEY
-    TOGETHER_API_KEY
-    AZURE_OPENAI_API_KEY
-  )
-  for var in "${known_keys[@]}"; do
-    if [[ -n "${!var:-}" ]]; then
-      env_flags+=(-e "$var")
-    fi
-  done
-
-  # Git identity — pass host git config into the container
-  local git_name git_email
-  git_name="$(git config user.name 2>/dev/null || true)"
-  git_email="$(git config user.email 2>/dev/null || true)"
-  [[ -n "$git_name" ]] && env_flags+=(-e GIT_AUTHOR_NAME="$git_name")
-  [[ -n "$git_email" ]] && env_flags+=(-e GIT_AUTHOR_EMAIL="$git_email")
-
-  # Git config file mounts (optional, read-only)
-  local -a git_config_volumes=()
-  [[ -f "$HOME/.gitconfig" ]] && git_config_volumes+=(-v "$HOME/.gitconfig:/home/pi/.gitconfig:z,ro")
-  [[ -f "$HOME/.config/git/config" ]] && git_config_volumes+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
-
-  # Pi app mount (ensure_pi created it moments ago; guard anyway)
-  pi_host="$(resolve_pi_host_dir)"
-  local -a pi_volumes=()
-  [[ -d "$pi_host" ]] && pi_volumes+=(-v "$pi_host:/opt/pi:z")
-
+  # The mode is validated above. The container seam resolves the mode config
+  # and the read-only restrictions from it.
   local pi_args=()
   [[ "$resume" == "true" ]] && pi_args+=(-r)
   local session_flag=""
   [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
 
-  # Mode-specific Docker restrictions
-  local mode_vol_suffix=""
-  local tools_suffix=""
-  local -a mode_docker_flags=()
-  if [[ "$mode" == "readonly" ]]; then
-    mode_vol_suffix=",ro"
-    tools_suffix=",ro"
-    mode_docker_flags+=(--network none)
-  fi
-
   echo "INFO: Launching piw in $workspace (mode: $mode)$session_flag"
-  exec docker run --rm -it \
-    --add-host host.docker.internal:host-gateway \
-    --user "$(id -u):$(id -g)" \
-    -e HOME=/home/pi \
-    -e YADM_HOME="$HOME" \
-    -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent \
-    -e npm_config_cache=/tmp/.npm-cache \
-    -e npm_config_ignore_scripts=true \
-    "${env_flags[@]}" \
-    "${mode_docker_flags[@]}" \
-    -v "$config_dir:/home/pi/.pi/agent:z" \
-    -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
-    -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
-    -v "$SCRIPT_DIR/agents:/home/pi/.pi/agent/agents:z" \
-    ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
-    "${git_config_volumes[@]}" \
-    "${pi_volumes[@]}" \
-    -v "$workspace:$workspace:z${mode_vol_suffix}" \
-    -v "$(resolve_tools_dir):/home/pi/.local:z${tools_suffix}" \
-    -w "$workspace" \
-    "$image_tag" \
-    pi "${pi_args[@]}"
+  container_run \
+    --workspace "$workspace" \
+    --mode "$mode" \
+    --secrets \
+    --interactive \
+    -- pi "${pi_args[@]}"
 }
 
 # ── Internal: build the default image (no package install) ──────────────────
@@ -971,15 +964,15 @@ cmd_doctor() {
     echo "  ⚠ .local/env not found (copy .env.example to .local/env)"
   fi
 
+  # Secrets live in .local/env and pass to the container with --env-file.
   local found_keys=0
-  for var in ANTHROPIC_API_KEY OPENAI_API_KEY GEMINI_API_KEY FIREWORKS_API_KEY; do
-    if [[ -n "${!var:-}" ]]; then
-      echo "  ✓ $var is set"
-      ((found_keys+=1))
-    fi
-  done
-  if [[ $found_keys -eq 0 ]]; then
-    echo "  ⚠ No API keys found (set at least one in .local/env or export it)"
+  if [[ -f "$SCRIPT_DIR/.local/env" ]]; then
+    found_keys="$(grep -cE '^[A-Za-z_][A-Za-z0-9_]*_API_KEY=.+' "$SCRIPT_DIR/.local/env" 2>/dev/null || true)"
+  fi
+  if [[ "${found_keys:-0}" -gt 0 ]]; then
+    echo "  ✓ $found_keys API key(s) in .local/env"
+  else
+    echo "  ⚠ No API keys found (add at least one to .local/env)"
   fi
 
   # ── Config directory ──
@@ -1186,8 +1179,6 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
 fi
 
 # ── Main ──────────────────────────────────────────────────────────────────────
-load_env
-
 COMMAND=""
 NO_CACHE="false"
 RESUME="false"
