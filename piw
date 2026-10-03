@@ -1,47 +1,42 @@
 #!/usr/bin/env bash
-# piw — piw: launch the pi coding agent in Docker
+# piw - launch the pi coding agent in Docker
 #
 # Model:
-#   The Docker image is tooling + isolation only. pi lives in its own
-#   app mount (~/.pihub); extensions live in the config mount (.pi/agent/).
-#   Both update without image rebuilds. `piw update` is the one command
-#   that brings everything (repo, images, pi, extensions) current.
+#   The Docker image is tooling and isolation only. pi lives in its own
+#   app mount (.local/app), and extensions live inside the agent directory
+#   (.local/agent/). Both update without image rebuilds. `piw update` is the
+#   one command that brings everything current.
 #
 # Usage:
-#   piw                         Launch (default profile, current directory)
+#   piw                         Launch in the current directory
 #   piw <path>                  Launch with workspace
 #   piw -r, --resume            Launch with session picker
-#   piw build [profile]         Build tooling image + provision mount (default: core)
-#   piw build --all             Build all variants + provision mount
+#   piw build                   Build the default image + provision mount
 #   piw build --no-cache        Full rebuild (ignore Docker cache)
-#   piw build --offline         Build from build/archives only, no downloads
 #   piw update                  Pull + rebuild + upgrade pi + sync extensions
-#   piw update --all            Update all variants
 #   piw update --build-only     Pull + rebuild (skip pi/extensions)
 #   piw update --install-only   Pull + sync pi/extensions (skip build)
 #   piw update --force          Reinstall all extensions
 #   piw update --dry-run        Show what would change (no executions)
-#   piw doctor [profile]        Diagnose harness setup
+#   piw doctor                  Diagnose harness setup
 #   piw generate-catalog        Regenerate skills catalog from SKILL.md files
 #   piw tool install <spec>...   Install tools into the shared store
 #   piw tool list               List tools in the shared store
 #   piw tool remove <spec>...   Remove tools from the shared store
 #   piw --install [dir]         Install piw symlink into PATH
 #   piw --uninstall [dir]       Remove piw symlink from PATH
-#   piw --profile <name>        Launch with a specific variant
 #   piw --mode <name>           Launch with a permission mode (default: permissive)
 #                              Available: permissive, restricted, readonly
 #   piw --help                  Show this help
 #
 # Environment:
-#   API keys are sourced from .env (if present) or from the host environment.
-#   See .env.example for the full list of supported variables.
+#   API keys are read from .local/env (if present) or from the host
+#   environment. See .env.example for the supported variables.
 #
-#   PI_CONFIG_DIR   Override the pi state directory (default: .pi/agent/)
-#   PI_PI_DIR       Override the pi app directory (default: .pi/app)
-#   PI_TOOLS_DIR    Override the tool store directory (default: .pi/store)
+#   PI_CONFIG_DIR   Override the pi state directory (default: .local/agent)
+#   PI_PI_DIR       Override the pi app directory (default: .local/app)
+#   PI_TOOLS_DIR    Override the tool store directory (default: .local/store)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
-#   PIW_DEFAULT_PROFILE  Default variant profile (overrides "core")
 #
 set -euo pipefail
 
@@ -67,40 +62,23 @@ show_help() {
   exit 0
 }
 
-# ── Utility: validate profile exists ──────────────────────────────────────────
-validate_profile() {
-  local profile="$1"
-  local dir="$SCRIPT_DIR/variants/$profile"
-  if [[ ! -d "$dir" ]]; then
-    echo "ERROR: Unknown profile '$profile'." >&2
-    echo "  Available:" >&2
-    for d in "$SCRIPT_DIR"/variants/*/; do
-      name="$(basename "$d")"
-      [[ "$name" != "template" ]] && echo "    - $name"
-    done >&2
-    exit 1
-  fi
-  if [[ ! -f "$dir/Dockerfile" ]]; then
-    echo "ERROR: Variant '$profile' has no Dockerfile at $dir/Dockerfile" >&2
-    exit 1
-  fi
-}
-
 # ── Utility: validate mode exists ────────────────────────────────────────────
 validate_mode() {
   local mode="$1"
   if [[ "$mode" == "permissive" ]]; then
     return 0
   fi
-  local seed_config="$SCRIPT_DIR/config-seeds/permissions/config.$mode.json"
-  local live_config="$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
+  local config_dir
+  config_dir="$(resolve_config_dir)"
+  local seed_config="$SCRIPT_DIR/seed/permissions/config.$mode.json"
+  local live_config="$config_dir/extensions/pi-permission-system/config.$mode.json"
   if [[ ! -f "$seed_config" && ! -f "$live_config" ]]; then
     echo "ERROR: Unknown mode '$mode'." >&2
     echo "  Available modes:" >&2
     local f name
     local -a modes=()
-    for f in "$SCRIPT_DIR"/config-seeds/permissions/config.*.json \
-             "$SCRIPT_DIR"/extensions/pi-permission-system/config.*.json; do
+    for f in "$SCRIPT_DIR"/seed/permissions/config.*.json \
+             "$config_dir"/extensions/pi-permission-system/config.*.json; do
       [[ -f "$f" ]] || continue
       name="$(basename "$f" .json)"
       name="${name#config.}"
@@ -121,7 +99,7 @@ resolve_mode_config() {
     echo ""
     return
   fi
-  echo "$SCRIPT_DIR/extensions/pi-permission-system/config.$mode.json"
+  echo "$(resolve_config_dir)/extensions/pi-permission-system/config.$mode.json"
 }
 
 # ── Utility: resolve pi config directory ─────────────────────────────────────
@@ -129,13 +107,13 @@ resolve_config_dir() {
   if [[ "${PI_CONFIG_DIR:-}" = /* ]]; then
     echo "$PI_CONFIG_DIR"
   else
-    echo "$SCRIPT_DIR/${PI_CONFIG_DIR:-.pi/agent}"
+    echo "$SCRIPT_DIR/${PI_CONFIG_DIR:-.local/agent}"
   fi
 }
 
-# ── Utility: source .env if present ───────────────────────────────────────────
+# ── Utility: source .local/env if present ────────────────────────────────────
 load_env() {
-  local env_file="$SCRIPT_DIR/.env"
+  local env_file="$SCRIPT_DIR/.local/env"
   if [[ -f "$env_file" ]]; then
     set -a
     # shellcheck source=/dev/null
@@ -150,25 +128,26 @@ bootstrap_config() {
   mkdir -p "$config_dir"
 
   # Seed models.json
-  if [[ ! -f "$config_dir/models.json" ]] && [[ -f "$SCRIPT_DIR/config-seeds/models.json" ]]; then
-    cp "$SCRIPT_DIR/config-seeds/models.json" "$config_dir/models.json"
+  if [[ ! -f "$config_dir/models.json" ]] && [[ -f "$SCRIPT_DIR/seed/models.json" ]]; then
+    cp "$SCRIPT_DIR/seed/models.json" "$config_dir/models.json"
     echo "INFO: Seeded $config_dir/models.json from harness defaults."
     echo "      Edit it there to tweak models or add providers."
   fi
 
   # Seed settings.json
-  if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/config-seeds/settings.json" ]]; then
-    cp "$SCRIPT_DIR/config-seeds/settings.json" "$config_dir/settings.json"
+  if [[ ! -f "$config_dir/settings.json" ]] && [[ -f "$SCRIPT_DIR/seed/settings.json" ]]; then
+    cp "$SCRIPT_DIR/seed/settings.json" "$config_dir/settings.json"
     echo "INFO: Seeded $config_dir/settings.json from harness defaults."
   fi
 }
 
 # ── Utility: seed permission configs into the live extension directory ───────
-# The live extensions/ directory is gitignored user state. Shipped policies
-# live in config-seeds/permissions/ and are copied in only when absent.
+# The live extension directory is user state under the agent directory.
+# Shipped policies live in seed/permissions/ and are copied in only when absent.
 bootstrap_permissions() {
-  local seed_dir="$SCRIPT_DIR/config-seeds/permissions"
-  local live_dir="$SCRIPT_DIR/extensions/pi-permission-system"
+  local seed_dir="$SCRIPT_DIR/seed/permissions"
+  local live_dir
+  live_dir="$(resolve_config_dir)/extensions/pi-permission-system"
 
   mkdir -p "$live_dir"
 
@@ -188,130 +167,22 @@ bootstrap_permissions() {
   fi
 }
 
-# ── Utility: list non-template variant names ─────────────────────────────────
-variant_names() {
-  for dir in "$SCRIPT_DIR"/variants/*/; do
-    local name
-    name="$(basename "$dir")"
-    [[ "$name" != "template" ]] && echo "$name"
-  done
-}
-
-# ── Utility: the variant image a profile is built FROM, if any ────────────────
-_variant_base() {
-  local from
-  from="$(grep -m1 '^FROM ' "$SCRIPT_DIR/variants/$1/Dockerfile" 2>/dev/null | awk '{print $2}')"
-  if [[ "$from" == "${IMAGE_PREFIX}:"* ]]; then
-    echo "${from#"${IMAGE_PREFIX}:"}"
-  fi
-}
-
-# ── Utility: archives required by a profile ─────────────────────────────────
-_profile_archives() {
-  case "$1" in
-  core)
-    echo "mise-v2026.9.17-linux-x64.tar.gz"
-    ;;
-  devops)
-    echo "yq_linux_amd64.tar.gz"
-    ;;
-  workstation)
-    cat <<'EOF'
-go1.27.1.linux-amd64.tar.gz
-rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz
-rust-1.98.1-x86_64-unknown-linux-musl.tar.xz
-rizin-v0.9.1-static-x86_64.tar.xz
-ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz
-yq_linux_amd64.tar.gz
-yadm-3.5.0
-tofu_1.12.6_linux_amd64.tar.gz
-packer_1.16.0_linux_amd64.zip
-hadolint-linux-x86_64
-tflint_linux_amd64.zip
-uv-x86_64-unknown-linux-gnu.tar.gz
-EOF
-    ;;
-  esac
-}
-
-# ── Utility: per-archive download URL (mirrors build/README.md) ─────────────
-_archive_url() {
-  case "$1" in
-  mise-v2026.9.17-linux-x64.tar.gz) echo "https://github.com/jdx/mise/releases/download/v2026.9.17/$1" ;;
-  go1.27.1.linux-amd64.tar.gz) echo "https://go.dev/dl/$1" ;;
-  rust-1.98.1-x86_64-unknown-linux-gnu.tar.xz | rust-1.98.1-x86_64-unknown-linux-musl.tar.xz) echo "https://static.rust-lang.org/dist/$1" ;;
-  rizin-v0.9.1-static-x86_64.tar.xz) echo "https://github.com/rizinorg/rizin/releases/download/v0.9.1/$1" ;;
-  ffmpeg-n9.0-latest-linux64-gpl-9.0.tar.xz) echo "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/$1" ;;
-  yq_linux_amd64.tar.gz) echo "https://github.com/mikefarah/yq/releases/latest/download/$1" ;;
-  yadm-3.5.0) echo "https://raw.githubusercontent.com/TheLocehiliosan/yadm/3.5.0/yadm" ;;
-  tofu_1.12.6_linux_amd64.tar.gz) echo "https://github.com/opentofu/opentofu/releases/download/v1.12.6/$1" ;;
-  packer_1.16.0_linux_amd64.zip) echo "https://releases.hashicorp.com/packer/1.16.0/$1" ;;
-  hadolint-linux-x86_64) echo "https://github.com/hadolint/hadolint/releases/latest/download/hadolint-Linux-x86_64" ;;
-  tflint_linux_amd64.zip) echo "https://github.com/terraform-linters/tflint/releases/latest/download/$1" ;;
-  uv-x86_64-unknown-linux-gnu.tar.gz) echo "https://github.com/astral-sh/uv/releases/download/0.12.13/$1" ;;
-  esac
-}
-
-# ── Utility: ensure required archives exist before an image build ───────────
-ensure_archives() {
-  local profile="$1"
-  local offline="${2:-false}"
-  local archive_dir="$SCRIPT_DIR/build/archives"
-
-  # Archives are published for amd64; refuse to build elsewhere rather than
-  # ship a silent runtime breakage (image says amd64, binaries are not).
-  # See build/README.md for the manual aarch64 archive swap.
-  if [[ "$(uname -m)" != "x86_64" ]]; then
-    echo "ERROR: build/archives are amd64-only; this host is $(uname -m)." >&2
-    echo "  See build/README.md for how to swap in aarch64 archives manually." >&2
-    exit 1
-  fi
-  local -a missing=()
-  local file
-
-  mkdir -p "$archive_dir"
-  for file in $(_profile_archives "$profile"); do
-    [[ -f "$archive_dir/$file" ]] || missing+=("$file")
-  done
-
-  if [[ ${#missing[@]} -eq 0 ]]; then
-    return 0
-  fi
-
-  echo "WARNING: Missing archives for profile '$profile':" >&2
-  if [[ "$offline" == "true" ]]; then
-    for file in "${missing[@]}"; do
-      echo "  - $file" >&2
-    done
-    echo "Fetch them manually. Source URLs are in build/README.md." >&2
-    exit 1
-  fi
-
-  for file in "${missing[@]}"; do
-    local url
-    url="$(_archive_url "$file")"
-    echo "  Downloading $file…" >&2
-    if ! curl -fsSL --create-dirs -o "$archive_dir/$file" "$url"; then
-      echo "ERROR: Could not download $file from $url" >&2
-      echo "  Fetch it manually and place it in $archive_dir." >&2
-      exit 1
-    fi
-  done
-}
-
-# ── Utility: ensure Docker image exists for a profile ────────────────────────
+# ── Utility: ensure the default Docker image exists ──────────────────────────
 ensure_image() {
-  local profile="$1"
-  local dry_run="${2:-false}"
-  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local dry_run="${1:-false}"
+  local image_tag="${IMAGE_PREFIX}:default"
   if ! docker image inspect "$image_tag" &>/dev/null; then
     if [[ "$dry_run" == "true" ]]; then
-      echo "INFO: (dry-run) Image '$image_tag' is missing — would build."
+      echo "INFO: (dry-run) Image '$image_tag' is missing - would build."
       return 0
     fi
+    if [[ ! -f "$SCRIPT_DIR/Dockerfile" ]]; then
+      echo "ERROR: Dockerfile not found at $SCRIPT_DIR/Dockerfile" >&2
+      echo "  The default image builds from the repository root Dockerfile." >&2
+      exit 1
+    fi
     echo "INFO: Image '$image_tag' not found. Building…"
-    ensure_archives "$profile"
-    docker build -f "$SCRIPT_DIR/variants/$profile/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
+    docker build -f "$SCRIPT_DIR/Dockerfile" -t "$image_tag" "$SCRIPT_DIR"
   fi
 }
 
@@ -321,30 +192,35 @@ PI_NPM_PKG="@earendil-works/pi-coding-agent"
 
 resolve_pi_host_dir() {
   # Mirror resolve_config_dir: an absolute PI_PI_DIR wins; otherwise the
-  # harness owns everything under its own .pi/ (state: .pi/agent, app: .pi/app).
+  # harness owns the app directory under .local/.
   if [[ "${PI_PI_DIR:-}" = /* ]]; then
     echo "$PI_PI_DIR"
   else
-    echo "$SCRIPT_DIR/${PI_PI_DIR:-.pi/app}"
+    echo "$SCRIPT_DIR/${PI_PI_DIR:-.local/app}"
   fi
 }
 
 # ── Utility: resolve the shared tool store directory ─────────────────────────
 resolve_tools_dir() {
   # Mirror the other resolvers: an absolute PI_TOOLS_DIR wins; otherwise the
-  # harness owns the store under its own .pi/.
+  # harness owns the store under .local/.
   if [[ "${PI_TOOLS_DIR:-}" = /* ]]; then
     echo "$PI_TOOLS_DIR"
   else
-    echo "$SCRIPT_DIR/${PI_TOOLS_DIR:-.pi/store}"
+    echo "$SCRIPT_DIR/${PI_TOOLS_DIR:-.local/store}"
   fi
 }
 
-# ── Utility: create the tool store before Docker can create it as root ───────
+# ── Utility: create the .local/ namespace before Docker can, as the user ─────
 # A missing bind-mount source is created by Docker as root:root, and the host
-# user cannot then write it. Create it here, as the user.
-ensure_tools_dir() {
+# user cannot then write it. Create every namespace path here, as the user.
+ensure_local_namespace() {
+  mkdir -p "$(resolve_config_dir)"
   mkdir -p "$(resolve_tools_dir)/bin"
+  mkdir -p "$(resolve_pi_host_dir)"
+  mkdir -p "$SCRIPT_DIR/.local/mise"
+  mkdir -p "$SCRIPT_DIR/.local/layers"
+  mkdir -p "$SCRIPT_DIR/.local/agents/skills"
 }
 
 # ── Utility: run a command inside the harness image ──────────────────────────
@@ -352,15 +228,13 @@ ensure_tools_dir() {
 # host package manager. Leading -v/-e pairs are passed through as extra
 # mounts and env vars.
 _in_container() {
-  local profile="$1"
-  shift
   local -a extra=()
   while [[ "${1:-}" == "-v" || "${1:-}" == "-e" ]]; do
     extra+=("$1" "${2:?missing value for $1}")
     shift 2
   done
 
-  ensure_tools_dir
+  ensure_local_namespace
   docker run --rm \
     --user "$(id -u):$(id -g)" \
     -e HOME=/home/pi \
@@ -370,7 +244,7 @@ _in_container() {
     -v "$(resolve_config_dir):/home/pi/.pi/agent:z" \
     -v "$(resolve_tools_dir):/home/pi/.local:z" \
     "${extra[@]}" \
-    "${IMAGE_PREFIX}:${profile}" \
+    "${IMAGE_PREFIX}:default" \
     "$@"
 }
 
@@ -395,7 +269,7 @@ _npm_latest_version() {
       --user "$(id -u):$(id -g)" \
       -e HOME=/home/pi \
       -e npm_config_cache=/tmp/.npm-cache \
-      "${IMAGE_PREFIX}:core" \
+      "${IMAGE_PREFIX}:default" \
       npm view "$spec" version 2>/dev/null | tail -1 || true
   fi
 }
@@ -404,15 +278,14 @@ _npm_latest_version() {
 # mode: require  — install if missing; never check the registry
 #       upgrade  — bring to latest when npm is reachable, keep otherwise
 ensure_pi() {
-  local profile="$1"
-  local mode="${2:-require}"
-  local dry_run="${3:-false}"
+  local mode="${1:-require}"
+  local dry_run="${2:-false}"
   local config_dir
   config_dir="$(resolve_config_dir)"
-  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local image_tag="${IMAGE_PREFIX}:default"
   local installed latest pi_host
 
-  ensure_image "$profile" "$dry_run"
+  ensure_image "$dry_run"
 
   pi_host="$(resolve_pi_host_dir)"
   mkdir -p "$pi_host"
@@ -541,10 +414,9 @@ _pi_install_one() {
 # force=false — install missing, upgrade outdated npm extensions
 # force=true  — reinstall every listed extension
 sync_extensions_for() {
-  local profile="$1"
-  local force="${2:-false}"
-  local dry_run="${3:-false}"
-  local packages_file="$SCRIPT_DIR/config-seeds/extensions.txt"
+  local force="${1:-false}"
+  local dry_run="${2:-false}"
+  local packages_file="$SCRIPT_DIR/seed/extensions.txt"
   local config_dir
   config_dir="$(resolve_config_dir)"
 
@@ -568,13 +440,13 @@ sync_extensions_for() {
     return
   fi
 
-  ensure_image "$profile" "$dry_run"
-  ensure_pi "$profile" require "$dry_run"
+  ensure_image "$dry_run"
+  ensure_pi require "$dry_run"
 
-  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local image_tag="${IMAGE_PREFIX}:default"
   local exit_code=0 installed=0 upgraded=0 skipped=0 failed=0
 
-  echo "Syncing extensions for piw:$profile…"
+  echo "Syncing extensions…"
 
   for pkg in "${packages[@]}"; do
     local dir ver latest verb
@@ -651,8 +523,6 @@ sync_extensions_for() {
 # Specs dispatch to the manager that owns each ecosystem. Every install runs
 # inside the container and lands in the mounted store.
 _tool_install() {
-  local profile="$1"
-  shift
   if [[ $# -eq 0 ]]; then
     echo "ERROR: piw tool install needs at least one spec." >&2
     echo "  Example: piw tool install npm:typescript uv:ruff" >&2
@@ -662,20 +532,18 @@ _tool_install() {
   for spec in "$@"; do
     echo "INFO: Installing $spec into the tool store…"
     case "$spec" in
-    npm:*) _in_container "$profile" npm install --global --prefix /home/pi/.local "${spec#npm:}" ;;
-    uv:*) _in_container "$profile" env UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool install --force "${spec#uv:}" ;;
-    cargo:*) _in_container "$profile" cargo install --root /home/pi/.local "${spec#cargo:}" ;;
-    go:*) _in_container "$profile" env GOBIN=/home/pi/.local/bin go install "${spec#go:}" ;;
-    mise:*) _in_container "$profile" mise use -g "${spec#mise:}" ;;
-    bin:*) _in_container "$profile" mise use -g "github:${spec#bin:}" ;;
-    *) _in_container "$profile" mise use -g "$spec" ;;
+    npm:*) _in_container npm install --global --prefix /home/pi/.local "${spec#npm:}" ;;
+    uv:*) _in_container env UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool install --force "${spec#uv:}" ;;
+    cargo:*) _in_container cargo install --root /home/pi/.local "${spec#cargo:}" ;;
+    go:*) _in_container env GOBIN=/home/pi/.local/bin go install "${spec#go:}" ;;
+    mise:*) _in_container mise use -g "${spec#mise:}" ;;
+    bin:*) _in_container mise use -g "github:${spec#bin:}" ;;
+    *) _in_container mise use -g "$spec" ;;
     esac
   done
 }
 
 _tool_remove() {
-  local profile="$1"
-  shift
   if [[ $# -eq 0 ]]; then
     echo "ERROR: piw tool remove needs at least one spec." >&2
     exit 1
@@ -683,24 +551,23 @@ _tool_remove() {
   local spec
   for spec in "$@"; do
     case "$spec" in
-    npm:*) _in_container "$profile" npm uninstall --global --prefix /home/pi/.local "${spec#npm:}" ;;
-    uv:*) _in_container "$profile" uv tool uninstall "${spec#uv:}" ;;
-    cargo:*) _in_container "$profile" cargo uninstall --root /home/pi/.local "${spec#cargo:}" ;;
+    npm:*) _in_container npm uninstall --global --prefix /home/pi/.local "${spec#npm:}" ;;
+    uv:*) _in_container uv tool uninstall "${spec#uv:}" ;;
+    cargo:*) _in_container cargo uninstall --root /home/pi/.local "${spec#cargo:}" ;;
     go:*)
       echo "ERROR: go install has no uninstall." >&2
       echo "  Remove the binary under $(resolve_tools_dir)/bin by hand." >&2
       exit 1
       ;;
-    mise:*) _in_container "$profile" mise unuse -g "${spec#mise:}" ;;
-    bin:*) _in_container "$profile" mise unuse -g "github:${spec#bin:}" ;;
-    *) _in_container "$profile" mise unuse -g "$spec" ;;
+    mise:*) _in_container mise unuse -g "${spec#mise:}" ;;
+    bin:*) _in_container mise unuse -g "github:${spec#bin:}" ;;
+    *) _in_container mise unuse -g "$spec" ;;
     esac
   done
 }
 
 _tool_list() {
-  local profile="$1"
-  _in_container "$profile" sh -c '
+  _in_container sh -c '
     echo "== binaries"
     ls -1 /home/pi/.local/bin 2>/dev/null || true
     echo
@@ -720,14 +587,12 @@ _tool_list() {
 
 # ── Command: manage the shared tool store ────────────────────────────────────
 cmd_tool() {
-  local profile="$1"
-  shift
   local sub="${1:-list}"
   [[ $# -gt 0 ]] && shift
   case "$sub" in
-  install) _tool_install "$profile" "$@" ;;
-  remove) _tool_remove "$profile" "$@" ;;
-  list) _tool_list "$profile" ;;
+  install) _tool_install "$@" ;;
+  remove) _tool_remove "$@" ;;
+  list) _tool_list ;;
   *)
     echo "ERROR: Unknown 'piw tool' subcommand: $sub" >&2
     echo "Usage: piw tool install <spec>... | list | remove <spec>..." >&2
@@ -738,13 +603,10 @@ cmd_tool() {
 
 # ── Command: launch pi in Docker ──────────────────────────────────────────────
 cmd_launch() {
-  local profile="$1"
-  local workspace="$2"
-  local resume="${3:-false}"
-  local mode="${4:-permissive}"
-  local image_tag="${IMAGE_PREFIX}:${profile}"
-
-  validate_profile "$profile"
+  local workspace="$1"
+  local resume="${2:-false}"
+  local mode="${3:-permissive}"
+  local image_tag="${IMAGE_PREFIX}:default"
 
   # Workspace must exist
   if [[ ! -d "$workspace" ]]; then
@@ -752,24 +614,29 @@ cmd_launch() {
     exit 1
   fi
 
-  # Resolve config dir (default: .pi/agent/ inside harness)
+  # Resolve config dir (default: .local/agent inside harness)
   local config_dir
   config_dir="$(resolve_config_dir)"
+
+  # Validate the mode before any expensive work.
+  validate_mode "$mode"
+  local mode_config
+  mode_config="$(resolve_mode_config "$mode")"
+
   bootstrap_config "$config_dir"
   bootstrap_permissions
-  ensure_tools_dir
+  ensure_local_namespace
 
-  # Ensure APPEND_SYSTEM.md exists
+  # The harness ships APPEND_SYSTEM.md. A missing file means the tree is broken.
   local append_src="$SCRIPT_DIR/skills/system/workflow/APPEND_SYSTEM.md"
   if [[ ! -f "$append_src" ]]; then
-    echo "WARNING: $append_src not found. Creating empty placeholder."
-    mkdir -p "$(dirname "$append_src")"
-    touch "$append_src"
+    echo "ERROR: $append_src not found. The harness tree is incomplete." >&2
+    exit 1
   fi
 
   # ensure_pi builds the image when missing (ensure_image) and checks the
   # pi install in the config mount.
-  ensure_pi "$profile" require
+  ensure_pi require
 
   # Cheap pre-exec guard: a corrupted/empty app mount that still passes the
   # version read would otherwise die inside the container with an opaque
@@ -778,7 +645,7 @@ cmd_launch() {
   pi_host="$(resolve_pi_host_dir)"
   if [[ ! -x "$pi_host/node_modules/.bin/pi" ]]; then
     echo "ERROR: pi CLI missing in app mount ($pi_host)." >&2
-    echo "  Run 'piw update' (or delete .pi/app and retry) to repair." >&2
+    echo "  Run 'piw update' (or delete .local/app and retry) to repair." >&2
     exit 1
   fi
 
@@ -817,13 +684,7 @@ cmd_launch() {
   [[ -f "$HOME/.gitconfig" ]] && git_config_volumes+=(-v "$HOME/.gitconfig:/home/pi/.gitconfig:z,ro")
   [[ -f "$HOME/.config/git/config" ]] && git_config_volumes+=(-v "$HOME/.config/git:/home/pi/.config/git:z,ro")
 
-  # Variant-specific skill mount (documents the active variant's toolset)
-  local variant_skill="$SCRIPT_DIR/variants/$profile/SKILL.md"
-  local -a variant_skill_volumes=()
-  [[ -f "$variant_skill" ]] && variant_skill_volumes+=(-v "$variant_skill:/home/pi/.pi/agent/skills/variant/SKILL.md:z,ro")
-
   # Pi app mount (ensure_pi created it moments ago; guard anyway)
-  local pi_host
   pi_host="$(resolve_pi_host_dir)"
   local -a pi_volumes=()
   [[ -d "$pi_host" ]] && pi_volumes+=(-v "$pi_host:/opt/pi:z")
@@ -832,11 +693,6 @@ cmd_launch() {
   [[ "$resume" == "true" ]] && pi_args+=(-r)
   local session_flag=""
   [[ "$resume" == "true" ]] && session_flag=" (resume mode)"
-
-  # Validate and resolve mode config
-  validate_mode "$mode"
-  local mode_config
-  mode_config="$(resolve_mode_config "$mode")"
 
   # Mode-specific Docker restrictions
   local mode_vol_suffix=""
@@ -848,7 +704,7 @@ cmd_launch() {
     mode_docker_flags+=(--network none)
   fi
 
-  echo "INFO: Launching piw ($profile) in $workspace (mode: $mode)$session_flag"
+  echo "INFO: Launching piw in $workspace (mode: $mode)$session_flag"
   exec docker run --rm -it \
     --add-host host.docker.internal:host-gateway \
     --user "$(id -u):$(id -g)" \
@@ -862,11 +718,9 @@ cmd_launch() {
     -v "$config_dir:/home/pi/.pi/agent:z" \
     -v "$append_src:/home/pi/.pi/agent/APPEND_SYSTEM.md:z,ro" \
     -v "$SCRIPT_DIR/skills:/home/pi/.pi/agent/skills:z" \
-    -v "$SCRIPT_DIR/extensions:/home/pi/.pi/agent/extensions:z" \
     -v "$SCRIPT_DIR/agents:/home/pi/.pi/agent/agents:z" \
     ${mode_config:+-v "$mode_config:/home/pi/.pi/agent/extensions/pi-permission-system/config.json:z"} \
     "${git_config_volumes[@]}" \
-    "${variant_skill_volumes[@]}" \
     "${pi_volumes[@]}" \
     -v "$workspace:$workspace:z${mode_vol_suffix}" \
     -v "$(resolve_tools_dir):/home/pi/.local:z${tools_suffix}" \
@@ -875,73 +729,36 @@ cmd_launch() {
     pi "${pi_args[@]}"
 }
 
-# ── Internal: build a single variant image (no package install) ───────────────
+# ── Internal: build the default image (no package install) ──────────────────
 _build_single() {
-  local profile="$1"
-  local no_cache="$2"
-  local offline="$3"
-  local variant_dir="$SCRIPT_DIR/variants/$profile"
-  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local no_cache="$1"
+  local image_tag="${IMAGE_PREFIX}:default"
 
-  validate_profile "$profile"
-  ensure_archives "$profile" "$offline"
+  if [[ ! -f "$SCRIPT_DIR/Dockerfile" ]]; then
+    echo "ERROR: Dockerfile not found at $SCRIPT_DIR/Dockerfile" >&2
+    echo "  The default image builds from the repository root Dockerfile." >&2
+    exit 1
+  fi
 
-  local -a build_args=(-f "$variant_dir/Dockerfile" -t "$image_tag" "$SCRIPT_DIR")
+  local -a build_args=(-f "$SCRIPT_DIR/Dockerfile" -t "$image_tag" "$SCRIPT_DIR")
   if [[ "$no_cache" == "true" ]]; then
     build_args=("--no-cache" "${build_args[@]}")
   fi
 
-  echo "INFO: Building piw:$profile…"
+  echo "INFO: Building $image_tag…"
   docker build "${build_args[@]}"
   echo "INFO: Build complete: $image_tag"
 }
 
-# ── Command: build variant images + provision the config mount ───────────────
+# ── Command: build the default image + provision the config mount ────────────
 cmd_build() {
-  local profile="$1"
-  local no_cache="${2:-false}"
-  local do_all="${3:-false}"
-  local offline="${4:-false}"
+  local no_cache="${1:-false}"
 
-  local -a targets=()
-  if [[ "$do_all" == "true" ]]; then
-    mapfile -t targets < <(variant_names)
-  else
-    targets=("$profile")
-  fi
+  _build_single "$no_cache"
 
-  # A variant built FROM another variant image needs its base rebuilt first.
-  # Without this, a stale base silently yields a stale variant. The layer
-  # cache makes an unchanged base rebuild cheap.
-  local -a bases=()
-  local p base
-  for p in "${targets[@]}"; do
-    base="$(_variant_base "$p")"
-    [[ -z "$base" ]] && continue
-    [[ " ${targets[*]} " == *" $base "* ]] && continue
-    [[ " ${bases[*]:-} " == *" $base "* ]] && continue
-    bases+=("$base")
-  done
-
-  if (( ${#bases[@]} > 0 )); then
-    echo "INFO: Rebuilding base image(s) first: ${bases[*]}"
-    for p in "${bases[@]}"; do
-      echo "--- $p ---"
-      _build_single "$p" "$no_cache" "$offline"
-    done
-  fi
-
-  for p in "${targets[@]}"; do
-    echo "--- $p ---"
-    _build_single "$p" "$no_cache" "$offline"
-  done
-
-  # pi is mount-level: provision once, then sync extensions per variant
-  ensure_pi "${targets[0]}" require
-  for p in "${targets[@]}"; do
-    echo "--- $p ---"
-    sync_extensions_for "$p"
-  done
+  # pi is mount-level: provision once, then sync extensions
+  ensure_pi require
+  sync_extensions_for
 
   cmd_generate_catalog  # refresh catalog, skills may have changed
 }
@@ -971,9 +788,10 @@ cmd_install() {
     echo "✓ Installed: $link_path → $piw_path"
   fi
 
-  # Seed configs (same as launch does)
+  # Seed configs and create the namespace (same as launch does)
   local config_dir
   config_dir="$(resolve_config_dir)"
+  ensure_local_namespace
   bootstrap_config "$config_dir"
   bootstrap_permissions
 
@@ -1023,10 +841,9 @@ cmd_uninstall() {
 
 # ── Command: diagnose harness setup ──────────────────────────────────────────
 cmd_doctor() {
-  local profile="$1"
   local errors=0
 
-  echo "piw doctor — diagnosing \"$profile\" profile"
+  echo "piw doctor - diagnosing the harness"
   echo ""
 
   # ── Docker ──
@@ -1044,24 +861,8 @@ cmd_doctor() {
     ((errors+=1))
   fi
 
-  # ── Variant ──
-  echo "── Variant ($profile) ──"
-  local variant_dir="$SCRIPT_DIR/variants/$profile"
-  if [[ -d "$variant_dir" ]]; then
-    echo "  ✓ Variant directory: $variant_dir"
-    if [[ -f "$variant_dir/Dockerfile" ]]; then
-      echo "  ✓ Dockerfile exists"
-    else
-      echo "  ✗ No Dockerfile in $variant_dir"
-      ((errors+=1))
-    fi
-  else
-    echo "  ✗ Variant directory not found: $variant_dir"
-    ((errors+=1))
-  fi
-
   # ── Docker image ──
-  local image_tag="${IMAGE_PREFIX}:${profile}"
+  local image_tag="${IMAGE_PREFIX}:default"
   if docker image inspect "$image_tag" &>/dev/null 2>&1; then
     echo "  ✓ Docker image built: $image_tag"
   else
@@ -1070,13 +871,13 @@ cmd_doctor() {
 
   # ── Environment ──
   echo "── Environment ──"
-  if [[ -f "$SCRIPT_DIR/.env" ]]; then
-    echo "  ✓ .env file exists"
-    if grep -qP '^[A-Z_]+=\s*$' "$SCRIPT_DIR/.env" 2>/dev/null; then
-      echo "  ⚠ Some variables in .env are empty (placeholders?)"
+  if [[ -f "$SCRIPT_DIR/.local/env" ]]; then
+    echo "  ✓ .local/env file exists"
+    if grep -qP '^[A-Z_]+=\s*$' "$SCRIPT_DIR/.local/env" 2>/dev/null; then
+      echo "  ⚠ Some variables in .local/env are empty (placeholders?)"
     fi
   else
-    echo "  ⚠ .env not found (copy .env.example to .env)"
+    echo "  ⚠ .local/env not found (copy .env.example to .local/env)"
   fi
 
   local found_keys=0
@@ -1087,7 +888,7 @@ cmd_doctor() {
     fi
   done
   if [[ $found_keys -eq 0 ]]; then
-    echo "  ⚠ No API keys found (set at least one in .env or export it)"
+    echo "  ⚠ No API keys found (set at least one in .local/env or export it)"
   fi
 
   # ── Config directory ──
@@ -1112,10 +913,12 @@ cmd_doctor() {
     echo "  ⚠ Workflow skill directory not found: skills/system/workflow"
   fi
   [[ -d "$SCRIPT_DIR/skills/system" ]] && echo "  ✓ skills/system directory" || echo "  ⚠ skills/system not found (optional)"
-  [[ -d "$SCRIPT_DIR/extensions" ]] && echo "  ✓ Extensions directory" || echo "  ⚠ Extensions directory not found"
+  local live_ext_dir
+  live_ext_dir="$(resolve_config_dir)/extensions/pi-permission-system"
+  [[ -d "$live_ext_dir" ]] && echo "  ✓ Live extension directory" || echo "  ⚠ Live extension directory not found (seeded on first launch)"
 
   # ── Pi (app mount) ──
-  echo "── Pi (app mount .pi/app) ──"
+  echo "── Pi (app mount .local/app) ──"
   local pi_installed pi_latest
   pi_installed="$(_pi_installed_version "$(resolve_pi_host_dir)")"
   pi_latest="$(_npm_latest_version "$PI_NPM_PKG")"
@@ -1134,10 +937,10 @@ cmd_doctor() {
     ((errors+=1))
   fi
 
-  # ── Extensions (config-seeds manifest vs config mount) ──
+  # ── Extensions (seed manifest vs config mount) ──
   echo "── Extensions ──"
-  if [[ -f "$SCRIPT_DIR/config-seeds/extensions.txt" ]]; then
-    echo "  ✓ config-seeds/extensions.txt found"
+  if [[ -f "$SCRIPT_DIR/seed/extensions.txt" ]]; then
+    echo "  ✓ seed/extensions.txt found"
     local checked=0 missing=0 outdated=0
     while IFS= read -r line; do
       line="${line/#"${line%%[![:space:]]*}"/}"
@@ -1167,28 +970,13 @@ cmd_doctor() {
       else
         echo "  ✓ $line (git)"
       fi
-    done <"$SCRIPT_DIR/config-seeds/extensions.txt"
+    done <"$SCRIPT_DIR/seed/extensions.txt"
     echo "  Extensions: $((checked - missing))/$checked current, $outdated outdated"
     if [[ "$missing" -gt 0 || "$outdated" -gt 0 ]]; then
       echo "  ⚠ Run 'piw update' to sync extensions"
     fi
   else
     echo "  ⚠ No extensions.txt found"
-  fi
-
-  # ── Build archives ──
-  echo "── Build archives ──"
-  local missing_archives=0
-  for file in $(_profile_archives "$profile"); do
-    if [[ -f "$SCRIPT_DIR/build/archives/$file" ]]; then
-      echo "  ✓ $file"
-    else
-      echo "  ✗ $file (missing — fetch manually, see build/README.md)"
-      ((missing_archives+=1))
-    fi
-  done
-  if [[ "$missing_archives" -eq 0 ]]; then
-    echo "  ✓ All build archives present for $profile"
   fi
 
   # ── Skills catalog freshness ──
@@ -1248,14 +1036,11 @@ cmd_generate_catalog() {
 
 # ── Command: update harness, images, pi, and extensions ──────────────────────
 cmd_update() {
-  local profile="$1"
-  local no_cache="${2:-false}"
-  local do_all="${3:-false}"
-  local build_only="${4:-false}"
-  local install_only="${5:-false}"
-  local offline="${6:-false}"
-  local dry_run="${7:-false}"
-  local force="${8:-false}"
+  local no_cache="${1:-false}"
+  local build_only="${2:-false}"
+  local install_only="${3:-false}"
+  local dry_run="${4:-false}"
+  local force="${5:-false}"
 
   # 1) Pull harness updates (ff-only; never stash). Fail → abort.
   if [[ "$dry_run" != "true" ]]; then
@@ -1275,33 +1060,19 @@ cmd_update() {
     echo "INFO: (dry-run) Skipping git pull."
   fi
 
-  # Determine target variant(s)
-  local -a targets=()
-  if [[ "$do_all" == "true" ]]; then
-    mapfile -t targets < <(variant_names)
-  else
-    targets=("$profile")
-  fi
-
-  # 2) Rebuild images
+  # 2) Rebuild the default image
   if [[ "$install_only" != "true" ]]; then
-    for p in "${targets[@]}"; do
-      echo "--- $p ---"
-      if [[ "$dry_run" == "true" ]]; then
-        echo "(dry-run) Would rebuild piw:$p"
-        continue
-      fi
-      _build_single "$p" "$no_cache" "$offline"
-    done
+    if [[ "$dry_run" == "true" ]]; then
+      echo "(dry-run) Would rebuild piw:default"
+    else
+      _build_single "$no_cache"
+    fi
   fi
 
   # 3) Mount-level maintenance: pi (upgrade) + extensions (sync)
   if [[ "$build_only" != "true" ]]; then
-    ensure_pi "${targets[0]}" upgrade "$dry_run"
-    for p in "${targets[@]}"; do
-      echo "--- $p ---"
-      sync_extensions_for "$p" "$force" "$dry_run"
-    done
+    ensure_pi upgrade "$dry_run"
+    sync_extensions_for "$force" "$dry_run"
   fi
 
   echo ""
@@ -1316,43 +1087,24 @@ cmd_update() {
 # ── Main ──────────────────────────────────────────────────────────────────────
 load_env
 
-PROFILE="${PIW_DEFAULT_PROFILE:-core}"
 COMMAND=""
 NO_CACHE="false"
 RESUME="false"
-DO_ALL="false"
 FORCE="false"
 DRY_RUN="false"
 BUILD_ONLY="false"
 INSTALL_ONLY="false"
-OFFLINE="false"
 MODE="${PIW_MODE:-permissive}"
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --profile)
-    if [[ -z "${2:-}" ]]; then
-      echo "ERROR: --profile requires an argument" >&2
-      exit 1
-    fi
-    PROFILE="$2"
-    shift 2
-    ;;
   --no-cache)
     NO_CACHE="true"
     shift
     ;;
-  --offline)
-    OFFLINE="true"
-    shift
-    ;;
   -r | --resume)
     RESUME="true"
-    shift
-    ;;
-  --all)
-    DO_ALL="true"
     shift
     ;;
   --force)
@@ -1402,7 +1154,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   -*)
     echo "ERROR: Unknown option: $1" >&2
-    echo "Usage: piw [--profile <name>] [--resume|-r] [--install|--uninstall] [--help]" >&2
+    echo "Usage: piw [--resume|-r] [--mode <name>] [--install|--uninstall] [--help]" >&2
     exit 1
     ;;
   *)
@@ -1420,10 +1172,10 @@ fi
 
 case "$COMMAND" in
 build)
-  cmd_build "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$OFFLINE"
+  cmd_build "$NO_CACHE"
   ;;
 update)
-  cmd_update "${POSITIONAL[0]:-$PROFILE}" "$NO_CACHE" "$DO_ALL" "$BUILD_ONLY" "$INSTALL_ONLY" "$OFFLINE" "$DRY_RUN" "$FORCE"
+  cmd_update "$NO_CACHE" "$BUILD_ONLY" "$INSTALL_ONLY" "$DRY_RUN" "$FORCE"
   ;;
 install)
   cmd_install "${POSITIONAL[0]:-}"
@@ -1432,15 +1184,15 @@ uninstall)
   cmd_uninstall "${POSITIONAL[0]:-}"
   ;;
 doctor)
-  cmd_doctor "${POSITIONAL[0]:-$PROFILE}"
+  cmd_doctor
   ;;
 generate-catalog)
   cmd_generate_catalog
   ;;
 tool)
-  cmd_tool "$PROFILE" "${POSITIONAL[@]}"
+  cmd_tool "${POSITIONAL[@]}"
   ;;
 *)
-  cmd_launch "$PROFILE" "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"
+  cmd_launch "${POSITIONAL[0]:-$(pwd)}" "$RESUME" "$MODE"
   ;;
 esac

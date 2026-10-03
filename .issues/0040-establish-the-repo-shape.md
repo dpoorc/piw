@@ -1,7 +1,7 @@
 ---
 id: 40
 title: Establish the repo shape
-status: open
+status: closed
 priority: high
 labels:
     - kind:enhancement
@@ -12,6 +12,7 @@ relations:
         - 42
 created: "2026-10-03"
 updated: "2026-10-03"
+closed: "2026-10-03"
 ---
 
 ## Parent
@@ -31,6 +32,11 @@ The variant scaffolding goes, because variants go: the placeholder skill that ex
 - [ ] `skills/variant/` and the `variants/` tree are gone, along with the variant skill mount
 - [ ] The image prefix is `piw`, so images are `piw:default` and `piw:local`
 - [ ] `git status` is clean after a launch, and no tracked file is written after install
+
+## Note
+
+The starter manifest and the starter mise config are delivered by #41.
+This slice renames the seed tree and creates the namespace.
 
 ## Blocked by
 

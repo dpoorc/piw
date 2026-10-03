@@ -56,3 +56,36 @@ explicitly, so pi does not need `.pi/`.
   in `git status`.
 - **Move the generated artifacts into the namespace too.** Rejected:
   Docker cannot copy from outside the build context.
+
+## Amendment: flattened layout (2026-10-03)
+
+#24 revised the layout before implementation. The `config/` directory and
+the top-level `extensions/` directory are gone. `piw.conf` and `mise/` sit
+directly under `.local/`. The permission config moved inside the agent
+directory to `.local/agent/extensions/pi-permission-system/`, because
+extension state belongs to pi. The amendment adds `.local/agents/skills/`
+for the Agent Skills convention.
+
+```
+.local/
+├── agent/          pi's agent directory, including extensions/
+├── agents/skills/  the Agent Skills convention
+├── app/            pi's program install
+├── layers/         user layers, the build context
+├── mise/           the mise config and lockfile
+├── store/          the tool store
+├── env             secrets
+└── piw.conf        the layer manifest
+```
+
+The names `.local/agent` and `.local/agents` differ by one character and
+hold different things. `.local/agent` is pi's namespace.
+`.local/agents/skills` is the cross-tool Agent Skills convention.
+
+The amendment has these consequences:
+
+- The `.local/extensions/` directory is removed. Extension state lives
+  inside the agent directory, which pi writes.
+- The secrets file stays at `.local/env`. The deny-rule work does not change.
+- Only the ignored namespace changes shape. The tracked seed tree keeps
+  its role.

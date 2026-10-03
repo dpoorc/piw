@@ -3,7 +3,7 @@
 #
 # Drives the real piw with a stub docker on PATH, so argument parsing, image
 # tags, mounts, environment, and the container command are all exercised.
-# Docker is not required, and the repo is never touched.
+# Docker is not required, and the real repo is never touched.
 #
 #   tests/run.sh
 set -uo pipefail
@@ -16,23 +16,33 @@ WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
 # ── Sandbox ──────────────────────────────────────────────────────────────────
-# A copy of the harness with a fake variants tree and dummy archives, so no
-# test reaches the network or the real build inputs.
+# A copy of the harness with a dummy Dockerfile and seed tree, so no test
+# reaches the network or the real build inputs.
 SANDBOX="$WORK/harness"
-mkdir -p "$SANDBOX/variants/core" "$SANDBOX/variants/devops" \
-  "$SANDBOX/variants/workstation" "$SANDBOX/build/archives"
+mkdir -p "$SANDBOX/skills/system/workflow" "$SANDBOX/skills/vendor"
 cp "$ROOT/piw" "$SANDBOX/piw"
-printf 'FROM scratch\n' > "$SANDBOX/variants/core/Dockerfile"
-printf 'FROM piw:core\n' > "$SANDBOX/variants/devops/Dockerfile"
-printf 'FROM piw:core\n' > "$SANDBOX/variants/workstation/Dockerfile"
+cp "$ROOT/.gitignore" "$SANDBOX/.gitignore"
+cp "$ROOT/skills/generate-catalog.sh" "$SANDBOX/skills/generate-catalog.sh"
+cp "$ROOT/skills/system/workflow/SKILL.md" "$SANDBOX/skills/system/workflow/SKILL.md"
+cp "$ROOT/skills/system/workflow/APPEND_SYSTEM.md" \
+  "$SANDBOX/skills/system/workflow/APPEND_SYSTEM.md"
+cp -r "$ROOT/seed" "$SANDBOX/seed"
+printf 'FROM scratch\n' > "$SANDBOX/Dockerfile"
 
-# Dummy file for every archive piw knows, so ensure_archives never downloads.
-# The names come from piw itself, so the fixtures cannot drift out of date.
-for profile in core devops workstation; do
-  while read -r archive; do
-    [[ -n "$archive" ]] && : > "$SANDBOX/build/archives/$archive"
-  done < <(bash -c "source <(sed -n '/^_profile_archives()/,/^}/p' '$ROOT/piw'); _profile_archives $profile")
-done
+# A fake pi install, so ensure_pi takes the offline "already present" path.
+PI_APP="$SANDBOX/.local/app"
+mkdir -p "$PI_APP/node_modules/.bin" \
+  "$PI_APP/node_modules/@earendil-works/pi-coding-agent"
+printf '{"name":"@earendil-works/pi-coding-agent","version":"9.9.9"}\n' \
+  > "$PI_APP/node_modules/@earendil-works/pi-coding-agent/package.json"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PI_APP/node_modules/.bin/pi"
+chmod +x "$PI_APP/node_modules/.bin/pi"
+
+# Sandbox git repo: proves that piw writes only into the ignored namespace.
+git -C "$SANDBOX" init -q
+git -C "$SANDBOX" -c user.name=test -c user.email=test@example.com add -A
+git -C "$SANDBOX" -c user.name=test -c user.email=test@example.com \
+  commit -qm "sandbox"
 
 # ── Stub docker ──────────────────────────────────────────────────────────────
 STUB="$WORK/stub"
@@ -41,7 +51,7 @@ cp "$ROOT/tests/stub-docker" "$STUB/docker"
 chmod +x "$STUB/docker"
 
 # Fail loudly if anything reaches for the network. A missing fixture must not
-# become a silent 600 MB download.
+# become a silent download.
 cat > "$STUB/curl" <<'STUB'
 #!/usr/bin/env bash
 echo "test harness: unexpected curl: $*" >&2
@@ -49,7 +59,7 @@ exit 1
 STUB
 chmod +x "$STUB/curl"
 
-# Keep piw from consulting a real npm registry for the pi version.
+# Keep piw from consulting a real npm registry for versions.
 printf '#!/usr/bin/env bash\nexit 1\n' > "$STUB/npm"
 chmod +x "$STUB/npm"
 export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
@@ -75,17 +85,31 @@ assert_not_contains() {
 assert_absent() { # name path
   if [[ ! -e "$2" ]]; then ok "$1"; else bad "$1 ($2 exists)"; fi
 }
+assert_exists() { # name path
+  if [[ -e "$2" ]]; then ok "$1"; else bad "$1 ($2 missing)"; fi
+}
 
 # ── Cases ────────────────────────────────────────────────────────────────────
+printf '== piw tool list (namespace creation)\n'
+reset_log
+piw tool list >/dev/null 2>&1
+assert_contains "runs in the container" "$(log)" "sh -c"
+assert_contains "lists mise tools" "$(log)" "mise ls"
+assert_exists "creates .local/agent" "$SANDBOX/.local/agent"
+assert_exists "creates .local/store/bin" "$SANDBOX/.local/store/bin"
+assert_exists "creates .local/app" "$SANDBOX/.local/app"
+assert_exists "creates .local/mise" "$SANDBOX/.local/mise"
+assert_exists "creates .local/layers" "$SANDBOX/.local/layers"
+assert_exists "creates .local/agents/skills" "$SANDBOX/.local/agents/skills"
+
 printf '== piw tool install\n'
 reset_log
 out="$(piw tool install opentofu 2>&1)"
 status=$?
 assert_status "exits 0" "$status" "0"
 assert_contains "reaches the container" "$(log)" "mise use -g opentofu"
-assert_contains "mounts the store" "$(log)" "-v $SANDBOX/.pi/store:/home/pi/.local:z"
+assert_contains "mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
 assert_not_contains "does not run the top-level install command" "$out" "Installed:"
-assert_absent "creates no <spec>/piw directory" "$SANDBOX/opentofu"
 
 printf '== piw tool install (every prefix)\n'
 reset_log
@@ -96,12 +120,6 @@ assert_contains "uv" "$(log)" "UV_TOOL_BIN_DIR=/home/pi/.local/bin uv tool insta
 assert_contains "cargo" "$(log)" "cargo install --root /home/pi/.local ripgrep"
 assert_contains "go" "$(log)" "GOBIN=/home/pi/.local/bin go install example.com/x"
 assert_contains "bin" "$(log)" "mise use -g github:opentofu/opentofu@v1.12.6"
-
-printf '== piw tool list\n'
-reset_log
-piw tool list >/dev/null 2>&1
-assert_contains "runs in the container" "$(log)" "sh -c"
-assert_contains "lists mise tools" "$(log)" "mise ls"
 
 printf '== piw tool remove\n'
 reset_log
@@ -117,31 +135,68 @@ out="$(piw tool install 2>&1)"
 assert_status "install with no spec exits 1" "$?" "1"
 assert_contains "install with no spec explains itself" "$out" "needs at least one spec"
 
-printf '== piw --install\n'
+printf '== piw build (default image)\n'
 reset_log
-bindir="$WORK/bin"
-piw --install "$bindir" >/dev/null 2>&1
-if [[ -L "$bindir/piw" ]]; then
-  ok "--install still creates the symlink"
-else
-  bad "--install still creates the symlink"
-fi
+piw build >/dev/null 2>&1
+assert_contains "builds piw:default from the root Dockerfile" "$(log)" \
+  "build -f $SANDBOX/Dockerfile -t piw:default $SANDBOX"
 
-printf '== piw build (base ordering)\n'
+printf '== piw launch
+'
+mkdir -p "$WORK/proj"
 reset_log
-piw build workstation >/dev/null 2>&1
-core_line="$(log | grep -n 'variants/core/Dockerfile' | head -1 | cut -d: -f1)"
-work_line="$(log | grep -n 'variants/workstation/Dockerfile' | head -1 | cut -d: -f1)"
-if [[ -n "$core_line" && -n "$work_line" && "$core_line" -lt "$work_line" ]]; then
-  ok "builds core before workstation"
-else
-  bad "builds core before workstation (core=$core_line workstation=$work_line)"
-fi
+out="$(piw "$WORK/proj" 2>&1)"
+status=$?
+assert_status "launch exits 0" "$status" "0"
+assert_contains "mounts the agent directory" "$(log)" "-v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
+assert_contains "mounts the store" "$(log)" "-v $SANDBOX/.local/store:/home/pi/.local:z"
+assert_contains "mounts the workspace" "$(log)" "-v $WORK/proj:$WORK/proj:z"
+assert_contains "runs pi in the default image" "$(log)" "-w $WORK/proj piw:default pi"
+
+printf '== piw build (missing Dockerfile)\n'
+mv "$SANDBOX/Dockerfile" "$WORK/Dockerfile.bak"
+reset_log
+out="$(piw build 2>&1)"
+status=$?
+assert_status "build fails without the Dockerfile" "$status" "1"
+assert_contains "build names the missing file" "$out" "Dockerfile not found"
+mv "$WORK/Dockerfile.bak" "$SANDBOX/Dockerfile"
 
 printf '== piw --help\n'
 out="$(piw --help 2>&1)"
 assert_status "help exits 0" "$?" "0"
 assert_contains "help lists the tool command" "$out" "piw tool install"
+assert_contains "help names the default image" "$out" "Build the default image"
+
+printf '== piw --install\n'
+reset_log
+bindir="$WORK/bin"
+piw --install "$bindir" >/dev/null 2>&1
+if [[ -L "$bindir/piw" ]]; then
+  ok "--install creates the symlink"
+else
+  bad "--install creates the symlink"
+fi
+assert_exists "install creates the namespace" "$SANDBOX/.local/store/bin"
+
+printf '== no retired names\n'
+# The pattern is split so this test file does not match its own search.
+if grep -Eq 'varia[n]ts|config[-]seeds|PIW_DEFAULT_PROFILE|pi-harness' "$SANDBOX/piw"; then
+  bad "piw names no retired variant paths"
+else
+  ok "piw names no retired variant paths"
+fi
+
+printf '== sandbox stays clean\n'
+if [[ -z "$(git -C "$SANDBOX" status --porcelain)" ]]; then
+  ok "piw writes only into the ignored namespace"
+else
+  bad "piw mutated the tracked tree:"
+  git -C "$SANDBOX" status --porcelain | sed 's/^/    /'
+fi
+assert_absent "no .pi/ in the sandbox" "$SANDBOX/.pi"
+assert_absent "no extensions/ in the sandbox" "$SANDBOX/extensions"
+assert_absent "no root env in the sandbox" "$SANDBOX/.env"
 
 # ── Result ───────────────────────────────────────────────────────────────────
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

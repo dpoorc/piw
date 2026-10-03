@@ -53,6 +53,13 @@ pi's own state directory: sessions, authentication, models, and settings.
 It lives at `.local/agent`.
 _Avoid_: config dir, PI_CONFIG_DIR
 
+**Agent Skills directory**:
+The cross-tool skills directory at `.local/agents/skills`, mounted at
+`/home/pi/.agents/skills`. It is not the agent directory. The two names
+differ by one character. `.local/agent` is pi's namespace.
+`.local/agents/skills` follows the Agent Skills convention and other agent
+tools read it.
+
 **Extension**:
 A pi package that adds behaviour. pi owns the installation of extensions.
 _Avoid_: plugin, addon
