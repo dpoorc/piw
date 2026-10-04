@@ -1,21 +1,20 @@
 {
   "permission": {
     "*": "deny",
-
     "path": {
       "*": "allow",
       ".env": "deny",
       ".env.*": "deny",
+      "*.env": "deny",
+      "*.env.*": "deny",
       ".env.example": "allow",
       ".env.template": "allow",
       "*.pem": "deny",
       "*.key": "deny"
     },
-
     "read": "allow",
     "write": "deny",
     "edit": "deny",
-
     "bash": {
       "*": "ask",
       "ls *": "allow",
@@ -46,7 +45,6 @@
       "kill *": "deny",
       "pkill *": "deny"
     },
-
     "external_directory": {
       "*": "deny"
     }

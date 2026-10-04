@@ -39,8 +39,9 @@ explicitly, so pi does not need `.pi/`.
 - `.local/` sits inside the workspace when the harness is self-hosted, so
   the agent can read it. Deny rules are required for the secrets and for
   pi's `auth.json`.
-- The secrets file is `.local/env`. The permission rules match the basename
-  `.env`, so they must be updated to match the new name.
+- The secrets file is `.local/.env`. Its basename stays `.env`, so the
+  existing permission deny rules keep matching. No rule change is needed
+  for it.
 - Generated artifacts in tracked directories stay where they are. They are
   generated, not user-owned, and `build/archives/` must remain in the
   Docker build context.
@@ -86,6 +87,7 @@ The amendment has these consequences:
 
 - The `.local/extensions/` directory is removed. Extension state lives
   inside the agent directory, which pi writes.
-- The secrets file stays at `.local/env`. The deny-rule work does not change.
+- The secrets file stays at `.local/.env`. Its basename keeps the existing
+  deny rules matching.
 - Only the ignored namespace changes shape. The tracked seed tree keeps
   its role.

@@ -1,21 +1,20 @@
 {
   "permission": {
     "*": "ask",
-
     "path": {
       "*": "allow",
       ".env": "deny",
       ".env.*": "deny",
+      "*.env": "deny",
+      "*.env.*": "deny",
       ".env.example": "allow",
       ".env.template": "allow",
       "*.pem": "deny",
       "*.key": "deny"
     },
-
     "read": "allow",
     "write": "ask",
     "edit": "ask",
-
     "bash": {
       "*": "ask",
       "ls *": "allow",
@@ -55,7 +54,6 @@
       "kubectl drain *": "ask",
       "helm delete *": "ask"
     },
-
     "external_directory": {
       "*": "ask",
       "/home/pi/.pi/agent/*": "allow"

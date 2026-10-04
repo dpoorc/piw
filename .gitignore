@@ -1,6 +1,6 @@
 # ── Secrets ───────────────────────────────────────────────────────────────────
 # .env is the pre-.local/ location. It stays ignored until the user moves it
-# to .local/env.
+# to .local/.env. The .local/ rule below covers the new location.
 .env
 api.key
 

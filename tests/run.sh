@@ -281,14 +281,14 @@ assert_output "launch argv is exact" "$run_line" \
   "run --rm -it $seam_base -v $WORK/proj:$WORK/proj:z $seam_layers -w $WORK/proj piw:default pi"
 
 printf '== piw launch passes the env file\n'
-printf 'ANTHROPIC_API_KEY=test-key\n' > "$SANDBOX/.local/env"
+printf 'ANTHROPIC_API_KEY=test-key\n' > "$SANDBOX/.local/.env"
 sync_label
 reset_log
 out="$(ANTHROPIC_API_KEY=host-only piw "$WORK/proj" 2>&1)"
 assert_output "passes the env file and does not forward a host API key" \
   "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)" \
-  "run --rm -it ${seam_base/ -v / --env-file $SANDBOX/.local/env -v } -v $WORK/proj:$WORK/proj:z $seam_layers -w $WORK/proj piw:default pi"
-rm -f "$SANDBOX/.local/env"
+  "run --rm -it ${seam_base/ -v / --env-file $SANDBOX/.local/.env -v } -v $WORK/proj:$WORK/proj:z $seam_layers -w $WORK/proj piw:default pi"
+rm -f "$SANDBOX/.local/.env"
 
 printf '== piw --mode readonly\n'
 sync_label

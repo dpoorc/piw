@@ -38,7 +38,7 @@
 #   symlink to this script in a directory such as ~/.local/bin.
 #
 # Environment:
-#   Secrets are read from .local/env (if present) and passed to the
+#   Secrets are read from .local/.env (if present) and passed to the
 #   container with --env-file. See .env.example for the supported variables.
 #
 #   PI_CONFIG_DIR   Override the pi state directory (default: .local/agent)
@@ -89,7 +89,7 @@ validate_mode() {
     local f name
     local -a modes=()
     for f in "$SCRIPT_DIR"/seed/permissions/config.*.json \
-             "$config_dir"/extensions/pi-permission-system/config.*.json; do
+      "$config_dir"/extensions/pi-permission-system/config.*.json; do
       [[ -f "$f" ]] || continue
       name="$(basename "$f" .json)"
       name="${name#config.}"
@@ -637,7 +637,7 @@ container_run() {
     -e npm_config_cache=/tmp/.npm-cache
     -e npm_config_ignore_scripts=true
   )
-  [[ "$secrets" == "true" && -f "$SCRIPT_DIR/.local/env" ]] && args+=(--env-file "$SCRIPT_DIR/.local/env")
+  [[ "$secrets" == "true" && -f "$SCRIPT_DIR/.local/.env" ]] && args+=(--env-file "$SCRIPT_DIR/.local/.env")
   [[ -n "$git_name" ]] && args+=(-e GIT_AUTHOR_NAME="$git_name")
   [[ -n "$git_email" ]] && args+=(-e GIT_AUTHOR_EMAIL="$git_email")
   args+=("${mode_flags[@]}")
@@ -844,7 +844,7 @@ _append_layer_entry() {
   mkdir -p "$(dirname "$conf")"
 
   if [[ ! -f "$conf" ]]; then
-    printf '[layers]\n%s\n' "$entry" > "$conf"
+    printf '[layers]\n%s\n' "$entry" >"$conf"
     return 0
   fi
 
@@ -861,7 +861,7 @@ _append_layer_entry() {
   ' "$conf")"
 
   if [[ -z "$last" ]]; then
-    printf '\n[layers]\n%s\n' "$entry" >> "$conf"
+    printf '\n[layers]\n%s\n' "$entry" >>"$conf"
     return 0
   fi
 
@@ -870,15 +870,15 @@ _append_layer_entry() {
   if [[ -z "$end" ]]; then
     # A file without a trailing newline would glue the entry onto the last line.
     if [[ -n "$(tail -c 1 "$conf")" ]]; then
-      printf '\n' >> "$conf"
+      printf '\n' >>"$conf"
     fi
-    printf '%s\n' "$entry" >> "$conf"
+    printf '%s\n' "$entry" >>"$conf"
   else
     local tmp
     tmp="$(mktemp)"
-    head -n "$((end - 1))" "$conf" > "$tmp"
-    printf '%s\n' "$entry" >> "$tmp"
-    tail -n "+$end" "$conf" >> "$tmp"
+    head -n "$((end - 1))" "$conf" >"$tmp"
+    printf '%s\n' "$entry" >>"$tmp"
+    tail -n "+$end" "$conf" >>"$tmp"
     mv "$tmp" "$conf"
   fi
 }
@@ -887,7 +887,7 @@ _append_layer_entry() {
 _scaffold_install() {
   local file="$1"
   [[ -f "$file" ]] && return 0
-  cat > "$file" <<'STARTER'
+  cat >"$file" <<'STARTER'
 #!/usr/bin/env bash
 # Layer install script. It runs as root inside the image, at build time.
 #
@@ -1041,7 +1041,7 @@ cmd_layer_add() {
   mkdir -p "$(dirname "$active_dir")"
   if [[ -d "$shipped_dir" ]]; then
     cp -R "$shipped_dir" "$active_dir"
-    layer_hash "$shipped_dir" > "$active_dir/.piw-origin"
+    layer_hash "$shipped_dir" >"$active_dir/.piw-origin"
     _append_layer_entry "run:$name"
     echo "Adopted shipped layer '$name' into $active_dir."
     echo "  Wrote the .piw-origin stamp and added 'run:$name' to $(resolve_piw_conf)."
@@ -1093,7 +1093,7 @@ cmd_layer_remove() {
       print
     }
     END { if (!removed) exit 3 }
-  ' "$conf" > "$tmp" || rc=$?
+  ' "$conf" >"$tmp" || rc=$?
 
   if [[ "$rc" -eq 3 ]]; then
     rm -f "$tmp"
@@ -1165,7 +1165,7 @@ cmd_layer_update() {
 
   rm -rf "$active_dir"
   cp -R "$shipped_dir" "$active_dir"
-  layer_hash "$shipped_dir" > "$active_dir/.piw-origin"
+  layer_hash "$shipped_dir" >"$active_dir/.piw-origin"
   echo "Updated layer '$name' from the shipped copy."
   echo "  Rewrote the .piw-origin stamp."
 }
@@ -1391,7 +1391,7 @@ cmd_build() {
   install_store "$image"
   ensure_pi
 
-  cmd_generate_catalog  # refresh catalog, skills may have changed
+  cmd_generate_catalog # refresh catalog, skills may have changed
 }
 
 # ── Command: put piw on PATH (link a symlink into a directory) ────────────────
@@ -1790,8 +1790,14 @@ parse_build() {
   local dry_run="false"
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --no-cache) no_cache="true"; shift ;;
-    --dry-run) dry_run="true"; shift ;;
+    --no-cache)
+      no_cache="true"
+      shift
+      ;;
+    --dry-run)
+      dry_run="true"
+      shift
+      ;;
     -*) reject_flag build "$1" ;;
     *)
       echo "ERROR: 'piw build' takes no arguments: $1" >&2
@@ -1830,15 +1836,24 @@ parse_layer() {
   [[ $# -gt 0 ]] && shift
   case "$sub" in
   list)
-    [[ $# -eq 0 ]] || { echo "ERROR: 'piw layer list' takes no arguments." >&2; exit 1; }
+    [[ $# -eq 0 ]] || {
+      echo "ERROR: 'piw layer list' takes no arguments." >&2
+      exit 1
+    }
     cmd_layer_list
     ;;
   show)
-    [[ $# -eq 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer show' needs one layer name." >&2; exit 1; }
+    [[ $# -eq 1 && "$1" != -* ]] || {
+      echo "ERROR: 'piw layer show' needs one layer name." >&2
+      exit 1
+    }
     cmd_layer_show "$1"
     ;;
   add)
-    [[ $# -ge 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer add' needs a name or an apt: entry." >&2; exit 1; }
+    [[ $# -ge 1 && "$1" != -* ]] || {
+      echo "ERROR: 'piw layer add' needs a name or an apt: entry." >&2
+      exit 1
+    }
     local arg
     for arg in "$@"; do
       case "$arg" in
@@ -1848,7 +1863,10 @@ parse_layer() {
     cmd_layer_add "$@"
     ;;
   remove)
-    [[ $# -eq 1 && "$1" != -* ]] || { echo "ERROR: 'piw layer remove' needs one layer name." >&2; exit 1; }
+    [[ $# -eq 1 && "$1" != -* ]] || {
+      echo "ERROR: 'piw layer remove' needs one layer name." >&2
+      exit 1
+    }
     cmd_layer_remove "$1"
     ;;
   update)
@@ -1868,7 +1886,10 @@ parse_layer() {
         ;;
       esac
     done
-    [[ -n "$name" ]] || { echo "ERROR: 'piw layer update' needs one layer name." >&2; exit 1; }
+    [[ -n "$name" ]] || {
+      echo "ERROR: 'piw layer update' needs one layer name." >&2
+      exit 1
+    }
     cmd_layer_update "$name" "$replace"
     ;;
   -*) reject_flag layer "$sub" ;;
@@ -1906,7 +1927,10 @@ parse_link() {
       ;;
     esac
   done
-  [[ ${#positional[@]} -le 1 ]] || { echo "ERROR: 'piw link' takes at most one directory." >&2; exit 1; }
+  [[ ${#positional[@]} -le 1 ]] || {
+    echo "ERROR: 'piw link' takes at most one directory." >&2
+    exit 1
+  }
   cmd_link "${positional[0]:-}"
 }
 
@@ -1921,7 +1945,10 @@ parse_unlink() {
       ;;
     esac
   done
-  [[ ${#positional[@]} -le 1 ]] || { echo "ERROR: 'piw unlink' takes at most one directory." >&2; exit 1; }
+  [[ ${#positional[@]} -le 1 ]] || {
+    echo "ERROR: 'piw unlink' takes at most one directory." >&2
+    exit 1
+  }
   cmd_unlink "${positional[0]:-}"
 }
 
@@ -1946,9 +1973,18 @@ parse_update() {
   local dry_run="false"
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --no-cache) no_cache="true"; shift ;;
-    --force) force="true"; shift ;;
-    --dry-run) dry_run="true"; shift ;;
+    --no-cache)
+      no_cache="true"
+      shift
+      ;;
+    --force)
+      force="true"
+      shift
+      ;;
+    --dry-run)
+      dry_run="true"
+      shift
+      ;;
     -*) reject_flag update "$1" ;;
     *)
       echo "ERROR: 'piw update' takes no arguments: $1" >&2

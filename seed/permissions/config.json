@@ -8,6 +8,8 @@
       "*": "allow",
       ".env": "deny",
       ".env.*": "deny",
+      "*.env": "deny",
+      "*.env.*": "deny",
       ".env.example": "allow",
       ".env.template": "allow",
       "*.pem": "deny",
