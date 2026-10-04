@@ -1,5 +1,5 @@
 ---
-id: 24
+id: 61
 title: Good-enough bar and verification
 status: closed
 priority: medium
@@ -7,7 +7,7 @@ labels:
     - wayfinder:grilling
 relations:
     depends-on:
-        - 23
+        - 60
 created: "2026-09-29"
 updated: "2026-10-01"
 closed: "2026-10-01"

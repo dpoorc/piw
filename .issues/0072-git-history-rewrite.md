@@ -1,5 +1,5 @@
 ---
-id: 35
+id: 72
 title: Git history rewrite
 status: open
 priority: high
@@ -8,17 +8,17 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 37
+        - 74
     depends-on:
-        - 29
-        - 30
+        - 66
+        - 67
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -35,5 +35,5 @@ post-rewrite cleanup, and re-scan.
 
 ## Blocked by
 
-- #29 - Gated-fix protocol and destructive gate
-- #30 - Secrets vector
+- #66 - Gated-fix protocol and destructive gate
+- #67 - Secrets vector

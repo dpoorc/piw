@@ -1,5 +1,5 @@
 ---
-id: 15
+id: 52
 title: Project classification and adaptation model
 status: closed
 priority: high
@@ -7,11 +7,11 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 18
-        - 19
-        - 20
-        - 21
-        - 22
+        - 55
+        - 56
+        - 57
+        - 58
+        - 59
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"

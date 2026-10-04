@@ -1,5 +1,5 @@
 ---
-id: 36
+id: 73
 title: Sensitive-information reference
 status: open
 priority: medium
@@ -8,18 +8,18 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 37
+        - 74
     depends-on:
-        - 30
-        - 31
-        - 33
+        - 67
+        - 68
+        - 70
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -36,6 +36,6 @@ occurrences.
 
 ## Blocked by
 
-- #30 - Secrets vector
-- #31 - PII vector
-- #33 - Hygiene and doc hygiene vector
+- #67 - Secrets vector
+- #68 - PII vector
+- #70 - Hygiene and doc hygiene vector

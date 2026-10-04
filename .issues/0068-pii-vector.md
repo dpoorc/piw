@@ -1,5 +1,5 @@
 ---
-id: 31
+id: 68
 title: PII vector
 status: open
 priority: high
@@ -8,18 +8,18 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 36
-        - 37
+        - 73
+        - 74
     depends-on:
-        - 27
-        - 28
+        - 64
+        - 65
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -36,5 +36,5 @@ reported like secrets.
 
 ## Blocked by
 
-- #27 - Inventory and report skeleton
-- #28 - Fixture project and seam harness
+- #64 - Inventory and report skeleton
+- #65 - Fixture project and seam harness

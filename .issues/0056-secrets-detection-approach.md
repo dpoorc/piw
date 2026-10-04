@@ -1,5 +1,5 @@
 ---
-id: 19
+id: 56
 title: Secrets detection approach
 status: closed
 priority: high
@@ -7,10 +7,10 @@ labels:
     - wayfinder:research
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 14
-        - 15
+        - 51
+        - 52
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -50,7 +50,7 @@ Headline results:
 
 Full detail, sources, and gaps are in the research file.
 
-## Revision (2026-09-30, by #23)
+## Revision (2026-09-30, by #60)
 
 The resolution above described a no-scanner playbook. That is
 superseded for the shipped skill: `gitleaks` is required, and it

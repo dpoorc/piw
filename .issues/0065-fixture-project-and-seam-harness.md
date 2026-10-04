@@ -1,5 +1,5 @@
 ---
-id: 28
+id: 65
 title: Fixture project and seam harness
 status: closed
 priority: high
@@ -8,13 +8,13 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 30
-        - 31
-        - 32
-        - 33
-        - 34
+        - 67
+        - 68
+        - 69
+        - 70
+        - 71
     depends-on:
-        - 26
+        - 63
 created: "2026-10-01"
 updated: "2026-10-01"
 closed: "2026-10-01"
@@ -22,7 +22,7 @@ closed: "2026-10-01"
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -39,4 +39,4 @@ compares the output. This is Seam A.
 
 ## Blocked by
 
-- #26 - Skill package, intake, and tool check
+- #63 - Skill package, intake, and tool check

@@ -1,5 +1,5 @@
 ---
-id: 20
+id: 57
 title: PII detection approach
 status: closed
 priority: high
@@ -7,10 +7,10 @@ labels:
     - wayfinder:research
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 14
-        - 15
+        - 51
+        - 52
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -46,7 +46,7 @@ Headline results:
 
 Full detail, sources, and gaps are in the research file.
 
-## Revision (2026-09-30, by #23)
+## Revision (2026-09-30, by #60)
 
 The resolution above leaned on a no-tool fallback. That is superseded:
 `presidio` is required for content PII detection, because names and

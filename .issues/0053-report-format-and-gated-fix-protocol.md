@@ -1,5 +1,5 @@
 ---
-id: 16
+id: 53
 title: Report format and gated-fix protocol
 status: closed
 priority: high
@@ -7,10 +7,10 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 17
-        - 23
+        - 54
+        - 60
     depends-on:
-        - 14
+        - 51
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -86,7 +86,7 @@ skill reports coverage and risk. It does not certify.
 
 A finding's carrier, and whether it is tracked in git, set the
 remediation and the ordering - not the severity tier. This is
-consistent with `#14`: severity is harm, and exposure is not tracked
+consistent with `#51`: severity is harm, and exposure is not tracked
 per finding.
 
 - Tracked in git: history rewrite or forward fix. Highest weight.

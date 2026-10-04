@@ -1,5 +1,5 @@
 ---
-id: 14
+id: 51
 title: Leak-vector taxonomy and severity model
 status: closed
 priority: high
@@ -7,11 +7,11 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 16
-        - 18
-        - 19
-        - 20
-        - 21
+        - 53
+        - 55
+        - 56
+        - 57
+        - 58
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -96,4 +96,4 @@ Git history work is project-dependent. Commit identity may need
 rewriting or may be fine. History may need a squash or may not. The
 skill presents the options - keep as-is, squash, rewrite identity -
 and the user decides. It never treats a history edit as required on
-its own. `#17` owns the mechanics.
+its own. `#54` owns the mechanics.

@@ -1,5 +1,5 @@
 ---
-id: 29
+id: 66
 title: Gated-fix protocol and destructive gate
 status: in-progress
 priority: high
@@ -8,16 +8,16 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 35
+        - 72
     depends-on:
-        - 27
+        - 64
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -36,4 +36,4 @@ is destroyed. A sanitized export can be produced on request.
 
 ## Blocked by
 
-- #27 - Inventory and report skeleton
+- #64 - Inventory and report skeleton

@@ -1,5 +1,5 @@
 ---
-id: 22
+id: 59
 title: 'Ancillary vectors: licensing, attribution, authorship'
 status: closed
 priority: medium
@@ -7,10 +7,10 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 13
-        - 15
+        - 50
+        - 52
 created: "2026-09-29"
 updated: "2026-09-30"
 closed: "2026-09-30"
@@ -33,7 +33,7 @@ and naming? Keep it to leak-relevant advice, not license selection.
   text. Flag conflicting statements across files, such as a README
   that says MIT while the license file is GPL. Check SPDX identifier
   validity.
-- **Excluded.** Dependency license compatibility auditing. `#13`
+- **Excluded.** Dependency license compatibility auditing. `#50`
   ruled supply chain out.
 
 Tools to design for, not gate on: REUSE (FSFE), scancode-toolkit,
@@ -54,12 +54,12 @@ issues. Deeper exploration happens only on user request, and the
 skill recommends switching to a compliance skill or workflow rather
 than guiding the agent there.
 
-### Authorship split with #18
+### Authorship split with #55
 
-`#18` owns the mechanics: commit identity, document author fields,
+`#55` owns the mechanics: commit identity, document author fields,
 and the removal tools.
 
-`#22` owns the advice: whether to publish personal names in `AUTHORS`,
+`#59` owns the advice: whether to publish personal names in `AUTHORS`,
 `CONTRIBUTORS`, and source headers. Personal names are a user-defined
 angle. Some projects want named attribution, some want anonymity. The
 skill asks for the preference and does not assume.
@@ -86,4 +86,4 @@ Remediation is `forward fix` (redact or correct) or `add protection`
 - No legal advice.
 - No DCO or CLA setup.
 - No authoring of attribution text.
-- Naming stays out, as `#13` decided.
+- Naming stays out, as `#50` decided.

@@ -1,5 +1,5 @@
 ---
-id: 34
+id: 71
 title: Licensing, attribution, and authorship vector
 status: open
 priority: medium
@@ -8,17 +8,17 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 37
+        - 74
     depends-on:
-        - 27
-        - 28
+        - 64
+        - 65
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -36,5 +36,5 @@ preference.
 
 ## Blocked by
 
-- #27 - Inventory and report skeleton
-- #28 - Fixture project and seam harness
+- #64 - Inventory and report skeleton
+- #65 - Fixture project and seam harness

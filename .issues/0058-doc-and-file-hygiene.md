@@ -1,5 +1,5 @@
 ---
-id: 21
+id: 58
 title: Doc and file hygiene
 status: closed
 priority: high
@@ -7,10 +7,10 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 14
-        - 15
+        - 51
+        - 52
 created: "2026-09-29"
 updated: "2026-09-30"
 closed: "2026-09-30"
@@ -39,13 +39,13 @@ The check list is open-ended, not exhaustive.
   IDs.
 - **Leaky TODO, FIXME, and HACK comments.**
 - **`.gitignore` gaps.**
-- **Extension and content mismatch** - from `#15`.
+- **Extension and content mismatch** - from `#52`.
 - **Doc hygiene** - the same content checks applied to prose: internal
   references, absolute paths, draft markers, personal notes, "do not
   publish" text. Not doc-reality checking, which stays with
   `verify-docs`.
 
-File-system metadata (ownership, xattrs, permissions) stays with `#18`.
+File-system metadata (ownership, xattrs, permissions) stays with `#55`.
 
 ### Internal references, TODOs, and the feel of a file
 
@@ -82,7 +82,7 @@ A multi-round detection aid:
 - Hard flag for anything above 50 MB.
 - Report tracked and untracked separately. A tracked large file is a
   repo problem. An untracked one is only an export problem.
-- Action is a forward fix, or history rewrite under `#17` when it is
+- Action is a forward fix, or history rewrite under `#54` when it is
   in history.
 
 ### .gitignore gaps
@@ -105,7 +105,7 @@ renamed.
 ### Severity
 
 Full four-tier scale, with class defaults and a per-finding override,
-consistent with `#14`:
+consistent with `#51`:
 
 - **critical** - content damaging on its own if published, such as an
   unpublished legal matter or a live incident report.
@@ -117,4 +117,4 @@ consistent with `#14`:
 ### Remediation
 
 `forward fix` (delete or redact), `add protection` (`.gitignore`), or
-`history rewrite` under `#17` when the file is tracked in history.
+`history rewrite` under `#54` when the file is tracked in history.

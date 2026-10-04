@@ -1,5 +1,5 @@
 ---
-id: 18
+id: 55
 title: Metadata hygiene
 status: closed
 priority: high
@@ -7,10 +7,10 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 14
-        - 15
+        - 51
+        - 52
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -24,17 +24,17 @@ repository metadata, and commit identity.
 
 ## Answer
 
-### Scope split with #21
+### Scope split with #58
 
-`#18` owns metadata: file, document, and media metadata; repository
+`#55` owns metadata: file, document, and media metadata; repository
 metadata; and commit identity.
 
-`#21` owns content-level hygiene: strays, TODOs, absolute paths in
-source, large binaries, and `.gitignore` gaps. `#21` also owns file
-content as it appears in git history. `#18` owns commit metadata and
+`#58` owns content-level hygiene: strays, TODOs, absolute paths in
+source, large binaries, and `.gitignore` gaps. `#58` also owns file
+content as it appears in git history. `#55` owns commit metadata and
 identity, not the file contents a commit carries.
 
-Absolute paths baked into binaries go to `#21` as a content check.
+Absolute paths baked into binaries go to `#58` as a content check.
 
 ### Detection
 
@@ -58,12 +58,12 @@ Keep functional tags: `Orientation`, color profile, dimensions.
 `exiftool -all=` is an option, with the warning that it drops
 functional tags too, notably `Orientation`, which can rotate images.
 
-Copyright and licensor fields belong to `#22`, not here.
+Copyright and licensor fields belong to `#59`, not here.
 
 ### Destructive gate
 
 In-place metadata edits cannot be undone, so they are destructive
-under the `#16` gate. Prefer an out-of-place write (`-o`) and compare,
+under the `#53` gate. Prefer an out-of-place write (`-o`) and compare,
 or rely on a tracked original. Require the backup otherwise. Re-read
 the file after the edit to confirm the tag is gone.
 
@@ -74,7 +74,7 @@ Three options, presented together, none automatic:
 1. Set `user.name` and `user.email` to a project identity for future
    commits.
 2. Rewrite past identity with `git-filter-repo` and a mailmap, under
-   the `#17` gate.
+   the `#54` gate.
 3. Add `.mailmap` only for display remapping. It removes nothing.
 
 ### Repository metadata checklist

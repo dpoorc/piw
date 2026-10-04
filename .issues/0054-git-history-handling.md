@@ -1,5 +1,5 @@
 ---
-id: 17
+id: 54
 title: Git history handling
 status: closed
 priority: high
@@ -7,9 +7,9 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 23
+        - 60
     depends-on:
-        - 16
+        - 53
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -30,7 +30,7 @@ leaked; removing it does not revoke it. Rotate, or confirm rotation,
 independently.
 
 Commit identity rewriting and history squashing are separate optional
-actions. They are never leak fixes, consistent with `#14`.
+actions. They are never leak fixes, consistent with `#51`.
 
 ### Tool
 
@@ -70,7 +70,7 @@ The skill gives:
 - the confirmation step that proves the credential is dead.
 
 Publish stays blocked until the user confirms rotation. The skill
-makes no network calls, consistent with `#19`.
+makes no network calls, consistent with `#56`.
 
 ### After the rewrite
 

@@ -1,5 +1,5 @@
 ---
-id: 30
+id: 67
 title: Secrets vector
 status: open
 priority: high
@@ -8,19 +8,19 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 35
-        - 36
-        - 37
+        - 72
+        - 73
+        - 74
     depends-on:
-        - 27
-        - 28
+        - 64
+        - 65
 created: "2026-10-01"
 updated: "2026-10-01"
 ---
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
@@ -38,5 +38,5 @@ kind. Gated fixes and the credential-rotation hand-off are wired.
 
 ## Blocked by
 
-- #27 - Inventory and report skeleton
-- #28 - Fixture project and seam harness
+- #64 - Inventory and report skeleton
+- #65 - Fixture project and seam harness

@@ -1,5 +1,5 @@
 ---
-id: 23
+id: 60
 title: Packaging and invocation
 status: closed
 priority: medium
@@ -7,15 +7,15 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 24
+        - 61
     depends-on:
-        - 16
-        - 17
-        - 18
-        - 19
-        - 20
-        - 21
-        - 22
+        - 53
+        - 54
+        - 55
+        - 56
+        - 57
+        - 58
+        - 59
 created: "2026-09-29"
 updated: "2026-09-30"
 closed: "2026-09-30"

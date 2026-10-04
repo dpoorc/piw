@@ -1,5 +1,5 @@
 ---
-id: 13
+id: 50
 title: Skill boundary and non-goals
 status: closed
 priority: high
@@ -7,7 +7,7 @@ labels:
     - wayfinder:grilling
 relations:
     blocks:
-        - 22
+        - 59
 created: "2026-09-29"
 updated: "2026-09-29"
 closed: "2026-09-29"
@@ -79,13 +79,13 @@ The skill may invoke `verify-docs` as a step. It does not reimplement
 it, and it does not own doc-reality checks. It does not perform code
 review. The map records both as out of scope.
 
-## Revision (2026-09-30, by #23)
+## Revision (2026-09-30, by #60)
 
 The Identity section above says the skill "falls back to agent-driven
 checks when a tool is absent". That is superseded. The skill requires
 tools and stops the relevant check when one is missing. It does not
 substitute a weaker scan, which would produce false confidence.
-`#23` records the required and optional tools.
+`#60` records the required and optional tools.
 
 The environment fact above described the container at that time.
 Tools are added to the container and the workspace as needed, so

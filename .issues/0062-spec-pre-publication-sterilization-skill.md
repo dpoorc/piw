@@ -1,5 +1,5 @@
 ---
-id: 25
+id: 62
 title: 'Spec: pre-publication sterilization skill'
 status: open
 priority: high
@@ -344,7 +344,7 @@ No neutrality pass.
 
 ## Further Notes
 
-- Source: wayfinder map #12, decisions #13 through #24.
+- Source: wayfinder map #49, decisions #50 through #61.
 - Research: `docs/research/2026-09-29-secret-detection.md` and
   `docs/research/2026-09-29-pii-detection.md`.
 - `gitleaks`, `presidio`, and `git-filter-repo` are not installed in

@@ -1,5 +1,5 @@
 ---
-id: 26
+id: 63
 title: Skill package, intake, and tool check
 status: closed
 priority: high
@@ -8,8 +8,8 @@ labels:
     - state:ready-for-agent
 relations:
     blocks:
-        - 27
-        - 28
+        - 64
+        - 65
 created: "2026-10-01"
 updated: "2026-10-01"
 closed: "2026-10-01"
@@ -17,7 +17,7 @@ closed: "2026-10-01"
 
 ## Parent
 
-#25 - Spec: pre-publication sterilization skill
+#62 - Spec: pre-publication sterilization skill
 
 ## What to build
 
