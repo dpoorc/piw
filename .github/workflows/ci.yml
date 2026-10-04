@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The catalog test runs the real generator, which needs yq. Pin the
+      # same version the default image installs.
+      - name: Install yq
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/yq \
+            https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Shellcheck
+        run: |
+          shellcheck -S warning \
+            piw \
+            tests/run.sh \
+            tests/stub-docker \
+            skills/generate-catalog.sh \
+            layers/workstation/install.sh
+
+      # The suite drives piw against a stub docker, so no Docker is needed.
+      - name: Test
+        run: bash tests/run.sh
