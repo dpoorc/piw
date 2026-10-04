@@ -2,88 +2,82 @@
 
 ## Base image
 
-All variants use `node:24-trixie-slim` as their base. This gives us:
+`piw:default` uses `node:24-trixie-slim`:
 
-- Node.js v24 (required by pi)
-- Debian 13 Trixie (stable, current packages)
-- `slim` variant (smaller attack surface, faster pulls)
+- Node.js 24, which pi needs. npm comes with it, so npm is not in the apt
+  list.
+- Debian 13 (trixie), stable with current packages.
+- The `slim` variant, for a smaller attack surface and faster pulls.
 
-No Alpine — the musl libc compatibility issues with native npm modules
-aren't worth the size savings for a development tool.
+Alpine is not used. The musl libc compatibility problems with native npm
+modules cost more than the size saving is worth.
 
 ## User mapping
 
-The container has a user `pi` created at build time with a default
-UID/GID of 1000. At runtime, `piw` uses `--user $(id -u):$(id -g)`
-to remap to the host user's identity.
+The image creates a user `pi` at build time with UID and GID 1000. At launch,
+piw passes `--user $(id -u):$(id -g)`, which maps the container user to the
+host user. Files written through a mount then belong to the host user.
 
-`/home/pi` is `chmod 755` (world-traversable) so that any UID can
-reach it after remapping. The `.pi/agent` subdirectory is covered by
-a bind mount from the host, so actual file permissions match the host
-user.
+`/home/pi` is not writable, and it does not survive the container. The image
+never creates it, so Docker creates it as `root` for the mount targets. The
+container runs with `--rm`, so the directory is discarded. The store mount at
+`/home/pi/.local` is the writable, persistent home area.
 
-## State directory
+The runtime environment points every tool that writes to `$HOME` back into the
+store mount:
 
-Pi state (sessions, config, auth) lives in `.pi/agent/` inside the
-harness directory by default. This is gitignored. The `PI_CONFIG_DIR`
-environment variable in `.env` can override this path.
-
-Inside the container, the config directory is at `/home/pi/.pi/agent`
-and pi is told about it via `PI_CODING_AGENT_DIR`.
-
-## Bind mounts
-
-| Host path | Container path | Purpose | Mode |
-|-----------|---------------|---------|------|
-| `.pi/agent/` | `/home/pi/.pi/agent` | Config, sessions, credentials | `rw` |
-| `skills/` | `/home/pi/.pi/agent/skills` | Agent skills | `rw` |
-| `skills/system/workflow/APPEND_SYSTEM.md` | `/home/pi/.pi/agent/APPEND_SYSTEM.md` | System prompt appendage | `ro` |
-| `variants/<profile>/SKILL.md` | `/home/pi/.pi/agent/skills/variant/SKILL.md` | Variant toolset doc | `ro` |
-| Workspace | Same path | Project files | `rw` |
-
-All mounts use the `:z` flag for SELinux relabeling (required on Fedora
-and RHEL-based systems).
-
-## Config directory
-
-Pi's `PI_CODING_AGENT_DIR` environment variable is set to
-`/home/pi/.pi/agent` inside the container, which corresponds to
-`.pi/agent/` on the host. This means all pi state files (sessions,
-settings, auth tokens, installed packages) are kept in the harness
-directory, out of version control.
-
-## yadm bridge
-
-The workstation variant ships [yadm](https://yadm.io/), a dotfiles
-manager that treats `$HOME` as its work tree. The container user's
-home is `/home/pi`, but the real dotfiles live under the host home
-(e.g. `/home/<user>`), which is bind-mounted as the workspace.
-
-To make yadm operate on the host's dotfiles, `piw` passes
-`YADM_HOME` at launch (the host's `$HOME`). The installed yadm is a
-small wrapper:
-
-```sh
-#!/bin/sh
-exec env HOME="${YADM_HOME:-$HOME}" /usr/local/libexec/yadm "$@"
+```
+MISE_DATA_DIR=/home/pi/.local/share/mise
+XDG_CACHE_HOME=/home/pi/.local/cache
+RUSTUP_HOME=/home/pi/.local/rustup
+CARGO_HOME=/home/pi/.local/cargo
+GOPATH=/home/pi/.local/go
 ```
 
-It re-exports `HOME` to the host home before running the real yadm
-(at `/usr/local/libexec/yadm`), so config
-(`$HOME/.config/yadm/`), data (`$HOME/.local/share/yadm/`), and
-work tree all resolve to the host. Without `YADM_HOME` (interactive
-shell, other contexts) the wrapper is a no-op and yadm behaves
-normally against the container home.
+Without this, a tool install fails with `Permission denied`.
+
+## Mounts
+
+A launch mounts the state, the tooling, and the workspace. See
+[the overview](../overview.md#the-mount-map) for the full table. The
+important points:
+
+- The writable state lives in four mounts: `.local/agent`, `.local/store`,
+  `.local/mise`, and `.local/app`.
+- The tooling is read-only: `skills/`, `agents/`, the system-prompt
+  appendage, the mode config, and `.local/layers`.
+- The workspace mounts at the same path, so paths inside the agent match
+  paths on the host.
+- Every mount carries the `:z` flag for SELinux relabeling, which Fedora and
+  RHEL need.
 
 ## Network
 
-`--add-host host.docker.internal:host-gateway` enables the container
-to reach services running on the Docker host (e.g., a local llama.cpp
-server at port 8080, or a local OpenShell gateway).
+The launch adds `--add-host host.docker.internal:host-gateway`, so the
+container can reach a service on the Docker host, such as a local model
+server.
 
-## API keys
+In `readonly` mode, the launch adds `--network none`. The container has no
+network access at all.
 
-Keys are sourced from `.env` (if present) and passed to the container
-via `-e VAR_NAME` flags. The `models.json` file uses `$VARIABLE`
-syntax that pi resolves at runtime, so keys never need to be baked
-into configuration files.
+## Secrets
+
+piw passes the secrets file to the container with `--env-file .local/.env`
+when the file exists. The `models.json` file refers to keys as `$VARIABLE`,
+and pi resolves the reference at runtime. Keys are never written into a
+configuration file.
+
+## Images
+
+| Image | Contents |
+|-------|----------|
+| `piw:default` | The base: Node, the apt tools, mise, yq, and uv |
+| `piw:local` | `piw:default` plus the active layers |
+
+The default image comes from the `Dockerfile`. piw composes `piw:local` from a
+generated Dockerfile that starts `FROM piw:default` and appends one step per
+active layer. The composed image carries the label `piw.plan=<hash>`. piw
+compares the label against the current plan to detect a stale image.
+
+pi is not in either image. pi lives in the `.local/app` mount, and its
+extensions live in `.local/agent`. Both update without an image rebuild.

@@ -1,54 +1,93 @@
-# piw — Docker environment for the pi coding agent
+# piw
 
-piw wraps [pi](https://pi.dev) in a Docker container. It
-isolates the agent from your host system while keeping the workspace
-accessible through bind mounts. No dependency pollution, no host
-modifications, no "works on my machine."
+piw is a launcher and environment manager for the
+[pi coding agent](https://pi.dev). It runs pi inside a Docker container and
+keeps your workspace native.
+
+The container holds the tooling and the isolation. The workspace stays on the
+host and is bind-mounted at the same path. The agent cannot change the host
+outside the paths you mount.
+
+## Prerequisites
+
+- Docker, running.
+- At least one API key for pi.
 
 ## Quick start
 
-**Prerequisites:** Docker running, one API key for pi.
-
 ```bash
-# Install the piw CLI
-piw --install
+git clone https://github.com/dpoorc/piw.git
+cd piw
 
-# Launch pi in a project directory
-piw ~/my-project
+# Put the CLI on your PATH.
+./piw link
 
-# Check your setup
+# Build the default image and compose your layers.
+piw build
+
+# Put your keys in the secrets file.
+cp .env.example .local/.env
+$EDITOR .local/.env
+
+# Check the setup.
 piw doctor
+
+# Launch pi in a project.
+piw ~/my-project
 ```
 
-See `.env.example` for API key setup. Copy it to `.env` and fill in
-your keys before the first launch.
+The first build needs network access. Later builds use the Docker cache.
 
-## CLI reference
+## How it works
 
-| Command | Description |
-|---------|-------------|
-| `piw ~/project` | Launch pi (default: core variant, permissive mode) |
-| `piw -r` | Resume a previous session |
-| `piw build` | Build tooling image + provision pi/extensions |
-| `piw build --offline` | Build from `build/archives/` only, no downloads |
-| `piw doctor` | Diagnose harness setup (incl. pi/extension versions) |
-| `piw update` | Pull updates, rebuild, upgrade pi, sync extensions |
-| `piw --mode restricted` | Launch with restricted permissions |
-| `piw --profile devops` | Launch with the devops variant |
+piw keeps two kinds of files apart:
 
-## Variants
+- **Upstream content** - the files in this repository.
+- **Local state** - everything under `.local/`. Gitignored.
 
-| Variant | Tools |
-|---------|-------|
-| **core** | node, git, curl, jq, openssh (pi comes from `.pi/app`) |
-| **devops** | Core + Python + Ansible + yq |
-| **workstation** | Core + language toolchains + security and forensics tools |
+```
+.local/
+├── .env        your secrets
+├── agent/      pi's state: sessions, auth, extensions
+├── agents/     skills that other agent tools read
+├── app/        pi's program install
+├── layers/     your layers
+├── mise/       the store tool manifest
+├── piw.conf    the layer manifest
+└── store/      the tools you installed
+```
+
+The image is tooling and isolation only. pi and its extensions live in the
+mounts, so they update without an image rebuild.
+
+Two mechanisms add tools:
+
+- A **layer** adds tools to the image at build time. It can install apt
+  packages or run a script as root.
+- A **store tool** is one that mise installs into `.local/store`. It survives
+  an image rebuild.
+
+See [the overview](docs/overview.md) for the full model.
+
+## Verification
+
+The test suite drives the real `piw` against a stub `docker`. It covers
+argument parsing, image tags, mounts, environment, and the container command.
+It needs no Docker daemon and no network.
+
+```bash
+bash tests/run.sh
+```
+
+The suite does not run a real container. Build and launch are verified by hand
+on a Docker host. Treat the container behaviour as verified, not proven.
 
 ## Documentation
 
-Full docs are in [docs/index.md](docs/index.md). Topics include
-architecture, permission modes, and skill system.
+Start at [docs/index.md](docs/index.md).
 
 ## License
 
 GPLv3. See [LICENSE](LICENSE).
+
+piw is a community wrapper. It is not an official product of the pi project.

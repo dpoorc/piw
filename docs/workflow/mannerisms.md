@@ -40,8 +40,8 @@ will figure it out." Things should be written down, structured, and
 visible.
 
 **Growth paths matter.** Even if a simple solution works today, the
-user considers whether it will work at scale. Dedicated variant dirs
-over multi-stage Dockerfile is the clearest example of this.
+user considers whether it will work at scale. A layer directory per
+addition, over one large Dockerfile, is the clearest example.
 
 **Security-sensitive.** Keys in `.env` (not in files), SELinux-aware
 mount flags, read-only system prompt. The user thinks about attack

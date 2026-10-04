@@ -1,95 +1,67 @@
-# Publishing piw
+# Publishing
 
-> **REFERENCE** — Considerations for making this harness public.
-> Not a plan. Just a record of what was discussed so you can pick
-> it up later.
+Considerations for making the harness public. This is a checklist, not a plan.
 
 ## Before publishing
 
-### README.md
+### README
 
-The repo root has no README.md. GitHub shows visitors
-`docs/index.md` by default, but a root README.md is the platform
-standard. Write a one-pager:
-
-- What piw is (one paragraph)
-- Quick start: prerequisites, install, first run
-- Link to full docs
+The repository root has a `README.md` with the quick start. Keep it short:
+what piw is, the prerequisites, the install steps, and a link to the docs.
 
 ### LICENSE
 
-No license file currently exists. Pick one:
+The repository is GPLv3. See [LICENSE](../LICENSE).
 
-| License | Effect |
-|---------|--------|
-| MIT | Most permissive. Others can use, modify, distribute without restriction. |
-| Apache 2.0 | MIT-like with patent protection. Standard for many dev tools. |
-| GPLv3 | Copyleft. Derivatives must stay open. |
+### CONTRIBUTING
 
-### CONTRIBUTING.md
-
-The alignment-before-action workflow is distinctive. Document it so
-contributors understand the proposal process before opening PRs that
-skip it.
+Document the alignment-before-action workflow. A contributor should
+understand the proposal step before opening a pull request that skips it.
 
 ### CI
 
-Minimal GitHub Actions:
+`.github/workflows/ci.yml` runs shellcheck and the hermetic test suite. The
+suite needs no Docker daemon, because it drives `piw` against a stub `docker`.
+The only external dependency is `yq`, which the catalog test uses.
 
-- Build both variants (core, devops)
-- Run `piw doctor --profile <name>` on each
-- Validate JSON configs parse
-- Check that config-seeds/extensions.txt packages install without error
+### Secrets template
 
-Even basic CI signals the project is maintained.
-
-### .env.example
-
-Already exists. Make sure every env var a user might need is listed.
-Currently covers: ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY,
-FIREWORKS_API_KEY, SILICONFLOW_API_KEY, and config overrides.
+`.env.example` lists the API keys a user might need. Keep it current with the
+providers that `seed/models.json` refers to.
 
 ## Audience
 
-This is not a beginner tool. The README should set that expectation
-early. The user needs to:
+piw is not a beginner tool. The user must:
 
-- Have Docker installed and running
-- Have at least one API key for pi
-- Be comfortable editing JSON configs
-- Understand that the agent has a "think first" workflow
+- Have Docker installed and running.
+- Have at least one API key for pi.
+- Be comfortable editing JSON and text manifests.
 
-Target audience: power users of
-[pi](https://github.com/earendil-works/pi) who want Docker isolation,
-configurable permissions, and a composable tooling environment.
+The target reader is a power user of pi who wants Docker isolation,
+configurable permissions, and a composable tool environment.
 
-## Potential friction points
+## Friction points
 
 | Friction | Mitigation |
-|----------|-----------|
-| Docker required | State clearly in README. Provide `piw doctor` to diagnose. |
-| API key setup | `.env` + `models.json` is manual. Consider a `piw init` that prompts for keys. |
-| Mode/profile complexity | A "first run" example: `piw --profile core ~/my-project`. |
-| Agent thinks before acting | Frame this as a feature in the README, not a bug. |
-| No browser in container | Document the curator crash workaround (`workflow:"none"`). |
-| Self-hosting confusion | Clarify that the workspace is independent from the harness repo. |
+|----------|------------|
+| Docker is required | State it in the README. `piw doctor` diagnoses the setup. |
+| API key setup is manual | The README shows the `.env.example` copy step. |
+| The agent proposes before it acts | Frame this as a feature in the README. |
+| No browser in the container | Document the web-search fallback. |
+| Self-hosting is confusing | State that the workspace is independent from the harness. |
 
-## Naming
+## Verification coverage
 
-Current split: repo is `piw`, CLI tool is `piw`.
+Be honest about what is verified and what is not:
 
-| Option | Pros | Cons |
-|--------|------|------|
-| Keep as-is | Descriptive + distinctive tool name. Known convention (docker/docker, eslint/eslint). | Repo name is generic. |
-| Rename repo to `piw` | Tool/repo match (ripgrep/rg, bat, fd). More brandable. | SEO loss. Touch every doc and path. |
-| Rename both to something new | Clean break. | Loses all existing references. |
-
-Recommendation: keep `piw` as the repo name and `piw` as the
-tool name. This split is well-understood. If you rename, do it
-before publishing — not after.
+- The hermetic suite covers argument parsing, image tags, mounts,
+  environment, and the container command. It runs without Docker.
+- The suite does not run a real container. A build and a launch are verified
+  by hand on a Docker host.
+- The permission modes are configuration. The suite does not assert their
+  effect, because the user owns the configuration.
 
 ## Relationship to pi
 
-This harness wraps [pi](https://pi.dev) / `@earendil-works/pi-coding-agent`.
-It is a community wrapper, not an official product. Be explicit about
-this in the README to set expectations about support scope.
+piw wraps pi. It is a community wrapper, not an official product. State this
+in the README, so the support scope is clear.

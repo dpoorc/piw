@@ -1,44 +1,56 @@
 # Philosophy
 
-## Why a harness instead of just `npm install -g pi`?
+## Why a harness instead of `npm install -g pi`?
 
-Because the agent has full filesystem access. Running it bare-metal
-means it can read and write anything your user can. Most of the time
-that's fine — but when you're provisioning servers, handling
-credentials, or working on infrastructure, you want a boundary.
+The agent has full filesystem access. Bare-metal, it can read and write
+anything your user can. Most of the time that is fine. When you provision
+servers, handle credentials, or work on infrastructure, you want a boundary.
 
-Docker is the simplest boundary that works. No micro-VMs, no policy
-engines, no sandbox SDKs. Just a container with bind mounts.
+Docker is the simplest boundary that works. No micro-VMs, no policy engines,
+no sandbox SDKs. A container with bind mounts is enough.
 
-## Lean and mean
+## The principles
 
-Every tool in the container is there because someone needed it for a
-real task. Nothing is "nice to have" or "might be useful someday."
-If you need something new, create a variant or extend an existing one.
+### Isolation
 
-This applies to skills too. The workflow skill tells the agent what's
-specific to this environment and this user. It does not re-explain
-basic coding agent concepts — the model already knows what it is.
+The agent cannot change the host outside the paths you mount. The container
+is disposable, so a bad change inside it costs nothing. The workspace is
+bind-mounted, so your work survives.
 
-## Transparent over magical
+### Transparency
 
-- Skills are plain Markdown files you can read and edit.
-- `piw` is a single bash script with no hidden logic.
-- Variants are self-contained directories with their own Dockerfiles.
-- The `.env` file is a plain shell script sourced at startup.
+Nothing is hidden. Skills are Markdown files you can read and edit. `piw` is
+a single bash script. The Dockerfile is plain and self-contained. The
+manifests are text. If something breaks, you can trace it.
 
-Nothing is generated, compiled, or obscured. If something breaks, you
-can trace it.
+### Leanness
+
+Every tool in the default image is there because a real task needed it.
+Nothing is "nice to have". If you need more, add a layer or a store tool. The
+same rule applies to skills: a skill tells the agent what is specific to this
+environment. It does not re-explain what the model already knows.
+
+### Composition
+
+Layers, store tools, skills, and agents are separate pieces. A layer that
+adds Python and a layer that adds Kubernetes tools combine without changes.
+A community skill drops into `skills/vendor/`. The structure supports growth
+without requiring it.
+
+When the principles conflict, the order above decides: isolation first, then
+transparency, then leanness, then composition.
 
 ## Alignment before action
 
-The agent is encouraged (via the workflow skill) to understand before
-implementing, to propose before executing, and to flag problems early.
-This saves time. Rework costs more than a clarifying question.
+The workflow skill asks the agent to understand before it implements, to
+propose before it executes, and to report a problem early. A clarifying
+question costs less than rework.
 
-## Composition, not monolith
+## The workspace is independent
 
-Variants, skills, and docs are all designed to be composed. Need
-a variant that has Python AND Kubernetes tools? Create one. Found
-a great community skill? Drop it in `skills/vendor/` or `skills/system/`. The structure
-supports growth without requiring it.
+The harness and the workspace are separate. A user can clone the harness
+once, install the CLI, and then launch it in any project. The harness
+directory holds the tooling and the state. The workspace holds the work.
+
+The harness can also run on itself. This is convenient for development and
+confusing at first: the agent runs inside the tool it is changing.

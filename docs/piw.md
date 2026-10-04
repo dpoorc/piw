@@ -1,237 +1,205 @@
-# piw CLI Reference
+# piw CLI reference
 
-`piw` is the entry point for piw. It manages Docker images and
-the pi runtime (pi itself + extensions) in the bind-mounted config dir.
+`piw` is the entry point. It builds the images, manages the tool store and the
+layers, and launches pi in the container.
 
 ## Model
 
-The Docker image is tooling + isolation only. pi lives in its own app
-mount; extensions live in the config mount. Both update without image
-rebuilds:
-
-```
-.pi/                      ← harness-owned dir (gitignored)
-├── app/                  ← pi app mount (npm prefix, reinstallable)
-│   └── node_modules/@earendil-works/pi-coding-agent
-└── agent/                ← config mount (pi state + extensions)
-    ├── npm/              ← npm extensions (pi-managed)
-    ├── git/              ← git extensions (pi-managed)
-    ├── settings.json     ← pi's package bookkeeping
-    └── models.json       ← model/provider config
-```
-
-`piw update` is the one command that brings everything — repo, images,
-pi, extensions — current. Extension tweaks (code in the mount) need no
-wrapper involvement: pi reloads them on next launch or `/reload`.
+The image is tooling and isolation only. pi lives in the app mount
+(`.local/app`), and its extensions live in the agent mount (`.local/agent`).
+Both update without an image rebuild. `piw update` is the one command that
+brings the repository, the images, and pi up to date.
 
 ## Synopsis
 
 ```bash
-piw [--profile <name>] [--resume|-r] [--help] [<path>]
-piw build [<profile>] [--all] [--no-cache] [--offline]
-piw update [<profile>] [--all] [--build-only] [--install-only] [--force] [--dry-run] [--no-cache] [--offline]
-piw doctor [<profile>]
+piw [<path>] [--mode <name>] [-r|--resume]
+piw build [--no-cache] [--dry-run]
+piw tool install <spec>... | remove <spec>... | list
+piw layer add <name|apt:...> | remove <name> | list | show <name> | update <name> [--replace]
+piw doctor
+piw link [dir] | unlink [dir]
 piw generate-catalog
-piw --install [<dir>]
-piw --uninstall [<dir>]
+piw update [--no-cache] [--force] [--dry-run]
+piw --version | --help
 ```
 
-## Global Options
+The first argument selects the command. A known command word is a command.
+Anything else is a launch, so `piw ~/my-project` works without a keyword.
 
-| Flag | Description |
-|------|-------------|
-| `--profile <name>` | Select variant profile (default: `core`). Acts as default for subcommands. |
-| `-r`, `--resume` | Launch with session picker (resume a previous session) |
-| `--help`, `-h` | Show help text |
-
-## Commands
-
-### Launch (default)
+## Launch
 
 ```
-piw                         Launch with default profile in current directory
-piw ./my-project            Launch with specific workspace
-piw --profile devops        Launch with devops variant
+piw                         Launch in the current directory
+piw ~/my-project            Launch with a specific workspace
+piw --mode restricted       Launch with a permission mode
 piw -r                      Launch and pick a session to resume
 ```
 
-- Builds the Docker image if not cached
-- Ensures pi is installed in the app mount (`ensure_pi`, default
-  `.pi/app`); installs it if missing (requires network)
-- Sources `.env` for API keys
-- Bind-mounts config, skills, extensions, and workspace
-- Drops into the `pi` interactive session
+A launch does this:
 
-### `build`
+1. Builds the image if it is missing or stale.
+2. Ensures pi is present in the app mount, and installs it when missing.
+3. Passes the secrets file to the container.
+4. Mounts the state, the skills, the layers, and the workspace.
+5. Starts the pi interactive session.
 
-```
-piw build                   Build default profile + provision mount
-piw build devops            Build devops profile + provision mount
-piw build --all             Build all variants + provision mount
-piw build --no-cache        Full rebuild (ignore Docker cache)
-piw build --offline         Build from build/archives only (no downloads)
-```
+| Flag | Meaning |
+|------|---------|
+| `--mode <name>` | Select a permission mode: `permissive`, `restricted`, or `readonly` |
+| `-r`, `--resume` | Launch with the session picker |
 
-- Builds tooling images (no pi layer — pi comes from the config mount)
-- After building: installs pi if missing, then syncs extensions from
-  `config-seeds/extensions.txt` (install missing, upgrade outdated)
-- Regenerates the skills catalog
-
-`--offline` applies to the image builds; mount provisioning (pi
-install/upgrade, extension sync) still needs npm and fails with
-guidance when offline and something is missing.
-
-### `update`
+## build
 
 ```
-piw update                      Pull, rebuild, upgrade pi, sync extensions
-piw update --all                Update all variants
-piw update --build-only         Pull + rebuild, skip pi/extensions
-piw update --install-only       Pull + sync pi/extensions, skip build
-piw update --force              Reinstall every listed extension
-piw update --dry-run            Show the plan (pi, extensions, images) — no executions
-piw update --all --no-cache     Full rebuild all from scratch
-piw update --offline            Require build/archives present, no downloads
+piw build                   Build the default image and the layer image
+piw build --no-cache        Full rebuild, ignore the Docker cache
+piw build --dry-run         Print the plan, run nothing
 ```
 
-Order of operations:
+`build` builds `piw:default`, composes the active layers into `piw:local`,
+installs the store tools, and regenerates the skills catalog.
 
-1. `git pull --ff-only` — never stashes. Uncommitted work blocks
-   update: if local changes overlap incoming updates it aborts with
-   instructions (commit or unshelve locally, then retry). Commit your
-   work before running `piw update`.
-2. Rebuild variant images (`--install-only` skips).
-3. Upgrade pi in the config mount when npm shows a newer version.
-4. Sync extensions: install missing, upgrade outdated npm extensions
-   (`--force` reinstalls every listed extension).
-5. Regenerate the skills catalog.
-
-Dry-run prints the plan host-side: pi installed vs latest, each
-extension's status, and which images would rebuild. Nothing executes
-(no git pull, no docker builds, no installs).
-
-`--offline` covers **image builds only**: it requires `build/archives`
-present and never downloads archives. Pi install and extension sync
-still need npm — with no network, pi update/install or extension
-upgrades fail with guidance instead of silently proceeding.
-
-### `doctor`
+## tool
 
 ```
-piw doctor                  Diagnose default profile
-piw doctor devops           Diagnose devops profile
+piw tool install <spec>...  Install tools into the shared store
+piw tool remove <spec>...   Remove tools from the shared store
+piw tool list               List the tools in the shared store
 ```
 
-Checks: Docker, variant dir, Docker image, `.env`, API keys, config
-directory, skills, extensions, **pi version in the config mount vs npm
-latest**, per-extension installed/latest status, build archives, skills
-catalog freshness, git repository status.
-
-### `generate-catalog`
-
-Regenerates `skills/catalog.md` from the `SKILL.md` files. Runs
-automatically at the end of `build` and `update`.
-
-### `tool`
-
-Manage the shared tool store at `.pi/store`, mounted at `/home/pi/.local`
-inside the container.
-
-```
-piw tool install npm:typescript
-piw tool install uv:ruff
-piw tool install cargo:ripgrep
-piw tool install go:github.com/bettercap/bettercap/v2
-piw tool install opentofu
-piw tool install bin:opentofu/opentofu@v1.12.6
-piw tool list
-piw tool remove npm:typescript
-```
-
-Every install runs inside the container and lands in the store, so tools
-survive container recreation. The store bin directory is on PATH in the
+Every install runs inside the container and lands in `.local/store`, so tools
+survive a container recreation. The store `bin` directory is on `PATH` in the
 container.
 
-Specs dispatch to the manager that owns each ecosystem:
+A spec names a tool. mise resolves most specs. The prefixes select a specific
+manager:
 
-| Prefix | Manager | Notes |
-|--------|---------|-------|
-| `npm:` | npm | Installed under the store prefix |
-| `uv:` | uv | Python CLI tools |
-| `cargo:` | cargo | Rust crates |
-| `go:` | go | Go modules. `go install` has no uninstall |
-| `mise:` | mise | Any mise backend, for example `mise:cargo:ripgrep` |
-| `bin:` | mise | GitHub release binary, for example `bin:opentofu/opentofu@v1.12.6` |
-| (no prefix) | mise | Registry name, for example `ripgrep` or `opentofu` |
+| Prefix | Manager |
+|--------|---------|
+| (none) | mise, by registry name |
+| `mise:` | mise, any backend |
+| `bin:` | mise, a GitHub release binary |
+| `npm:` | npm |
+| `uv:` | uv |
+| `cargo:` | cargo |
+| `go:` | go |
 
-Bare specs and `bin:` specs resolve through mise. It pins versions, and
-it verifies checksums where the backend provides them. mise also installs
-language toolchains, so `piw tool install rust` works without the
-`workstation` profile. The `uv:`, `cargo:`, and `go:` prefixes are
-conveniences that use the toolchains already in the image.
-
-The store lives at `.pi/store`. mise data and its global `mise.toml` live
-inside it, so installed tools survive container recreation.
-
-The store sits beside pi's own `.pi/agent` and `.pi/app`. Do not put it in
-`.pi/tools`: pi reads that path as a deprecated project tools directory and
-warns on start.
-
-Project-local tools are planned: a gitignored `.pi/store` in the project,
-placed ahead of the shared store on PATH.
-
-### `--install` / `--uninstall`
+## layer
 
 ```
-piw --install               Install piw symlink into ~/.local/bin/
-piw --install ~/bin         Install piw symlink into ~/bin/
-piw --uninstall             Remove piw symlink from ~/.local/bin/
+piw layer add <name>        Adopt a shipped layer, or scaffold a new one
+piw layer add apt:<pkg>...  Append an apt entry to the manifest
+piw layer remove <name>     Remove a layer entry from the manifest
+piw layer list              List the shipped and active layers
+piw layer show <name>       Show a layer's contents
+piw layer update <name>     Update an adopted layer
+  --replace                 Overwrite local changes to the adopted layer
 ```
 
-Also seeds config directory (settings.json, models.json) if missing.
+`layer add <name>` copies a shipped layer into `.local/layers/` and adds a
+`run:<name>` entry to the manifest. When the name is not shipped, it scaffolds
+a new layer with an `install.sh`. `layer remove` removes the manifest entry and
+leaves the directory in place.
 
-## Environment Variables
+The manifest is `.local/piw.conf`. It holds two sections:
 
-| Variable | Description |
-|----------|-------------|
-| `PI_CONFIG_DIR` | Override pi state directory (default: `.pi/agent/`) |
-| `PI_PI_DIR` | Override pi app directory (default: `.pi/app`; set to an absolute path e.g. `~/.local/share/pi-node` for pi-standard placement) |
-| `PI_TOOLS_DIR` | Override the tool store directory (default: `.pi/store`) |
-| `YADM_HOME` | Host home passed into the container at launch. The yadm wrapper uses it so dotfiles resolve to the host's repo/config. Not set on the host-side; it is internal to the container. |
-| `ANTHROPIC_API_KEY` | Anthropic API key |
-| `OPENAI_API_KEY` | OpenAI API key |
-| `GEMINI_API_KEY` | Google Gemini API key |
-| `FIREWORKS_API_KEY` | Fireworks AI API key |
-| (and others) | See `.env.example` for full list |
+```ini
+[layers]
+apt:zsh gdb
+run:my-setup
 
-All API keys are sourced from `.env` (if present) or the host environment.
+[pi]
+npm:pi-intercom
+```
+
+`[layers]` declares build-time additions. `apt:` names Debian packages. `run:`
+names a layer directory at `.local/layers/<name>/`. `[pi]` declares pi
+packages, which pi installs itself.
+
+A layer directory holds up to five files:
+
+| File | Role |
+|------|------|
+| `apt` | One apt package per line |
+| `archives` | One download per line: URL, sha256, and destination |
+| `mise.toml` | Store tools to install after the image build |
+| `install.sh` | A script that runs as root at build time |
+| `README.md` | A description, shown by `piw layer list` |
+
+## doctor
+
+```
+piw doctor
+```
+
+`doctor` runs four checks:
+
+1. Docker is on `PATH` and the daemon answers.
+2. The launch image is present.
+3. Every tool in the manifest is installed in the store.
+4. The seeded files match the shipped versions (a report, not a failure).
+
+The exit code is 0 when checks 1 to 3 pass, and 1 when any of them fails.
+Check 4 never changes the exit code.
+
+## link and unlink
+
+```
+piw link                    Put piw on PATH (default: ~/.local/bin)
+piw link ~/bin              Put piw on PATH (a specific directory)
+piw unlink                  Take piw off PATH
+```
+
+`link` makes a symlink to the `piw` script in the directory. `unlink` removes
+it.
+
+## generate-catalog
+
+```
+piw generate-catalog
+```
+
+`generate-catalog` regenerates `skills/catalog.md` from the `SKILL.md` files.
+The catalog lists the skills that pi hides from the system prompt. The command
+runs automatically at the end of `build` and `update`.
+
+## update
+
+```
+piw update                  Pull, rebuild, and update pi
+piw update --no-cache       Full rebuild, ignore the Docker cache
+piw update --force          Force the pi update
+piw update --dry-run        Show the plan, run nothing
+```
+
+`update` runs four steps in order:
+
+1. Pull the harness with `git pull --ff-only`. A divergent branch stops the
+   update. piw does not merge.
+2. Report drift in the seeded files. A difference is a report, not a failure.
+3. Rebuild the images and the store.
+4. Update pi and its extensions in the container.
+
+## Environment variables
+
+| Variable | Meaning |
+|----------|---------|
+| `PI_CONFIG_DIR` | Override the agent directory (default: `.local/agent`) |
+| `PI_PI_DIR` | Override the app directory (default: `.local/app`) |
+| `PI_TOOLS_DIR` | Override the store directory (default: `.local/store`) |
+| `PIW_CONF` | Override the layer manifest (default: `.local/piw.conf`) |
+| `PIW_MISE_CONFIG` | Override the store tool manifest (default: `.local/mise/config.toml`) |
+| `PIW_MODE` | Select a permission mode |
+
+Secrets are read from `.local/.env`. See [.env.example](../.env.example).
 
 ## Tests
 
+```bash
+bash tests/run.sh
 ```
-tests/run.sh
-```
 
-Drives the real `piw` with a stub `docker` on PATH. Argument parsing, image
-tags, mounts, environment, and the container command are all exercised. No
-Docker daemon is needed, and the suite runs in under a second.
-
-The suite runs in a temporary sandbox with a fake variants tree, dummy
-archives, and stubs for `curl` and `npm`, so it never touches the repo or the
-network. Run it after any change to `piw`.
-
-## Flag Compatibility
-
-| Flag | launch | build | update | doctor |
-|------|--------|-------|--------|--------|
-| `--profile` | ✅ | ✅ (default) | ✅ (default) | ✅ (default) |
-| `--all` | ❌ | ✅ | ✅ | ❌ |
-| `--no-cache` | ❌ | ✅ | ✅ | ❌ |
-| `--force` | ❌ | ❌ | ✅ | ❌ |
-| `--dry-run` | ❌ | ❌ | ✅ | ❌ |
-| `--build-only` | ❌ | ❌ | ✅ | ❌ |
-| `--install-only` | ❌ | ❌ | ✅ | ❌ |
-| `--offline` | ❌ | ✅ | ✅ | ❌ |
-| `--resume` | ✅ | ❌ | ❌ | ❌ |
-
-`--build-only` and `--install-only` are mutually exclusive.
+The suite drives the real `piw` against a stub `docker`. It covers argument
+parsing, image tags, mounts, environment, and the container command. It needs
+no Docker daemon and no network, and it runs in a temporary sandbox.

@@ -1,6 +1,6 @@
 # piw — piw workspace
 
-piw is a piw coding agent configuration. It ships with system skills, vendor skills, Docker variants, and tooling for AI-assisted development workflows.
+piw is a piw coding agent configuration. It ships with system skills, vendor skills, Docker layers, and tooling for AI-assisted development workflows.
 
 ## Agent skills
 

@@ -1,27 +1,52 @@
-# Permission System
+# Permissions
 
-piw ships with `@gotgenes/pi-permission-system` to control the
-agent's access to files, commands, and paths.
+piw ships the [`@gotgenes/pi-permission-system`](https://github.com/gotgenes/pi-packages)
+extension. It controls the agent's access to files, commands, and paths.
 
-## Configuration
+## Where the config lives
 
-The permission config lives at `extensions/pi-permission-system/config.json`
-(seeded from `config-seeds/permissions/config.json` on first launch):
+The permission system reads one JSON file per scope:
+
+| Scope | Path |
+|-------|------|
+| Global | `.local/agent/extensions/pi-permission-system/config.json` |
+| Project | `<workspace>/.pi/extensions/pi-permission-system/config.json` |
+
+The global file is piw's. piw seeds it from `seed/permissions/config.json` on
+the first launch and never overwrites it afterwards. The project file is
+optional. The project file overrides the global file, and it loads only when
+the project is trusted.
+
+## The shipped policy
+
+The default (`permissive`) policy allows most actions and denies the sensitive
+files:
 
 ```json
 {
   "permission": {
     "*": "allow",
-
     "path": {
       "*": "allow",
       ".env": "deny",
       ".env.*": "deny",
+      "*/.env": "deny",
+      "*/*.env": "deny",
+      "*/.env.*": "deny",
       ".env.example": "allow",
+      ".env.template": "allow",
+      "*/.env.example": "allow",
+      "*/.env.template": "allow",
       "*.pem": "deny",
-      "*.key": "deny"
+      "*.key": "deny",
+      ".local/agent/auth.json": "ask",
+      "*/.local/agent/auth.json": "ask",
+      ".local/agent/sessions/*": "ask",
+      "*/.local/agent/sessions/*": "ask"
     },
-
+    "external_directory": {
+      "*": "ask"
+    },
     "bash": {
       "*": "allow",
       "rm -rf *": "ask",
@@ -36,161 +61,109 @@ The permission config lives at `extensions/pi-permission-system/config.json`
       "reboot*": "ask",
       "kill *": "ask",
       "pkill *": "ask"
-    },
-
-    "external_directory": {
-      "*": "ask"
     }
   }
 }
 ```
+
+The `.env` rules protect the secrets file. The patterns anchor to a path
+segment, so `*/.env.*` matches a file named `.env.<something>` in any
+directory. A leading `*` alone would be too greedy: the wildcard crosses `/`
+and newlines, so it would also match the text `.env.` inside a commit message.
+
+The `auth.json` and `sessions` rules cover the self-hosted case. When the
+workspace is the harness itself, `.local/` is inside the workspace, so the
+`external_directory` gate does not fire. These rules put pi's credentials and
+session logs behind a prompt.
 
 ## Modes
 
-piw supports three built-in permission modes, selectable via
-`--mode` flag or `PIW_MODE` environment variable:
+piw ships three modes:
 
-| Mode | Default policy | Use case |
-|------|---------------|----------|
+| Mode | Default policy | Use |
+|------|----------------|-----|
 | `permissive` | `"*": "allow"` | General development (default) |
-| `restricted` | `"*": "ask"` | Devops / sensitive environments |
-| `readonly` | `"*": "deny"` | Investigation / audit only |
-
-Usage:
+| `restricted` | `"*": "ask"` | Sensitive environments |
+| `readonly` | `"*": "deny"` | Investigation and audit |
 
 ```bash
-piw ~/project                          # permissive (default)
+piw ~/project                          # permissive
 piw --mode restricted ~/prod-project   # restricted
 piw --mode readonly ~/investigation    # read-only
 
-# Via env var:
-export PIW_MODE=restricted
+export PIW_MODE=restricted             # or set the environment
 piw ~/project
 ```
 
-### How modes work
-
-The shipped policies live in `config-seeds/permissions/`:
+The shipped policies live in `seed/permissions/`:
 
 ```
-config-seeds/permissions/
-├── config.json              # permissive mode
-├── config.restricted.json   # restricted mode
-└── config.readonly.json     # readonly mode
+seed/permissions/
+├── config.json              # permissive
+├── config.restricted.json   # restricted
+└── config.readonly.json     # readonly
 ```
 
-At launch, piw copies each missing policy into the live extension
-directory, `extensions/pi-permission-system/`. That directory is
-gitignored. It is the user's own state, and both the user and the
-permission system change it over time. piw seeds a file only when it
-is absent, so your edits are never overwritten. Delete a live policy
-to restore the shipped version on the next launch.
+On the first launch, piw copies each missing policy into the live extension
+directory, `.local/agent/extensions/pi-permission-system/`. piw seeds a file
+only when it is absent, so your edits survive. Delete a live policy to restore
+the shipped version on the next launch.
 
-When a non-default mode is active, piw bind-mounts the live
-mode-specific config over the default one in the container. The
-permission system reads the file at the same path. No extension
-changes are needed.
+For a non-default mode, piw mounts the mode file over `config.json` in the
+container, read-only. The permission system reads the same path, so no
+extension change is needed.
 
-For `readonly` mode, piw also applies Docker-level restrictions:
-- Workspace is mounted read-only (`:ro`)
-- Network access is disabled (`--network none`)
-
-### Mode + project config = layered
-
-Mode configs compose with [project-level overrides](#project-level-overrides):
-
-```
-mode config (e.g. restricted)
-  → project config (.pi/extensions/pi-permission-system/config.json)
-    = effective policy
-```
-
-This means you can use `--mode restricted` as a broad baseline and
-still tighten further per-project — or loosen specific tools in a
-given project while keeping the default restrictive.
+For `readonly`, piw also applies container-level restrictions: the workspace
+mounts read-only, and the network is disabled.
 
 ### Custom modes
 
-You can define your own mode by creating `config.<name>.json` in
-`config-seeds/permissions/`, or directly in the live
-`extensions/pi-permission-system/` directory, and passing
-`--mode <name>`.
+Create `config.<name>.json` in `seed/permissions/`, or directly in
+`.local/agent/extensions/pi-permission-system/`, and pass `--mode <name>`.
 
-## Project-Level Overrides
+## Rule matching
 
-You can override the mode (or the global default) on a per-project
-basis by creating a project-local config file:
+A rule has one of three states:
 
-```bash
-mkdir -p .pi/extensions/pi-permission-system
-$EDITOR .pi/extensions/pi-permission-system/config.json
-```
-
-This config merges on top of the active mode config, with higher
-precedence. So you can use `--mode permissive` globally but deny
-`write` for a specific project:
-
-```json
-{
-  "permission": {
-    "write": "deny",
-    "edit": "deny"
-  }
-}
-```
-
-Or run `--mode restricted` but allow `terraform plan` without
-prompting in a particular project:
-
-```json
-{
-  "permission": {
-    "bash": {
-      "terraform plan": "allow"
-    }
-  }
-}
-```
-
-## Permission Levels
-
-| Level | Behavior |
+| State | Behavior |
 |-------|----------|
-| `allow` | Operation proceeds without confirmation |
-| `deny` | Operation is blocked with an error |
-| `ask` | Agent is prompted for confirmation |
+| `allow` | The action proceeds without a prompt |
+| `deny` | The action is blocked with an error |
+| `ask` | The user confirms the action |
 
-### Rule Matching
+Four surfaces compose, and the most restrictive result wins:
 
-- `"*"` matches everything (wildcard)
-- Rules are checked in order; the most specific match wins
-- Path rules match against file paths the agent tries to read/write
-- Bash rules match against shell commands the agent tries to execute
+1. `path` - the cross-cutting gate. It applies to every file access: pi's
+   tools, bash commands, MCP calls, and extension tools.
+2. `external_directory` - the working-tree boundary. It decides whether a
+   path outside the workspace is reachable.
+3. The per-tool surfaces, such as `read`, `write`, and `edit`.
+4. `bash` - the shell command patterns.
+
+The order of restrictiveness is `deny` > `ask` > `allow`. A `path` allow
+cannot loosen an `external_directory: ask`. Put an outside-CWD directory on
+`external_directory` to silence its prompts.
+
+Inside one surface map, the last matching rule wins. Put broad catch-alls
+first and specific rules after.
+
+A `*` in a pattern matches any character, including `/` and a newline. A
+relative path matches both its written form and its working-directory-
+normalized form.
 
 ## Logging
 
-The permission system logs all interactions to
-`extensions/pi-permission-system/logs/pi-permission-system-permission-review.jsonl`:
-
-```jsonl
-{"timestamp":"2026-07-23T21:40:00.000Z","action":"deny","target":"read","path":"/home/<user>/Projekt/piw/.env","rule":".env"}
-{"timestamp":"2026-07-23T21:41:00.000Z","action":"allow","target":"read","path":"/home/<user>/Projekt/piw/src/main.ts","rule":"*"}
-```
-
-Each log entry contains:
-- `timestamp` — When the permission check occurred
-- `action` — `allow`, `deny`, or `ask`
-- `target` — The tool being used (read, write, bash, etc.)
-- `path` or `command` — The specific resource
-- `rule` — Which rule matched
-
-## Reviewing Denied Access
-
-Check the log for blocked actions:
+The permission system writes a review log to
+`.local/agent/extensions/pi-permission-system/logs/`. Each line records the
+time, the action, the tool, the value, and the rule that decided it.
 
 ```bash
-grep '"deny"' extensions/pi-permission-system/logs/*.jsonl
+grep '"deny"' .local/agent/extensions/pi-permission-system/logs/*.jsonl
 ```
 
-If a legitimate access is being blocked, adjust the rules in `config.json`.
-The agent cannot modify this file — edit it on the host.
+## Changing the policy
+
+Edit the live config on the host. The agent cannot change it: the permission
+config is the gate, so it stays outside the agent's reach. For a persistent
+change to a shipped mode, edit `seed/permissions/config.<mode>.json` and
+remove the live copy.
