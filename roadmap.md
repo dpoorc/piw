@@ -25,10 +25,6 @@
 - **A guard around the store install.** A mise failure inside `piw build`
   aborts the command before the summary. The install step should report the
   failure and reach the summary.
-- **Layer tool shims.** A mise shim for a layer tool resolves the version
-  from the active config for the current directory. Outside the layer
-  directory, the shim reports `No version is set`. A `conf.d` fragment, or a
-  move of the shared tools into the global manifest, would fix it.
 - **The `build/archives/` directory.** The shipped layer fetches its
   archives itself with a checksum, so the directory is unused. Remove it, or
   keep it for a layer that copies a manual download.

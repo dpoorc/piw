@@ -77,9 +77,14 @@ mounts this directory read-only at `/opt/piw/layers`.
 
 ## `mise/`
 
-The store tool manifest at `mise/config.toml`. mise reads it inside the
-container. Add tools here, or run `piw tool install <spec>`. The file is
-seeded once and never overwritten.
+The mise configuration directory, mounted at `/home/pi/.config/mise`.
+
+- `config.toml` is the store tool manifest. Add tools here, or run
+  `piw tool install <spec>`. The file is seeded once and never overwritten.
+- `conf.d/` holds one fragment per active layer, written by `piw build` from
+  the layer's `mise.toml`. mise loads every fragment, so a layer's tools
+  resolve from any directory. A tool in `config.toml` wins over the same tool
+  in a fragment.
 
 ## `piw.conf`
 

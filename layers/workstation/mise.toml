@@ -1,8 +1,9 @@
 # Store tools for the workstation layer.
 #
-# `piw build` runs `mise -C /opt/piw/layers/workstation install`, so these
-# tools land in the shared store. Every spec is "latest"; the mise lockfile
-# pins the resolved version.
+# `piw build` copies this file to .local/mise/conf.d/workstation.toml, which
+# mise loads as a global config fragment. The tools land in the shared store,
+# and their shims resolve from any directory. Every spec is "latest"; the mise
+# lockfile pins the resolved version.
 #
 # mise installs Rust through rustup, and the `targets` option passes straight
 # to `rustup toolchain install --target`. The musl std target rides along, so
@@ -11,7 +12,6 @@
 [tools]
 go = "latest"
 rust = { version = "latest", targets = "x86_64-unknown-linux-musl" }
-"go:github.com/steviee/git-issues" = "latest"
 "go:github.com/bettercap/bettercap/v2" = "latest"
 "aqua:ip7z/7zip" = "latest"
 "aqua:opentofu/opentofu" = "latest"

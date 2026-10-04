@@ -72,6 +72,10 @@ Every install runs inside the container and lands in `.local/store`, so tools
 survive a container recreation. The store `bin` directory is on `PATH` in the
 container.
 
+The store draws from two places: the global manifest at
+`.local/mise/config.toml`, and one fragment per active layer under
+`.local/mise/conf.d/`. `piw build` writes the fragments.
+
 A spec names a tool. mise resolves most specs. The prefixes select a specific
 manager:
 
@@ -117,7 +121,9 @@ npm:pi-intercom
 names a layer directory at `.local/layers/<name>/`. `[pi]` declares pi
 packages, which pi installs itself.
 
-A layer directory holds up to five files:
+`piw build` copies an active layer's `mise.toml` to
+`.local/mise/conf.d/<name>.toml`, so the layer's tools resolve from any
+directory. A layer directory holds up to five files:
 
 | File | Role |
 |------|------|

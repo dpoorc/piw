@@ -72,18 +72,22 @@ RUN tar -xzf /tmp/uv.tar.gz -C /tmp \
     && rm -rf /tmp/uv.tar.gz /tmp/uv-x86_64-unknown-linux-gnu
 
 # -- Runtime environment ------------------------------------------------------
-# The mount targets mirror the map in issue #24.
+# The mount targets mirror the map in docs/overview.md.
 # /home/pi is not writable: the image never creates it, so Docker makes it
 # as root for the mount targets. It is also ephemeral, because the container
 # runs with --rm. The store mount at /home/pi/.local is the writable,
 # persistent home area. Point every tool that reaches outside ~/.local back
 # into it, or the tool install fails with 'Permission denied'.
+#
+# piw sets HOME=/home/pi on every run, so mise finds its global config at
+# ~/.config/mise (the mounted .local/mise) and loads ~/.config/mise/conf.d.
+# Do not pin MISE_GLOBAL_CONFIG_FILE: an explicit path disables the conf.d
+# scan that carries each active layer's tools.
 ENV MISE_DATA_DIR=/home/pi/.local/share/mise \
     XDG_CACHE_HOME=/home/pi/.local/cache \
     RUSTUP_HOME=/home/pi/.local/rustup \
     CARGO_HOME=/home/pi/.local/cargo \
     GOPATH=/home/pi/.local/go \
-    MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml \
     PATH=/opt/pi/node_modules/.bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:$PATH
 
 CMD ["pi"]

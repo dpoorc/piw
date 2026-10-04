@@ -3,11 +3,12 @@
 # mise reads this file inside the container. piw never parses it.
 # Add store tools here, or run `piw tool install <spec>`.
 #
-# Example:
-#   [tools]
-#   jq = "latest"
-#   "github:cli/cli" = "latest"
+# Every active layer's mise.toml also loads, as a fragment in
+# .local/mise/conf.d/. A tool declared here wins over the same tool in a
+# fragment.
 #
-# The default image includes the base tools, so this table starts empty.
+# The default image includes the base tools, so this table holds only the
+# tool the harness itself needs.
 
 [tools]
+"go:github.com/steviee/git-issues" = "latest"

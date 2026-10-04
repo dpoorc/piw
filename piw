@@ -1107,6 +1107,10 @@ cmd_layer_remove() {
 
   mv "$tmp" "$conf"
   echo "Removed '$name' from $(resolve_piw_conf)."
+
+  # Drop the layer's conf.d fragment, so its tools stop resolving.
+  rm -f "$SCRIPT_DIR/.local/mise/conf.d/$name.toml"
+
   local dir="$SCRIPT_DIR/.local/layers/$name"
   if [[ -d "$dir" ]]; then
     echo "Kept the layer directory: $dir"
@@ -1312,37 +1316,57 @@ _build_local() {
   echo "INFO: Build complete: ${IMAGE_PREFIX}:local"
 }
 
-# ── Utility: populate the store with the global and active-layer tools ───────
-# mise reads the global config from MISE_GLOBAL_CONFIG_FILE and a layer's
-# mise.toml with -C. Both installs run in the image just built and write to the
-# mounted store (.local/store at /home/pi/.local), so they survive a rebuild.
-# A dry run prints the steps and runs no container.
+# ── Utility: materialize each active layer's mise.toml as a conf.d fragment ──
+# mise loads ~/.config/mise/conf.d/*.toml unconditionally, so a fragment gives
+# a layer's tools a version that resolves from any directory. Without it, the
+# mise shims work only inside the layer tree. The fragment is a copy, not a
+# symlink: the layer tree mounts at /opt/piw/layers in the container, so a
+# relative symlink would resolve to a path that does not exist there.
+materialize_layer_fragments() {
+  local steps="$1"
+  local conf_dir="$SCRIPT_DIR/.local/mise/conf.d"
+  mkdir -p "$conf_dir"
+
+  local kind name src
+  while IFS=$'\t' read -r kind name _; do
+    [[ "$kind" == "run" ]] || continue
+    src="$SCRIPT_DIR/.local/layers/$name/mise.toml"
+    [[ -f "$src" ]] && cp "$src" "$conf_dir/$name.toml"
+  done <<<"$steps"
+
+  # Drop a fragment whose layer is no longer active.
+  local active f base
+  active="$(active_layer_names)"
+  for f in "$conf_dir"/*.toml; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f" .toml)"
+    grep -qxF "$base" <<<"$active" || rm -f "$f"
+  done
+}
+
+# ── Utility: populate the store from the global config and the layer fragments ─
+# The fragments live in the mounted mise config dir, so the container reads
+# them. One `mise install` installs the global tools and every active layer's
+# tools into the mounted store (.local/store at /home/pi/.local), so they
+# survive a rebuild. A dry run prints the steps and runs no container.
 install_store() {
   local image="$1"
   local dry_run="${2:-false}"
-  local steps kind name
+  local steps
 
   if ! steps="$(resolve_layers)"; then
     return 1
   fi
 
   if [[ "$dry_run" == "true" ]]; then
-    echo "(dry-run) Would install the global store tools: mise install"
-    while IFS=$'\t' read -r kind name _; do
-      [[ "$kind" == "run" ]] || continue
-      echo "(dry-run) Would install layer '$name' store tools: mise -C /opt/piw/layers/$name install"
-    done <<<"$steps"
+    echo "(dry-run) Would write the active-layer tool fragments to .local/mise/conf.d/"
+    echo "(dry-run) Would install the store tools: mise install"
     return 0
   fi
 
-  echo "INFO: Installing the global store tools…"
+  materialize_layer_fragments "$steps"
+  echo "INFO: Installing the store tools…"
   container_run --image "$image" -- mise install
-
-  while IFS=$'\t' read -r kind name _; do
-    [[ "$kind" == "run" ]] || continue
-    echo "INFO: Installing store tools for layer '$name'…"
-    container_run --image "$image" -- mise -C "/opt/piw/layers/$name" install
-  done <<<"$steps"
 }
 
 # ── Command: build the default image and the composed layer image ────────────

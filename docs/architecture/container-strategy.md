@@ -36,6 +36,10 @@ GOPATH=/home/pi/.local/go
 
 Without this, a tool install fails with `Permission denied`.
 
+piw sets `HOME=/home/pi` on every run, so mise finds its config in the mount.
+The Dockerfile does not pin the global config path: an explicit path disables
+the `conf.d` scan that carries each active layer's tools.
+
 ## Mounts
 
 A launch mounts the state, the tooling, and the workspace. See

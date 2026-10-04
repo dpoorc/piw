@@ -85,6 +85,12 @@ mount, not the image.
 `piw tool install <spec>` adds one. mise resolves the spec, pins the version
 in a lockfile, and checks the checksum where the backend provides one.
 
+The store draws from two places. The global manifest, `.local/mise/config.toml`,
+holds the tools you declare. Each active layer's `mise.toml` also loads, as a
+fragment in `.local/mise/conf.d/`. `piw build` writes the fragments, so a
+layer's tools resolve from any directory. A tool in the global manifest wins
+over the same tool in a fragment.
+
 ## The mount map
 
 A launch mounts these paths:

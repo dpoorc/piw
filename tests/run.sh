@@ -655,14 +655,14 @@ out="$(piw build --dry-run 2>&1)"
 status=$?
 assert_output "dry run prints the plan and invokes no Docker" \
   "$(printf 'status=%s\ndocker=%s\n%s' "$status" "$(log)" \
-    "$(printf '%s\n' "$out" | grep -E 'FROM piw:default|# layer first|mise install|mise -C|Nothing executed|Build plan')")" \
+    "$(printf '%s\n' "$out" | grep -E 'FROM piw:default|# layer first|conf.d|mise install|Nothing executed|Build plan')")" \
   "status=0
 docker=
 INFO: (dry-run) Build plan:
 FROM piw:default
 # layer first
-(dry-run) Would install the global store tools: mise install
-(dry-run) Would install layer 'first' store tools: mise -C /opt/piw/layers/first install
+(dry-run) Would write the active-layer tool fragments to .local/mise/conf.d/
+(dry-run) Would install the store tools: mise install
 INFO: (dry-run) Nothing executed."
 
 # With layers, piw builds piw:local from stdin with the layers context.
@@ -692,20 +692,27 @@ printf '== store: build installs the global and active-layer tools\n'
 rm -rf "$LAYERS"
 mkdir -p "$LAYERS/alpha" "$LAYERS/beta" "$LAYERS/inactive"
 printf '#!/bin/sh\n' > "$LAYERS/alpha/install.sh"
+printf '[tools]\n"npm:typescript" = "latest"\n' > "$LAYERS/alpha/mise.toml"
 printf '#!/bin/sh\n' > "$LAYERS/beta/install.sh"
+printf '[tools]\n"npm:eslint" = "latest"\n' > "$LAYERS/beta/mise.toml"
 printf '#!/bin/sh\n' > "$LAYERS/inactive/install.sh"
+printf '[tools]\n"npm:prettier" = "latest"\n' > "$LAYERS/inactive/mise.toml"
 printf '[layers]\nrun:alpha\nrun:beta\n' > "$SANDBOX/.local/piw.conf"
 reset_log
 out="$(piw build 2>&1)"
 status=$?
-assert_output "build installs the global and active-layer stores in order" \
+assert_output "build installs the global and active-layer stores in one step" \
   "$(printf 'status=%s\n%s' "$status" \
     "$(log | grep '^run ' | sed 's/.* piw:\(default\|local\) //')")" \
   "status=0
 mise install
-mise -C /opt/piw/layers/alpha install
-mise -C /opt/piw/layers/beta install
 bash /home/pi/.pi/agent/skills/generate-catalog.sh"
+assert_exists "an active layer becomes a conf.d fragment" \
+  "$SANDBOX/.local/mise/conf.d/alpha.toml"
+assert_exists "every active layer becomes a conf.d fragment" \
+  "$SANDBOX/.local/mise/conf.d/beta.toml"
+assert_absent "an inactive layer leaves no fragment" \
+  "$SANDBOX/.local/mise/conf.d/inactive.toml"
 
 printf '== store: survives a rebuild\n'
 printf 'marker\n' > "$SANDBOX/.local/store/marker"
@@ -717,8 +724,6 @@ assert_contains "rebuild mounts the existing store" "$(log)" \
 assert_output "rebuild reinstalls the global and layer stores" \
   "$(log | grep '^run ' | sed 's/.* piw:\(default\|local\) //')" \
   "mise install
-mise -C /opt/piw/layers/alpha install
-mise -C /opt/piw/layers/beta install
 bash /home/pi/.pi/agent/skills/generate-catalog.sh"
 
 printf '== layers: launch uses the image the manifest needs\n'
@@ -826,9 +831,12 @@ assert_output "each pinned download sits on its ADD" \
 sha256:38b907b21b1b04327fb9481c595331d925a67c6ee1aabd0ef419d0b7d12dfb3d https://github.com/mikefarah/yq/releases/download/v4.53.6/yq_linux_amd64.tar.gz
 sha256:745765a3b6e360ad76743599ae5c42e9278c7edf8bbff9fc76d05bf2623a04dd https://github.com/astral-sh/uv/releases/download/0.12.13/uv-x86_64-unknown-linux-gnu.tar.gz"
 
-assert_output "mise points at the mounted config, not the superseded path" \
-  "$(grep -o 'MISE_GLOBAL_CONFIG_FILE=[^ ]*' "$df")" \
-  "MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml"
+# HOME=/home/pi (set at every run) lets mise find the mounted config and its
+# conf.d fragments. A pinned MISE_GLOBAL_CONFIG_FILE would disable that scan.
+assert_status "mise discovers its config from HOME, not a pinned file" \
+  "$(grep -c 'MISE_GLOBAL_CONFIG_FILE=' "$df" || true)" "0"
+assert_contains "the mise data dir lives in the mounted store" \
+  "$df_body" "MISE_DATA_DIR=/home/pi/.local/share/mise"
 
 # The rejected decisions stay rejected.
 bad_names=()
@@ -1174,6 +1182,9 @@ ERROR: git pull --ff-only failed.
 printf '== doctor: four checks, drift is a report\n'
 rm -rf "$SANDBOX/.local/layers"
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
+# The seeded global manifest declares git-issues, so the stub must list it.
+cp "$SANDBOX/seed/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
+export PIW_TEST_MISE_LS="go:github.com/steviee/git-issues 0.0.0"
 PIW_TEST_IMAGES="piw:default"
 out="$(piw doctor 2>&1)"
 status=$?
