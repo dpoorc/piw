@@ -4,14 +4,13 @@
 # tools land in the shared store. Every spec is "latest"; the mise lockfile
 # pins the resolved version.
 #
-# Known gap: mise installs the Rust toolchain, but the
-# x86_64-unknown-linux-musl std target needs `rustup target add`, and the
-# [tools] table has no place for a target. Add it here when mise can express
-# it, or carry it in install.sh.
+# mise installs Rust through rustup, and the `targets` option passes straight
+# to `rustup toolchain install --target`. The musl std target rides along, so
+# no install.sh step is needed.
 
 [tools]
 go = "latest"
-rust = "latest"
+rust = { version = "latest", targets = "x86_64-unknown-linux-musl" }
 "go:github.com/steviee/git-issues" = "latest"
 "go:github.com/bettercap/bettercap/v2" = "latest"
 "aqua:ip7z/7zip" = "latest"
