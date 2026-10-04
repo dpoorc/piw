@@ -75,7 +75,7 @@ for the Agent Skills convention.
 ├── layers/         user layers, the build context
 ├── mise/           the mise config and lockfile
 ├── store/          the tool store
-├── env             secrets
+├── .env            secrets
 └── piw.conf        the layer manifest
 ```
 
