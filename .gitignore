@@ -1,6 +1,6 @@
 # ── Secrets ───────────────────────────────────────────────────────────────────
-# .env is the pre-.local/ location. It stays ignored until the user moves it
-# to .local/.env. The .local/ rule below covers the new location.
+# A stray secrets file must never be committed. The live location is
+# .local/.env, covered by the .local/ rule below.
 .env
 api.key
 
@@ -8,12 +8,6 @@ api.key
 # One ignored namespace holds all user state: agent, store, app, mise,
 # layers, agents/skills, piw.conf, and env.
 .local/
-
-# Pre-.local/ locations. They still hold live state from before the migration,
-# so they stay ignored until the user moves them. Remove these patterns after
-# the migration.
-.pi/
-extensions/
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 **/Dockerfile.dockerignore
@@ -29,10 +23,6 @@ build/archives/
 piw-handoff-*.md
 docs/handoffs/
 docs/worklog/
-
-# ── Docker bind-mount artifacts ──────────────────────────────────────────────
-# skills/variant/ is a root-owned leftover. The host user cannot remove it.
-skills/variant/
 
 # ── Generated artifacts ───────────────────────────────────────────────────────
 skills/catalog.md
