@@ -1639,7 +1639,7 @@ cmd_doctor() {
 }
 
 # ── Command: regenerate skills catalog ────────────────────────────────────────
-# The generator runs in the container, where python3 exists. The skills tree
+# The generator runs in the container, where yq exists. The skills tree
 # mounts read-only there, so the container cannot write catalog.md. Capture the
 # generator's stdout and write the file on the host.
 cmd_generate_catalog() {
