@@ -73,7 +73,16 @@ RUN tar -xzf /tmp/uv.tar.gz -C /tmp \
 
 # -- Runtime environment ------------------------------------------------------
 # The mount targets mirror the map in issue #24.
+# /home/pi is not writable: the image never creates it, so Docker makes it
+# as root for the mount targets. It is also ephemeral, because the container
+# runs with --rm. The store mount at /home/pi/.local is the writable,
+# persistent home area. Point every tool that reaches outside ~/.local back
+# into it, or the tool install fails with 'Permission denied'.
 ENV MISE_DATA_DIR=/home/pi/.local/share/mise \
+    XDG_CACHE_HOME=/home/pi/.local/cache \
+    RUSTUP_HOME=/home/pi/.local/rustup \
+    CARGO_HOME=/home/pi/.local/cargo \
+    GOPATH=/home/pi/.local/go \
     MISE_GLOBAL_CONFIG_FILE=/home/pi/.config/mise/config.toml \
     PATH=/opt/pi/node_modules/.bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:$PATH
 
