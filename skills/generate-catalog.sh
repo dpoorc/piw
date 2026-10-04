@@ -8,131 +8,103 @@
 # The script scans skills/system/ and skills/vendor/ for SKILL.md files. It
 # emits only the skills marked `disable-model-invocation: true`, because pi
 # already shows the visible skills in the system prompt. It reads the
-# frontmatter with python3 and the standard library only. A hidden skill whose
-# description cannot be read is an error that names the skill. The output is
-# sorted, so two runs are byte-identical.
+# frontmatter with yq, a real YAML parser that the default image ships. A
+# hidden skill whose description cannot be read is an error that names the
+# skill. The output is sorted, so two runs are byte-identical.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT="${1:-}"
 
+if ! command -v yq >/dev/null 2>&1; then
+  echo "ERROR: yq is not on PATH. The default image ships it." >&2
+  exit 1
+fi
+
+# ── Print the YAML frontmatter of a SKILL.md ─────────────────────────────────
+# The block sits between the first two `---` lines. A missing opener, or an
+# unterminated block, is an error.
+frontmatter() {
+  awk '
+    NR == 1 { if ($0 !~ /^---[[:space:]]*$/) exit 1; next }
+    /^---[[:space:]]*$/ { found = 1; exit 0 }
+    { print }
+    END { if (!found) exit 1 }
+  ' "$1"
+}
+
+# ── Read one frontmatter field as a string ───────────────────────────────────
+yaml_field() {
+  local fm="$1" key="$2"
+  [[ -n "$fm" ]] || return 0
+  # The key is a fixed literal from this script, so it is safe to inline.
+  printf '%s\n' "$fm" | yq -r ".\"$key\" // \"\""
+}
+
+# ── Every SKILL.md under skills/system/ and skills/vendor/ ───────────────────
+skill_files() {
+  find "$SCRIPT_DIR/system" "$SCRIPT_DIR/vendor" -name SKILL.md -type f 2>/dev/null |
+    LC_ALL=C sort
+}
+
 generate() {
-  python3 - "$SCRIPT_DIR" <<'PY'
-import json
-import os
-import re
-import sys
+  local -a names=() descs=() rels=()
+  local file rel dir name fm hidden description
 
-KEY = re.compile(r"^([A-Za-z0-9_-]+):[ \t]*(.*)$")
-BLOCK = (">", "|", ">-", "|-", ">+", "|+")
+  while IFS= read -r file; do
+    [[ -n "$file" ]] || continue
+    rel="${file#"$SCRIPT_DIR"/}"
+    dir="$(basename "$(dirname "$file")")"
 
+    if ! fm="$(frontmatter "$file")"; then
+      echo "ERROR: $dir has malformed or missing frontmatter ($rel)" >&2
+      return 1
+    fi
 
-def parse_frontmatter(text):
-    """Return the frontmatter as a dict. Raise ValueError when it is broken.
+    if ! hidden="$(yaml_field "$fm" "disable-model-invocation")"; then
+      echo "ERROR: $dir has malformed frontmatter ($rel)" >&2
+      return 1
+    fi
+    [[ "$hidden" == "true" ]] || continue
 
-    The fields are simple: `key: value`, or a folded (`>`) or literal (`|`)
-    block. No third-party parser is needed.
-    """
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
-    end = None
-    for i in range(1, len(lines)):
-        if lines[i].strip() == "---":
-            end = i
-            break
-    if end is None:
-        raise ValueError("unterminated frontmatter")
-    fields = lines[1:end]
-    data = {}
-    i = 0
-    while i < len(fields):
-        match = KEY.match(fields[i])
-        if not match:
-            i += 1
-            continue
-        key = match.group(1)
-        value = match.group(2).strip()
-        if value in BLOCK:
-            block = []
-            i += 1
-            while i < len(fields) and (
-                fields[i].strip() == "" or fields[i][0] in (" ", "\t")
-            ):
-                block.append(fields[i])
-                i += 1
-            indents = [len(x) - len(x.lstrip()) for x in block if x.strip()]
-            trim = min(indents) if indents else 0
-            parts = [x[trim:].strip() for x in block]
-            value = " ".join(p for p in parts if p)
-        elif len(value) >= 2 and value[0] == '"' and value[-1] == '"':
-            try:
-                value = json.loads(value)
-            except ValueError:
-                value = value[1:-1]
-        elif len(value) >= 2 and value[0] == "'" and value[-1] == "'":
-            value = value[1:-1]
-        data[key] = value
-        i += 1
-    return data
+    if ! name="$(yaml_field "$fm" "name")"; then
+      echo "ERROR: $dir has malformed frontmatter ($rel)" >&2
+      return 1
+    fi
+    [[ -n "$name" ]] || name="$dir"
 
+    if ! description="$(yaml_field "$fm" "description")"; then
+      echo "ERROR: $dir has malformed frontmatter ($rel)" >&2
+      return 1
+    fi
+    # Collapse the description to one line, so a folded or literal scalar
+    # becomes a single catalog entry.
+    description="$(
+      printf '%s' "$description" |
+        tr '\n' ' ' |
+        tr -s '[:space:]' ' ' |
+        sed -e 's/^ //' -e 's/ $//'
+    )"
 
-def skill_files(root):
-    files = []
-    for base in ("system", "vendor"):
-        top = os.path.join(root, base)
-        if not os.path.isdir(top):
-            continue
-        for dirpath, _dirnames, filenames in os.walk(top):
-            if "SKILL.md" in filenames:
-                files.append(os.path.join(dirpath, "SKILL.md"))
-    files.sort()
-    return files
+    if [[ -z "$description" ]]; then
+      echo "ERROR: $name has no readable description ($rel)" >&2
+      return 1
+    fi
 
+    names+=("$name")
+    descs+=("$description")
+    rels+=("$rel")
+  done < <(skill_files)
 
-def main():
-    root = sys.argv[1]
-    entries = []
-    for path in skill_files(root):
-        rel = os.path.relpath(path, root)
-        fallback = os.path.basename(os.path.dirname(path))
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                text = handle.read()
-        except OSError as exc:
-            sys.stderr.write(
-                "ERROR: %s is unreadable: %s (%s)\n" % (fallback, exc, rel)
-            )
-            return 1
-        try:
-            data = parse_frontmatter(text)
-        except ValueError as exc:
-            sys.stderr.write("ERROR: %s: %s (%s)\n" % (fallback, exc, rel))
-            return 1
-        if str(data.get("disable-model-invocation", "")).strip().lower() != "true":
-            continue
-        name = data.get("name") or fallback
-        description = " ".join(str(data.get("description", "")).split())
-        if not description:
-            sys.stderr.write(
-                "ERROR: %s has no readable description (%s)\n" % (name, rel)
-            )
-            return 1
-        entries.append((rel, name, description))
+  printf '# Skills catalog\n\n'
+  printf 'Skills hidden from the system prompt. The system prompt shows the\n'
+  printf 'other skills. Load a hidden skill with `/skill:<name>`.\n\n'
+  printf 'Paths are relative to the skills root (`~/.pi/agent/skills/`).\n\n'
 
-    out = sys.stdout
-    out.write("# Skills catalog\n\n")
-    out.write("Skills hidden from the system prompt. The system prompt shows the\n")
-    out.write("other skills. Load a hidden skill with `/skill:<name>`.\n\n")
-    out.write("Paths are relative to the skills root (`~/.pi/agent/skills/`).\n\n")
-    for rel, name, description in entries:
-        out.write("- **`%s`** - %s (`%s`)\n" % (name, description, rel))
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-PY
+  local i
+  for i in "${!names[@]}"; do
+    printf -- '- **`%s`** - %s (`%s`)\n' "${names[$i]}" "${descs[$i]}" "${rels[$i]}"
+  done
 }
 
 if [[ -n "$OUTPUT" ]]; then
