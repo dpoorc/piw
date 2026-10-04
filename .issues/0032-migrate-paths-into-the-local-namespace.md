@@ -1,7 +1,7 @@
 ---
 id: 32
 title: Migrate paths into the .local namespace
-status: open
+status: closed
 priority: high
 labels:
     - wayfinder:task
@@ -14,7 +14,8 @@ relations:
     related-to:
         - 13
 created: "2026-10-01"
-updated: "2026-10-02"
+updated: "2026-10-04"
+closed: "2026-10-04"
 ---
 
 Apply the decisions in #20, #21, #22, and #24 across the tree.
@@ -65,3 +66,6 @@ Apply the decisions in #20, #21, #22, and #24 across the tree.
 - The agent can write `.local/agent/skills/` and `.local/agents/skills/`, and
   cannot write `<repo>/skills` or `<repo>/agents`.
 - The stub-docker test asserts the full mount list from #24, and nothing else.
+
+## Closed
+Moved every path into .local/, updated the resolvers and mounts, and cleaned .gitignore and the ADR layout.

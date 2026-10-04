@@ -1,7 +1,7 @@
 ---
 id: 33
 title: Deny rules for the local state namespace
-status: open
+status: closed
 priority: high
 labels:
     - wayfinder:task
@@ -11,7 +11,8 @@ relations:
     related-to:
         - 13
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-04"
+closed: "2026-10-04"
 ---
 
 Found while resolving #20.
@@ -28,3 +29,6 @@ The permission rules deny the basename `.env`, `*.pem`, and `*.key`. They do not
 ## Acceptance
 
 - A test asserts that a read of the secrets file and of `auth.json` is denied.
+
+## Closed
+Anchored the secrets rules to a path segment, fixed the template allow, and put auth.json and sessions on ask.
