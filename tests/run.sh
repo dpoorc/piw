@@ -1292,6 +1292,39 @@ assert_not_contains "generate-catalog does not call host python3" "$(log)" "pyth
 assert_exists "generate-catalog writes the catalog on the host" \
   "$SANDBOX/skills/catalog.md"
 
+printf '== layers: the shipped workstation layer\n'
+# The shipped layer is inert until adopted. Adoption copies it into
+# .local/layers/, which is what `piw layer add` does.
+rm -rf "$SANDBOX/.local/layers"
+mkdir -p "$SANDBOX/.local/layers"
+cp -r "$ROOT/layers/workstation" "$SANDBOX/.local/layers/workstation"
+printf '[layers]\nrun:workstation\n' > "$SANDBOX/.local/piw.conf"
+
+out="$(piw layer show workstation 2>&1)"
+show_summary="$(printf '%s\n' "$out" | awk '
+  /^apt packages:/ {sec="apt"; next}
+  /^archives:/ {sec="arch"; next}
+  /^mise.toml: yes/ {mise=1; next}
+  /^install.sh: yes/ {script=1; next}
+  sec=="apt" && /^  / {a++}
+  sec=="arch" && /^  / {r++}
+  END {printf "apt=%d arch=%d mise=%d script=%d", a, r, mise, script}
+')"
+assert_output "layer show names the 25 apt packages, 3 archives, mise table, and script" \
+  "$show_summary" "apt=25 arch=3 mise=1 script=1"
+
+plan="$(piw_fn compose_plan 2>&1)"
+plan_summary="$(printf '%s\n' "$plan" | awk '
+  /^RUN apt-get update/ {apt++}
+  /^        [a-z]/ {pkg++}
+  /^ADD --checksum=/ {add++}
+  /^COPY workstation\// {copy++}
+  /^RUN bash \/tmp\/piw-layer-workstation\/install.sh/ {run++}
+  END {printf "apt=%d pkgs=%d add=%d copy=%d run=%d", apt, pkg, add, copy, run}
+')"
+assert_output "the shipped layer composes one apt install, three archives, and the script" \
+  "$plan_summary" "apt=1 pkgs=25 add=3 copy=1 run=1"
+
 printf '== sandbox stays clean\n'
 if [[ -z "$(git -C "$SANDBOX" status --porcelain)" ]]; then
   ok "piw writes only into the ignored namespace"

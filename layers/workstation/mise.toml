@@ -1,0 +1,27 @@
+# Store tools for the workstation layer.
+#
+# `piw build` runs `mise -C /opt/piw/layers/workstation install`, so these
+# tools land in the shared store. Every spec is "latest"; the mise lockfile
+# pins the resolved version.
+#
+# Known gap: mise installs the Rust toolchain, but the
+# x86_64-unknown-linux-musl std target needs `rustup target add`, and the
+# [tools] table has no place for a target. Add it here when mise can express
+# it, or carry it in install.sh.
+
+[tools]
+go = "latest"
+rust = "latest"
+"go:github.com/steviee/git-issues" = "latest"
+"go:github.com/bettercap/bettercap/v2" = "latest"
+"aqua:ip7z/7zip" = "latest"
+"aqua:opentofu/opentofu" = "latest"
+"aqua:hashicorp/packer" = "latest"
+"aqua:hadolint/hadolint" = "latest"
+"aqua:terraform-linters/tflint" = "latest"
+"npm:typescript" = "latest"
+"npm:eslint" = "latest"
+"npm:prettier" = "latest"
+"pypi:flake8" = "latest"
+"pypi:mypy" = "latest"
+"pypi:pylint" = "latest"
