@@ -320,3 +320,58 @@ Remediation is `forward-fix` (correct or redact) or `add-protection`
 - Contribution policy (DCO, CLA) is out of scope.
 - License selection and naming stay out of scope.
 - The license fingerprints cover the common licenses, not every license.
+
+## History rewrite
+
+Tool: `git-filter-repo`. Required. No fallback.
+
+Script: `scripts/rewrite.py`. Subcommands: `plan` (read-only), `run`
+(destructive), `verify` (re-scan).
+
+### What runs
+
+- `plan --path P` or `plan --replace LITERAL`: prints the target, the
+  refs, the backup ref, the bundle path, the restore command, the
+  exact `git-filter-repo` command, and the warnings. Read-only.
+- `run --confirm-destructive`: takes both backups, prints the restore
+  command, rewrites the local refs, removes the `origin` remote,
+  expires the reflog, and garbage collects. Refused without
+  `--confirm-destructive`.
+- `verify`: re-scans the rewritten refs. Exit 0 when the target is
+  gone, 1 when it is present.
+
+### Backup
+
+Two backups, taken before any rewrite:
+
+1. A backup ref, `refs/backup/prepublish-<timestamp>`.
+2. A `git bundle` in `.local/prepublish/`, verified with
+   `git bundle verify`.
+
+The rewrite passes `--refs` with every local ref name, except the
+backup ref. A glob such as `refs/heads/*` does not work: filter-repo
+passes it to `git rev-list` unchanged. Resolve the names first. The
+backup ref is not in the list, so it survives. The backup ref and the
+bundle keep the old history on purpose. Delete them when the user no
+longer needs the backup.
+
+### Warnings
+
+`plan` and `run` print these warnings:
+
+- The rewrite is local. It never pushes.
+- Forks, clones, CI artifacts, PR refs, and host caches keep the old
+  history.
+- Rotation is separate. A rewrite does not revoke a credential.
+
+`run` removes the `origin` remote after the rewrite, to prevent an
+accidental push. `--refs` implies `--partial`, and partial mode keeps
+the remote, so `run` removes it. `run` says so.
+
+### Limits
+
+- The rewrite covers the local refs only. It does not reach a fork, a
+  clone, a CI cache, a pull-request ref, or a host cache.
+- The rewrite is not a rotation. Rotate the credential separately.
+- `verify` walks every rewritten revision. On a very large repository
+  this is slow.

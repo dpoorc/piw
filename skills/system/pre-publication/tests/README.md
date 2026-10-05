@@ -129,6 +129,26 @@ Seam A runs `scripts/licensing.py` against the fixture and checks that:
 
 It also checks that the report carries the licensing advice.
 
+## History rewrite
+
+Seam A runs `scripts/rewrite.py` against a copy of the fixture and
+checks that:
+
+- `plan` prints the backup ref, the bundle, the restore command, and
+  the `git filter-repo` command;
+- `run` is refused without `--confirm-destructive`;
+- `verify` reports the target before the rewrite;
+- `run --confirm-destructive` rewrites history;
+- `verify` confirms the path is gone;
+- the backup ref survives the rewrite;
+- the bundle verifies;
+- the `origin` remote is removed;
+- replace mode removes a literal.
+
+The rewrite checks are skipped when `git-filter-repo` is absent. The
+rewrite runs on a copy, so the fixture stays intact for the other
+checks.
+
 ## Gate G1
 
 `g1_hygiene.py` fails if the shipped skill carries planning residue:

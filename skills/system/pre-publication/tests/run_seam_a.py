@@ -852,6 +852,104 @@ def check_gate(results):
     shutil.rmtree(gate, ignore_errors=True)
 
 
+def run_rewrite(sub, root, *extra):
+    args = [sys.executable, os.path.join(SCRIPTS, "rewrite.py"), sub,
+            "--project-root", root] + list(extra)
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT, text=True)
+
+
+def check_rewrite(results):
+    if shutil.which("git-filter-repo") is None:
+        results.skip("rewrite: history rewrite", "git-filter-repo is absent")
+        return
+    import tempfile
+    work = tempfile.mkdtemp(prefix="prepublish-rewrite-")
+    tree = os.path.join(work, "project")
+    make_fixture.build(tree)
+    secret_path = make_fixture.HISTORY_SECRET_PATH
+
+    plan = run_rewrite("plan", tree, "--path", secret_path)
+    if plan.returncode == 0 and "refs/backup/prepublish-" in plan.stdout \
+            and "git filter-repo" in plan.stdout:
+        results.ok("rewrite: plan prints the backup, bundle, and command")
+    else:
+        results.fail("rewrite: plan prints the backup, bundle, and command",
+                     plan.stdout.strip()[-200:])
+
+    refused = run_rewrite("run", tree, "--path", secret_path)
+    if refused.returncode == 1 and "confirm-destructive" in refused.stdout:
+        results.ok("rewrite: run is refused without --confirm-destructive")
+    else:
+        results.fail("rewrite: run is refused without --confirm-destructive",
+                     "exit %s" % refused.returncode)
+
+    before = run_rewrite("verify", tree, "--path", secret_path)
+    if before.returncode == 1:
+        results.ok("rewrite: verify reports the target before the rewrite")
+    else:
+        results.fail("rewrite: verify reports the target before the rewrite")
+
+    ran = run_rewrite("run", tree, "--path", secret_path,
+                      "--confirm-destructive")
+    if ran.returncode == 0:
+        results.ok("rewrite: run rewrites history")
+    else:
+        results.fail("rewrite: run rewrites history", ran.stdout.strip()[-200:])
+
+    after = run_rewrite("verify", tree, "--path", secret_path)
+    if after.returncode == 0 and "Gone" in after.stdout:
+        results.ok("rewrite: verify confirms the path is gone")
+    else:
+        results.fail("rewrite: verify confirms the path is gone",
+                     after.stdout.strip()[-200:])
+
+    backups = subprocess.run(
+        ["git", "-C", tree, "for-each-ref", "refs/backup/",
+         "--format=%(refname)"], stdout=subprocess.PIPE, text=True).stdout
+    if "refs/backup/prepublish-" in backups:
+        results.ok("rewrite: the backup ref survives")
+    else:
+        results.fail("rewrite: the backup ref survives", "backups=%r" % backups)
+
+    bundle_dir = os.path.join(tree, ".local", "prepublish")
+    bundles = [n for n in os.listdir(bundle_dir) if n.endswith(".bundle")] \
+        if os.path.isdir(bundle_dir) else []
+    if bundles:
+        verify = subprocess.run(
+            ["git", "-C", tree, "bundle", "verify",
+             os.path.join(bundle_dir, bundles[0])],
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        if verify.returncode == 0:
+            results.ok("rewrite: the bundle verifies")
+        else:
+            results.fail("rewrite: the bundle verifies")
+    else:
+        results.fail("rewrite: the bundle verifies", "no bundle written")
+
+    remotes = subprocess.run(["git", "-C", tree, "remote"],
+                             stdout=subprocess.PIPE, text=True).stdout.split()
+    if "origin" not in remotes:
+        results.ok("rewrite: the origin remote is removed")
+    else:
+        results.fail("rewrite: the origin remote is removed",
+                     "remotes=%r" % remotes)
+
+    tree2 = os.path.join(work, "project-replace")
+    make_fixture.build(tree2)
+    literal = make_fixture.FAKE_HISTORY_SECRET
+    ran2 = run_rewrite("run", tree2, "--replace", literal,
+                       "--confirm-destructive")
+    after2 = run_rewrite("verify", tree2, "--replace", literal)
+    if ran2.returncode == 0 and after2.returncode == 0:
+        results.ok("rewrite: replace mode removes a literal")
+    else:
+        results.fail("rewrite: replace mode removes a literal",
+                     "run=%s verify=%s" % (ran2.returncode, after2.returncode))
+
+    shutil.rmtree(work, ignore_errors=True)
+
+
 def check_worktree(root, results):
     # In a worktree .git is a file. The git checks must still run.
     import tempfile
@@ -915,6 +1013,7 @@ def main():
     check_g1(results)
     check_gate(results)
     check_worktree(target, results)
+    check_rewrite(results)
     return results.report()
 
 

@@ -307,6 +307,29 @@ result, offer to remove the backup.
 Propose the exact action, not a description of the action. Name the
 file, the line, and the command.
 
+### History rewrite
+
+A rewrite is separate from the fix ledger. It owns its backup and its
+confirmation:
+
+```
+python3 scripts/rewrite.py plan --project-root . \
+  --path config/credentials.py
+python3 scripts/rewrite.py run --project-root . \
+  --path config/credentials.py --confirm-destructive
+python3 scripts/rewrite.py verify --project-root . \
+  --path config/credentials.py
+```
+
+Use `--replace "literal"` instead of `--path` to replace a secret
+string that is still in the tree. `run` takes a backup ref and a
+verified `git bundle`, prints the restore command, rewrites the local
+refs, removes the `origin` remote, expires the reflog, and garbage
+collects. It never pushes. `verify` confirms the target is gone from the rewritten refs.
+The backup ref and the bundle keep the old history on purpose; delete
+them when the user no longer needs the backup. A rewrite is never a
+substitute for rotation.
+
 ## Invocation
 
 Optional arguments:
