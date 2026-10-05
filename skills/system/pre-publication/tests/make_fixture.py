@@ -14,6 +14,7 @@ Findings planted:
   - a remote URL with an embedded credential
   - a license mismatch and a vendored file with no notice
   - an AUTHORS file with a personal name
+  - a custom git hook that names a local path
   - a stray editor artifact
   - a non-resilient .gitignore entry
   - a tracked large file
@@ -187,6 +188,10 @@ def build(target, exiftool=None):
     git(["commit", "-q", "-m", "initial commit"], target)
     git(["rm", "-q", HISTORY_SECRET_PATH], target)
     git(["commit", "-q", "-m", "remove legacy credentials"], target)
+
+    # A custom git hook that names a local path.
+    write(os.path.join(target, ".git", "hooks", "post-checkout"),
+          "#!/bin/sh\n/home/damien/bin/setup.sh\n")
 
     return target
 

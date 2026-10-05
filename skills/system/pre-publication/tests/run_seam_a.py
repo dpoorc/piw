@@ -438,6 +438,16 @@ def check_metadata(root, results):
         results.ok("metadata: remote credential found")
     else:
         results.fail("metadata: remote credential found")
+    if any(f["location"] == "git reflog" for f in data["findings"]):
+        results.ok("metadata: reflog reported")
+    else:
+        results.fail("metadata: reflog reported")
+    hook = by_location.get(".git/hooks/post-checkout", {})
+    if hook.get("severity") == "low":
+        results.ok("metadata: custom hook reported")
+    else:
+        results.fail("metadata: custom hook reported",
+                     "finding=%s" % hook)
     advice_lines = [line for block in data.get("advice", [])
                     for line in block.get("lines", [])]
     if any("mailmap" in line for line in advice_lines):

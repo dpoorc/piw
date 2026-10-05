@@ -56,6 +56,7 @@ OOXML_IDENTITY = ("dc:creator", "cp:lastModifiedBy", "cp:lastPrinted",
                   "Manager", "Company")
 
 CREDENTIAL_URL = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*://([^/@\s]+)@")
+CREDENTIAL_IN_TEXT = re.compile(r"[a-zA-Z][a-zA-Z0-9+.-]*://([^/@\s]+)@")
 ABSOLUTE_PATH = re.compile(r"(/home/|/Users/|/root/|[A-Za-z]:\\|~/)")
 GIT_DESCRIPTION_DEFAULT = ("Unnamed repository; edit this file 'description' "
                            "to name the repository.")
@@ -90,6 +91,17 @@ def classify_tag(group, name):
 
 run_git = support.run_git
 is_git_repo = support.is_git_repo
+
+
+def git_path(root, name):
+    """Resolve a path inside the git directory, worktree safe."""
+    proc = run_git(root, ["rev-parse", "--git-path", name])
+    path = proc.stdout.strip()
+    if not path:
+        return None
+    if not os.path.isabs(path):
+        path = os.path.join(root, path)
+    return path
 
 
 # ---- File metadata (exiftool) ------------------------------------------------
@@ -255,19 +267,40 @@ def scan_repository(root):
             "git tags", "low", "history-rewrite",
             "annotated: %s" % ", ".join(annotated)))
 
-    hooks_dir = os.path.join(root, ".git", "hooks")
-    if os.path.isdir(hooks_dir):
+    proc = run_git(root, ["reflog", "--all"])
+    if proc.stdout.strip():
+        findings.append(finding(
+            "git reflog", "low", "forward-fix",
+            "%d reflog entries; old commits stay reachable until the reflog "
+            "expires" % len(proc.stdout.splitlines())))
+
+    hooks_dir = git_path(root, "hooks")
+    if hooks_dir and os.path.isdir(hooks_dir):
         hooks = [name for name in os.listdir(hooks_dir)
                  if not name.endswith(".sample")]
         if hooks:
             findings.append(finding(
                 ".git/hooks", "low", "forward-fix",
                 ", ".join(sorted(hooks))))
+        for name in sorted(hooks):
+            path = os.path.join(hooks_dir, name)
+            if not os.path.isfile(path):
+                continue
+            text = support.read_text(path) or ""
+            match = CREDENTIAL_IN_TEXT.search(text)
+            if match and ":" in match.group(1):
+                findings.append(finding(
+                    ".git/hooks/%s" % name, "medium", "rotate-credential",
+                    mask_url(match.group(0)),
+                    revocation="the account on %s" % host_of(match.group(0))))
+            elif ABSOLUTE_PATH.search(text):
+                findings.append(finding(
+                    ".git/hooks/%s" % name, "low", "forward-fix",
+                    "contains a local path"))
 
-    description = os.path.join(root, ".git", "description")
-    if os.path.exists(description):
-        with open(description, "r", encoding="utf-8", errors="replace") as handle:
-            text = handle.read().strip()
+    description = git_path(root, "description")
+    if description and os.path.exists(description):
+        text = (support.read_text(description) or "").strip()
         if text and text != GIT_DESCRIPTION_DEFAULT:
             findings.append(finding(
                 ".git/description", "low", "forward-fix", text))

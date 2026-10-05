@@ -156,8 +156,8 @@ belong to the licensing vector.
 
 Repository metadata: remote URLs with an embedded credential,
 `credential.helper`, config values with an absolute path, `.gitmodules`
-URLs, stashes, notes, annotated tags, custom hooks, and a changed
-`.git/description`.
+URLs, stashes, notes, annotated tags, the reflog, custom hooks and their
+contents, and a changed `.git/description`.
 
 Commit identity: the distinct author and committer identities in
 history. The report lists the three options: a project identity for
@@ -166,10 +166,11 @@ display only.
 
 ### Severity and remediation
 
-A credential in a remote URL is `critical` with `rotate-credential`. A
-credential helper, a local path in config, or a stash is `medium`. An
-identity or location tag is `high`. Device tags are `medium`. Tags,
-notes, hooks, and a changed description are `low`. File metadata uses
+A credential in a remote URL is `critical`. A credential in a custom
+hook is `medium`. Both use `rotate-credential`. A credential helper, a
+local path in config, or a stash is `medium`. An identity or location
+tag is `high`. Device tags are `medium`. Tags, notes, the reflog, a
+custom hook, and a changed description are `low`. File metadata uses
 `forward-fix`. Annotated tags use `history-rewrite`.
 
 ### Removal
