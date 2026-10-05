@@ -776,7 +776,8 @@ def check_report(root, results):
     if os.path.exists(clean_path):
         clean = read_text(clean_path)
         stripped = ("  - value:" not in clean and "  - rule:" not in clean
-                    and "  - tags:" not in clean)
+                    and "  - tags:" not in clean and "## Advice" not in clean
+                    and root not in clean)
         if "sanitized" in clean and stripped:
             results.ok("report writes a sanitized copy")
         else:

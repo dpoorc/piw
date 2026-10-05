@@ -269,10 +269,11 @@ python3 scripts/report.py --project-root . \
 ```
 
 It writes `report.md` to the output directory. With `--sanitize` it also
-writes `report.sanitized.md`, which strips values, rules, and tags and
-is safe to share. The sections are header, declared known risks,
-findings, skipped checks, suggested remediation plan, advice,
-non-findings, and readiness summary. Each declared known risk is marked
+writes `report.sanitized.md`, which strips values, rules, and tags, drops
+the advice section and the project root, and is safe to share. The full
+report has header, declared known risks, findings, skipped checks,
+suggested remediation plan, advice, non-findings, and readiness summary.
+Each declared known risk is marked
 found, not found, or not checked.
 
 ## Stage 5: Gated fixes

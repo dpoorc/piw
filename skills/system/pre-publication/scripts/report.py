@@ -30,9 +30,10 @@ def load_json(path):
         return json.load(handle)
 
 
-def render_header(project_root, public_mode, inventory, tools):
+def render_header(project_root, public_mode, inventory, tools, sanitized=False):
     lines = ["## Header", ""]
-    lines.append("- Project root: `%s`" % project_root)
+    if not sanitized:
+        lines.append("- Project root: `%s`" % project_root)
     lines.append("- Date: %s" % datetime.date.today().isoformat())
     lines.append("- Public mode: %s" % public_mode)
     if inventory:
@@ -282,7 +283,7 @@ def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
     if sanitized:
         parts += ["This copy strips values and raw snippets. It is safe to "
                   "share.", ""]
-    parts += render_header(project_root, public_mode, inventory, tools)
+    parts += render_header(project_root, public_mode, inventory, tools, sanitized)
     parts.append("")
     parts += render_known_risks(known_risks, findings, skipped_checks)
     parts.append("")
@@ -292,10 +293,13 @@ def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
     parts.append("")
     parts += render_plan(findings, sanitized)
     parts.append("")
-    advice_lines = render_advice(advice)
-    if advice_lines:
-        parts += advice_lines
-        parts.append("")
+    # Advice carries specifics such as commit identities. It has no place
+    # in a sanitized copy.
+    if not sanitized:
+        advice_lines = render_advice(advice)
+        if advice_lines:
+            parts += advice_lines
+            parts.append("")
     parts += render_non_findings(findings)
     parts.append("")
     parts += render_readiness(known_risks, findings, skipped_checks)
