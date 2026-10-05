@@ -1182,11 +1182,9 @@ ERROR: git pull --ff-only failed.
 printf '== doctor: four checks, drift is a report\n'
 rm -rf "$SANDBOX/.local/layers"
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
-# The seeded global manifest declares git-issues and gitleaks, so the
-# stub must list both.
+# The seeded global manifest declares git-issues, so the stub must list it.
 cp "$SANDBOX/seed/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
-export PIW_TEST_MISE_LS="go:github.com/steviee/git-issues 0.0.0
-gitleaks 8.30.1"
+export PIW_TEST_MISE_LS="go:github.com/steviee/git-issues 0.0.0"
 PIW_TEST_IMAGES="piw:default"
 out="$(piw doctor 2>&1)"
 status=$?
@@ -1337,6 +1335,34 @@ plan_summary="$(printf '%s\n' "$plan" | awk '
 ')"
 assert_output "the shipped layer composes one apt install, three archives, and the script" \
   "$plan_summary" "apt=1 pkgs=25 add=3 copy=1 run=1"
+
+printf '== layers: the shipped pre-publish layer\n'
+rm -rf "$SANDBOX/.local/layers"
+mkdir -p "$SANDBOX/.local/layers"
+cp -r "$ROOT/layers/pre-publish" "$SANDBOX/.local/layers/pre-publish"
+printf '[layers]\nrun:pre-publish\n' > "$SANDBOX/.local/piw.conf"
+
+out="$(piw layer show pre-publish 2>&1)"
+if [[ "$out" == *"mise.toml: yes"* && "$out" == *"install.sh: yes"* ]]; then
+  ok "layer show names the pre-publish mise table and script"
+else
+  bad "layer show names the pre-publish mise table and script"
+fi
+
+if grep -q '^gitleaks' "$ROOT/layers/pre-publish/mise.toml"; then
+  ok "the pre-publish layer declares gitleaks"
+else
+  bad "the pre-publish layer declares gitleaks"
+fi
+
+plan="$(piw_fn compose_plan 2>&1)"
+plan_summary="$(printf '%s\n' "$plan" | awk '
+  /^COPY pre-publish\// {copy++}
+  /^RUN bash \/tmp\/piw-layer-pre-publish\/install.sh/ {run++}
+  END {printf "copy=%d run=%d", copy, run}
+')"
+assert_output "the pre-publish layer composes its script" \
+  "$plan_summary" "copy=1 run=1"
 
 printf '== sandbox stays clean\n'
 if [[ -z "$(git -C "$SANDBOX" status --porcelain)" ]]; then

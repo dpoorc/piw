@@ -1,0 +1,8 @@
+# Store tools for the pre-publish layer.
+#
+# `piw build` copies this file to .local/mise/conf.d/pre-publish.toml, which
+# mise loads as a global config fragment. Every spec is "latest"; the mise
+# lockfile pins the resolved version.
+
+[tools]
+gitleaks = "latest"
