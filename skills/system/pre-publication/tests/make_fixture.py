@@ -132,7 +132,11 @@ def build(target, exiftool=None):
     # Vendored code with no license or notice beside it.
     write(os.path.join(target, "vendor", "lib", "foo.c"),
           "int foo(void) { return 0; }\n")
-    write(os.path.join(target, "src", "app.py"), "def main():\n    return 0\n")
+    write(os.path.join(target, "src", "app.py"),
+          "# SPDX-License-Identifier: MIT\n"
+          "# SPDX-License-Identifier: MIT@2.0\n"
+          "# SPDX-License-Identifier: Foobar-1.0\n"
+          "def main():\n    return 0\n")
     write(os.path.join(target, "docs", "contact.md"),
           "Contact: %s, %s\n" % (PII_EMAIL, PII_PHONE))
 

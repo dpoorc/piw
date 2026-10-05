@@ -81,8 +81,11 @@ DECLARED_PATTERNS = (
     ("BSD-2-Clause", re.compile(r"\bBSD-2-Clause\b|\b2-clause BSD\b")),
 )
 
-SPDX_LINE_RE = re.compile(r"SPDX-License-Identifier:\s*([A-Za-z0-9.+-]+)")
-SPDX_SHAPE_RE = re.compile(r"^[A-Za-z0-9.+-]+$")
+SPDX_LINE_RE = re.compile(r"SPDX-License-Identifier:\s*(.+)$", re.MULTILINE)
+SPDX_EXPRESSION_RE = re.compile(
+    r"^\(?[A-Za-z0-9.+-]+(?:\s+(?:AND|OR|WITH)\s+[A-Za-z0-9.+-]+)*\)?$")
+SPDX_TOKEN_RE = re.compile(r"[A-Za-z0-9.+-]+")
+SPDX_OPERATORS = {"AND", "OR", "WITH"}
 KNOWN_SPDX = {
     "0BSD", "AGPL-3.0-only", "AGPL-3.0-or-later", "Apache-2.0", "Artistic-2.0",
     "BSD-2-Clause", "BSD-3-Clause", "BSL-1.0", "CC-BY-4.0", "CC-BY-SA-4.0",
@@ -199,17 +202,27 @@ def scan_spdx(root, files):
         text = read_text(path)
         if text is None:
             continue
-        for identifier in set(SPDX_LINE_RE.findall(text)):
-            if identifier in KNOWN_SPDX:
+        for raw in set(SPDX_LINE_RE.findall(text)):
+            value = raw.strip()
+            for suffix in ("*/", "-->"):
+                if value.endswith(suffix):
+                    value = value[:-len(suffix)].strip()
+            if not value:
                 continue
-            if not SPDX_SHAPE_RE.match(identifier):
+            if not SPDX_EXPRESSION_RE.match(value):
                 findings.append(finding(
                     "SPDX", rel, "medium", "forward-fix",
-                    "malformed SPDX identifier: %s" % identifier))
-            else:
-                findings.append(finding(
-                    "SPDX", rel, "low", "forward-fix",
-                    "unrecognized SPDX identifier: %s (verify)" % identifier))
+                    "malformed SPDX identifier: %s" % value))
+                continue
+            tokens = [t for t in SPDX_TOKEN_RE.findall(value)
+                      if t not in SPDX_OPERATORS]
+            unknown = [t for t in tokens if t not in KNOWN_SPDX]
+            if not unknown:
+                continue
+            findings.append(finding(
+                "SPDX", rel, "low", "forward-fix",
+                "unrecognized SPDX identifier: %s (verify)"
+                % ", ".join(unknown)))
     return findings
 
 

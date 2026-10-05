@@ -624,6 +624,20 @@ def check_licensing(root, results):
         results.ok("licensing: vendored code without a notice found")
     else:
         results.fail("licensing: vendored code without a notice found")
+    malformed = [f for f in findings if f["category"] == "SPDX"
+                 and f["severity"] == "medium"]
+    if malformed and "MIT@2.0" in str(malformed[0].get("value")):
+        results.ok("licensing: malformed SPDX identifier is medium")
+    else:
+        results.fail("licensing: malformed SPDX identifier is medium",
+                     "malformed=%s" % malformed)
+    unknown = [f for f in findings if f["category"] == "SPDX"
+               and f["severity"] == "low"]
+    if unknown and "Foobar-1.0" in str(unknown[0].get("value")):
+        results.ok("licensing: unknown SPDX identifier is low")
+    else:
+        results.fail("licensing: unknown SPDX identifier is low",
+                     "unknown=%s" % unknown)
 
     topics = [block["topic"] for block in data.get("advice", [])]
     if "Authorship preference" in topics and "Licensing scope" in topics:
