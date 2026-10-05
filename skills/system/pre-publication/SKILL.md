@@ -36,8 +36,9 @@ Sterilize a project before it becomes public.
 5. **Gated fixes** - propose each fix, apply only what is approved,
    and gate destructive actions separately.
 
-Intake, inventory, the report skeleton, and the gated-fix protocol are
-implemented. The scan stages arrive with their own work.
+Intake, inventory, the secrets scan, the report, and the gated-fix
+protocol are implemented. The remaining scan vectors arrive with
+their own work.
 
 ## Stage 1: Intake
 
@@ -125,6 +126,32 @@ mismatch. A mismatch is a finding in its own right.
 Carrier checks are gated by what the inventory shows. A check whose
 carrier is absent is skipped, and the skip is recorded in the report.
 
+## Stage 3: Scan
+
+Run the vector checks. A content check runs over every text-like
+file. A carrier check runs only when its carrier is present. See
+`checks.md` for the per-vector detail.
+
+### Secrets
+
+`gitleaks` is required. Run `scripts/secrets.py`:
+
+```
+python3 scripts/secrets.py --project-root . --format text
+```
+
+It scans the working tree (`gitleaks dir`) and, when a git repository
+is present, the git history (`gitleaks git`). It writes
+`secrets.json` to the output directory.
+
+If `gitleaks` is absent, the script exits 3 and records the skip. Do
+not substitute a weaker scan.
+
+Each finding carries class, carrier, location, severity, confidence,
+and remediation kind. Secrets default to `critical` and
+`rotate-credential`. The report's rotation hand-off lists the
+affected credentials and the provider revocation location.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:
@@ -135,7 +162,8 @@ python3 scripts/report.py --project-root . \
   --known-risk "..." \
   --inventory inventory.json \
   --tools tools.json \
-  --stage intake --stage inventory
+  --findings .local/prepublish/secrets.json \
+  --stage intake --stage inventory --stage scan
 ```
 
 It writes `report.md` to the output directory. The sections are header,

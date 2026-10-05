@@ -9,9 +9,12 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 
 OUTPUT_SUBPATH = os.path.join(".local", "prepublish")
+
+SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
 
 def load_json(path):
@@ -52,43 +55,119 @@ def render_known_risks(known_risks):
     return lines
 
 
-def render_findings():
-    return [
-        "## Findings",
-        "",
-        "None yet. Findings are grouped by severity, each with class,",
-        "carrier, location, confidence, and remediation kind.",
-    ]
+def load_findings(paths):
+    """Read findings files. Return (findings, skipped_checks)."""
+    findings = []
+    skipped = []
+    for path in paths:
+        data = load_json(path)
+        if not data:
+            continue
+        if data.get("status") == "skipped":
+            skipped.append({
+                "check": data.get("vector", path),
+                "reason": data.get("reason", "skipped"),
+                "tool": (data.get("tool") or {}).get("name", "unknown"),
+            })
+        findings.extend(data.get("findings", []))
+    return findings, skipped
 
 
-def render_skipped(ran_stages):
+def render_findings(findings):
+    lines = ["## Findings", ""]
+    if not findings:
+        lines.append("None found by the checks that ran.")
+        return lines
+    lines.append("%d finding(s)." % len(findings))
+    lines.append("")
+    for severity in SEVERITY_ORDER:
+        group = [f for f in findings if f.get("severity") == severity]
+        if not group:
+            continue
+        lines.append("### %s (%d)" % (severity.capitalize(), len(group)))
+        for finding in group:
+            lines.append(
+                "- **%s** - carrier: %s - location: `%s` - confidence: %s - "
+                "remediation: %s"
+                % (finding.get("class", "?"), finding.get("carrier", "?"),
+                   finding.get("location", "?"), finding.get("confidence", "?"),
+                   finding.get("remediation", "?")))
+            if finding.get("rule"):
+                lines.append("  - rule: `%s`" % finding["rule"])
+            if finding.get("value"):
+                lines.append("  - value: `%s`" % finding["value"])
+            if finding.get("commit"):
+                lines.append("  - commit: `%s`" % finding["commit"][:12])
+        lines.append("")
+    return lines
+
+
+def render_skipped(ran_stages, skipped_checks):
     lines = ["## Skipped checks", ""]
     lines.append("Stages that ran: %s" % ", ".join(ran_stages))
+    lines.append("")
+    if skipped_checks:
+        for item in skipped_checks:
+            lines.append("- %s: %s" % (item["check"], item["reason"]))
+    else:
+        lines.append("No check was skipped by a missing carrier or tool.")
     lines.append("")
     lines.append("Carrier checks are skipped when their carrier is absent.")
     lines.append("No skipped check is dropped silently.")
     return lines
 
 
-def render_plan():
-    return [
-        "## Suggested remediation plan",
-        "",
-        "None. Each fix is proposed as an exact action once findings exist.",
-    ]
+def render_plan(findings):
+    lines = ["## Suggested remediation plan", ""]
+    rotation = [f for f in findings if f.get("remediation") == "rotate-credential"]
+    if rotation:
+        lines.append("### Credential rotation hand-off")
+        lines.append("")
+        lines.append("Rotate each credential before publication. A history "
+                     "rewrite is not a substitute for rotation.")
+        lines.append("")
+        grouped = {}
+        for finding in rotation:
+            key = finding.get("value") or (finding.get("rule"),
+                                           finding.get("location"))
+            entry = grouped.setdefault(key, {
+                "rule": finding.get("rule", "?"),
+                "revocation": finding.get("revocation", "the provider"),
+                "locations": [],
+            })
+            entry["locations"].append(finding.get("location", "?"))
+        for entry in grouped.values():
+            locations = ", ".join("`%s`" % loc for loc in entry["locations"])
+            lines.append("- %s (%s)" % (locations, entry["rule"]))
+            lines.append("  - revoke at: %s" % entry["revocation"])
+        lines.append("")
+        lines.append("Confirmation step: make a test request with the old "
+                     "credential and confirm it fails. Publication stays "
+                     "blocked until each rotation is confirmed.")
+        lines.append("")
+    if not findings:
+        lines.append("None. Each fix is proposed as an exact action once "
+                     "findings exist.")
+        return lines
+    lines.append("Ordered by severity. Each fix is proposed as an exact "
+                 "action and applied only after approval.")
+    return lines
 
 
-def render_non_findings():
-    return [
-        "## Non-findings",
-        "",
-        "Recorded as the scan stages run.",
-    ]
+def render_non_findings(findings):
+    lines = ["## Non-findings", ""]
+    if findings:
+        lines.append("Recorded as the scan stages run.")
+    else:
+        lines.append("The checks that ran reported no findings.")
+    return lines
 
 
-def render_readiness(known_risks):
+def render_readiness(known_risks, findings):
+    blocking = [f for f in findings
+                if f.get("severity") in ("critical", "high")]
     lines = ["## Readiness summary", ""]
-    lines.append("- Blocking findings open: 0")
+    lines.append("- Blocking findings open: %d" % len(blocking))
     lines.append("- Declared known risks: 0 found, 0 not found, %d not checked"
                  % len(known_risks))
     lines.append("")
@@ -98,23 +177,24 @@ def render_readiness(known_risks):
     return lines
 
 
-def render(project_root, public_mode, known_risks, inventory, tools, ran_stages):
+def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
+           findings, skipped_checks):
     parts = ["# Pre-publication report", ""]
     parts += render_header(project_root, public_mode, inventory, tools)
     parts.append("")
     parts += render_known_risks(known_risks)
     parts.append("")
-    parts += render_findings()
+    parts += render_findings(findings)
     parts.append("")
-    parts += render_skipped(ran_stages)
+    parts += render_skipped(ran_stages, skipped_checks)
     parts.append("")
-    parts += render_plan()
+    parts += render_plan(findings)
     parts.append("")
-    parts += render_non_findings()
+    parts += render_non_findings(findings)
     parts.append("")
-    parts += render_readiness(known_risks)
+    parts += render_readiness(known_risks, findings)
     parts.append("")
-    return "\n".join(parts)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(parts))
 
 
 def main():
@@ -127,6 +207,8 @@ def main():
     parser.add_argument("--tools", default=None, help="tool-check JSON file")
     parser.add_argument("--stage", action="append", default=[],
                         help="a stage that ran (repeatable)")
+    parser.add_argument("--findings", action="append", default=[],
+                        help="a findings JSON file (repeatable)")
     parser.add_argument("--stdout", action="store_true")
     args = parser.parse_args()
 
@@ -137,9 +219,10 @@ def main():
     inventory = load_json(args.inventory)
     tools = load_json(args.tools)
     stages = args.stage or ["intake"]
+    findings, skipped_checks = load_findings(args.findings)
 
     text = render(project_root, args.public_mode, args.known_risk,
-                  inventory, tools, stages)
+                  inventory, tools, stages, findings, skipped_checks)
 
     report_path = os.path.join(output_dir, "report.md")
     with open(report_path, "w", encoding="utf-8") as handle:

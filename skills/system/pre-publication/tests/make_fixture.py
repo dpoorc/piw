@@ -33,7 +33,7 @@ JPEG_1X1 = (
 )
 
 # Clearly fake. Reserved example domain and a non-functional token shape.
-FAKE_TREE_SECRET = "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
+FAKE_TREE_SECRET = "ghp_aB3dE5gH7jK9lM1nO3pQ5rS7tU9vW1xY3zA5"
 FAKE_HISTORY_SECRET = "ghp_zyxwvutsrqponmlkjihgfedcba9876543210"
 PII_EMAIL = "jane.doe@example.com"
 PII_PHONE = "+1-202-555-0143"

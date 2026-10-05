@@ -44,6 +44,24 @@ a file whose content contradicts its extension.
 `expected.json` lists those findings. It is written before the fixture,
 so a broken fixture fails loudly instead of passing every later check.
 
+Both planted secret tokens are GitHub token shapes that the gitleaks
+default rules detect. A sequential token shape is not detected, so the
+fixture does not use one.
+
+## Secrets scan
+
+Seam A runs `scripts/secrets.py` against the fixture and checks that:
+
+- a missing `gitleaks` stops the check with exit code 3 and a clear
+  message;
+- the scan runs and finds the working-tree secret and the history
+  secret;
+- every finding carries a confidence value.
+
+It also runs `report.py` with the findings and checks that the report
+carries the rotation hand-off. The check is skipped when `gitleaks` is
+absent from the environment.
+
 ## Gate G1
 
 `g1_hygiene.py` fails if the shipped skill carries planning residue:

@@ -242,14 +242,65 @@ def check_inventory(root, results):
     return data
 
 
+def run_secrets(root, gitleaks=None):
+    args = [sys.executable, os.path.join(SCRIPTS, "secrets.py"),
+            "--project-root", root, "--format", "json"]
+    if gitleaks:
+        args += ["--gitleaks", gitleaks]
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+
+
+def check_secrets(root, results):
+    # A missing required tool stops the check with a clear message.
+    absent = run_secrets(root, gitleaks="/nonexistent")
+    if absent.returncode == 3 and "gitleaks is required" in absent.stderr:
+        results.ok("secrets: missing tool stops the check")
+    else:
+        results.fail("secrets: missing tool stops the check",
+                     "exit %s" % absent.returncode)
+
+    if not shutil.which("gitleaks"):
+        results.skip("secrets: both fixture secrets found", "gitleaks is absent")
+        return
+
+    result = run_secrets(root)
+    if result.returncode != 0:
+        results.fail("secrets: scan runs", result.stderr.strip())
+        return
+    results.ok("secrets: scan runs")
+    data = json.loads(result.stdout)
+    findings = data["findings"]
+
+    pairs = {(f["location"], f["carrier"]) for f in findings}
+    if any(loc.startswith("src/settings.py") and carrier == "working tree"
+           for loc, carrier in pairs):
+        results.ok("secrets: tree secret found")
+    else:
+        results.fail("secrets: tree secret found", "locations=%s" % sorted(pairs))
+    if any(loc.startswith("config/credentials.py") and carrier == "git history"
+           for loc, carrier in pairs):
+        results.ok("secrets: history secret found")
+    else:
+        results.fail("secrets: history secret found", "locations=%s" % sorted(pairs))
+    if findings and all(f.get("confidence") for f in findings):
+        results.ok("secrets: findings carry confidence")
+    else:
+        results.fail("secrets: findings carry confidence")
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
+    secrets_json = os.path.join(output_dir, "secrets.json")
+    args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
+            "--project-root", root,
+            "--public-mode", "open source",
+            "--known-risk", "a legacy token",
+            "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
+    if os.path.exists(secrets_json):
+        args += ["--findings", secrets_json]
     result = subprocess.run(
-        [sys.executable, os.path.join(SCRIPTS, "report.py"),
-         "--project-root", root,
-         "--public-mode", "open source",
-         "--known-risk", "a legacy token",
-         "--stage", "intake", "--stage", "inventory"],
+        args,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         results.fail("report runs", result.stderr.strip())
@@ -269,6 +320,11 @@ def check_report(root, results):
         results.ok("report carries the declared known risk")
     else:
         results.fail("report carries the declared known risk")
+    if shutil.which("gitleaks"):
+        if "rotate-credential" in text and "Credential rotation hand-off" in text:
+            results.ok("report carries the rotation hand-off")
+        else:
+            results.fail("report carries the rotation hand-off")
 
 
 def check_g1(results):
@@ -352,6 +408,7 @@ def main():
     results = Results()
     check_planted_findings(target, results)
     check_inventory(target, results)
+    check_secrets(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)
