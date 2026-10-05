@@ -249,6 +249,45 @@ The check is high-level. It does not select a license, audit dependency
 compatibility, or author legal text. A deeper audit is a hand-off to a
 compliance workflow.
 
+### Sensitive-information reference (optional)
+
+The reference is an optional detection aid for project-specific
+strings that the generic checks miss: codenames, internal hostnames,
+personal names, and private terms. Ask the user whether they want it.
+A project that does not need it skips the stage.
+
+Build the first round from the known risks, the vector findings, and
+any terms the user supplies:
+
+```
+python3 scripts/reference.py build --project-root . \
+  --known-risk "internal codename is `ProjectNimbus`" \
+  --findings .local/prepublish/pii.json \
+  --term "acme-internal"
+```
+
+Then review the flagged files together with the user. Read the files
+that the hygiene vector marks as internal-facing, and read the
+reference markdown. Add each term that you and the user agree on:
+
+```
+python3 scripts/reference.py expand --project-root . --term "AcmeCorp"
+python3 scripts/reference.py scan --project-root .
+python3 scripts/reference.py show --project-root .
+```
+
+Each round scans the working tree for the terms. A round stops when it
+adds nothing new. The loop is collaborative: the agent proposes terms
+from the files it reads, and the user confirms them. The script cannot
+make the file-level judgment on its own.
+
+The reference lives in `.local/prepublish/`. The scan excludes that
+directory, and the reference is never part of a sanitized export. It
+carries sensitive terms, so never share it.
+
+Add `--findings .local/prepublish/reference.json` to the report command
+when the reference ran.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:

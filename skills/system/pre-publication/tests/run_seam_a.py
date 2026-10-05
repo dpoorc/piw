@@ -700,6 +700,73 @@ def check_licensing(root, results):
     shutil.rmtree(probe, ignore_errors=True)
 
 
+def run_reference(root, *args):
+    return subprocess.run(
+        [sys.executable, os.path.join(SCRIPTS, "reference.py")]
+        + list(args) + ["--project-root", root],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def check_reference(root, results):
+    output_dir = os.path.join(root, ".local", "prepublish")
+    pii_path = os.path.join(output_dir, "pii.json")
+    if not os.path.exists(pii_path):
+        results.skip("reference: build seeds the reference", "no pii.json")
+        return
+
+    built = run_reference(
+        root, "build",
+        "--known-risk", "internal codename is `ProjectNimbus`",
+        "--findings", pii_path,
+        "--term", "acme-internal")
+    if built.returncode == 0 and "Reference built" in built.stdout:
+        results.ok("reference: build seeds the reference")
+    else:
+        results.fail("reference: build seeds the reference",
+                     built.stdout.strip()[-200:])
+
+    ref_json = os.path.join(output_dir, "sensitive-info.json")
+    if os.path.exists(ref_json):
+        results.ok("reference: the reference is stored in the output dir")
+    else:
+        results.fail("reference: the reference is stored in the output dir")
+
+    scanned = run_reference(root, "scan")
+    if scanned.returncode == 0 and "docs/contact.md" in scanned.stdout:
+        results.ok("reference: scan finds a seeded term")
+    else:
+        results.fail("reference: scan finds a seeded term",
+                     scanned.stdout.strip()[-200:])
+
+    report_path = os.path.join(output_dir, "reference.json")
+    if os.path.exists(report_path):
+        data = json.load(open(report_path, "r", encoding="utf-8"))
+        locations = [item.get("location", "") for item in data["findings"]]
+        if locations and all(".local" not in loc for loc in locations):
+            results.ok("reference: scan excludes the output directory")
+        else:
+            results.fail("reference: scan excludes the output directory",
+                         "locations=%r" % locations)
+    else:
+        results.fail("reference: scan excludes the output directory",
+                     "reference.json missing")
+
+    expanded = run_reference(root, "expand", "--term", "Fixture",
+                             "--kind", "person")
+    if expanded.returncode == 0 and "new occurrence" in expanded.stdout:
+        results.ok("reference: expand adds a term and finds it")
+    else:
+        results.fail("reference: expand adds a term and finds it",
+                     expanded.stdout.strip()[-200:])
+
+    stopped = run_reference(root, "expand")
+    if stopped.returncode == 0 and "adds nothing new" in stopped.stdout:
+        results.ok("reference: a round with no new term stops")
+    else:
+        results.fail("reference: a round with no new term stops",
+                     stopped.stdout.strip()[-200:])
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
     args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
@@ -1009,6 +1076,7 @@ def main():
     check_metadata(target, results)
     check_hygiene(target, results)
     check_licensing(target, results)
+    check_reference(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)

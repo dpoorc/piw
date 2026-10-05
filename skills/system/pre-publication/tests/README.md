@@ -129,6 +129,18 @@ Seam A runs `scripts/licensing.py` against the fixture and checks that:
 
 It also checks that the report carries the licensing advice.
 
+## Sensitive-information reference
+
+Seam A runs `scripts/reference.py` against the fixture and checks that:
+
+- `build` seeds the reference from the PII findings, a known risk, and
+  a supplied term;
+- the reference is stored in the output directory;
+- `scan` finds a seeded term;
+- the scan excludes the output directory;
+- `expand` adds a term and finds it;
+- a round with no new term stops.
+
 ## History rewrite
 
 Seam A runs `scripts/rewrite.py` against a copy of the fixture and

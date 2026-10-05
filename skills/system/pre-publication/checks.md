@@ -321,6 +321,54 @@ Remediation is `forward-fix` (correct or redact) or `add-protection`
 - License selection and naming stay out of scope.
 - The license fingerprints cover the common licenses, not every license.
 
+## Sensitive-information reference
+
+Script: `scripts/reference.py`. Subcommands: `build`, `scan`, `expand`,
+`show`. Optional. Standard library only.
+
+### What runs
+
+- `build`: seeds the reference from the declared known risks, the
+  vector findings, a project term list, and a terms file. Writes
+  `sensitive-info.json` and `sensitive-info.md` to the output
+  directory.
+- `scan`: searches the working tree for every term. With `--history`
+  it also searches the git history, capped at 500 revisions. Writes
+  `reference.json` in the findings shape.
+- `expand`: adds terms, records a round, and rescans. Reports the new
+  occurrences. A round with no new term, or with no new occurrence,
+  adds nothing new and stops.
+- `show`: prints the terms and the rounds.
+
+### Term sources
+
+- A known risk: backticked, quoted, email-shaped, and host-shaped
+  tokens are extracted. A risk with no extractable token is recorded
+  as a note.
+- A finding: a `PERSON` value, an email address, and an email domain.
+  A secret value is never stored. Only the host of a URL-shaped secret
+  is kept.
+- A project term, or a file of terms, one per line.
+- A file-level judgment: the agent reads a flagged file, proposes a
+  term, and the user confirms it.
+
+### Storage and exclusion
+
+The reference lives in `.local/prepublish/`. The scan uses the
+inventory walk, which excludes that directory by exact path. The
+reference is never part of a sanitized export. The markdown view
+carries a warning: it holds sensitive terms, so never share it.
+
+### Limits
+
+- The script cannot make the file-level judgment. That step is the
+  agent and the user reading the files together.
+- A term match is a soft signal. It is `medium`, not a confirmed leak.
+- The scan is case-insensitive and plain-substring. A term with a
+  regular-expression metacharacter is treated literally.
+- A term is capped at 100 matches. The history scan is capped at 500
+  revisions.
+
 ## History rewrite
 
 Tool: `git-filter-repo`. Required. No fallback.
