@@ -27,7 +27,7 @@
       "vector": "metadata",
       "carrier": "file metadata",
       "location": "photo.jpg",
-      "note": "Artist, Make, Model, and GPS coordinates"
+      "note": "Artist, Make, Model, GPS coordinates, and Orientation"
     },
     {
       "id": "office-author",
@@ -35,6 +35,13 @@
       "carrier": "document metadata",
       "location": "docs/report.docx",
       "note": "the core-properties creator field"
+    },
+    {
+      "id": "remote-credential",
+      "vector": "metadata",
+      "carrier": "repository metadata",
+      "location": ".git/config",
+      "note": "a remote URL with an embedded credential"
     },
     {
       "id": "stray-artifact",

@@ -36,10 +36,11 @@ python3 tests/make_fixture.py --target /tmp/prepublish-fixture
 
 `make_fixture.py` builds a synthetic project in a temporary directory.
 Nothing is committed from it. It plants a secret in the working tree, a
-secret in git history only, a PII string, an image with EXIF identity
-and GPS tags, an Office document with an author field, a stray editor
-artifact, a non-resilient `.gitignore` entry, a tracked large file, and
-a file whose content contradicts its extension.
+secret in git history only, a PII string, an image with EXIF identity,
+GPS, and orientation tags, an Office document with an author field, a
+remote URL with an embedded credential, a stray editor artifact, a
+non-resilient `.gitignore` entry, a tracked large file, and a file whose
+content contradicts its extension.
 
 `expected.json` lists those findings. It is written before the fixture,
 so a broken fixture fails loudly instead of passing every later check.
@@ -74,6 +75,24 @@ Seam A runs `scripts/pii.py` against the fixture and checks that:
 It also checks that the report carries the PII findings. The check is
 skipped when `presidio` is absent. To run it, use an interpreter where
 `presidio_analyzer` is importable.
+
+## Metadata scan
+
+Seam A runs `scripts/metadata.py scan` against the fixture and checks
+that:
+
+- a missing `exiftool` records the file-metadata check as skipped, and
+  the git checks still run;
+- the scan finds the EXIF identity and GPS tags, the Office author
+  field, and the remote credential;
+- the commit identity options are presented;
+- selective removal keeps `Orientation` and removes `Artist` and GPS;
+- OOXML removal removes the author field;
+- an in-place removal is refused without `--confirm-destructive`.
+
+The scan check is skipped when `exiftool` is absent. The removal checks
+need `exiftool` for the image and only the standard library for the
+Office document.
 
 ## Gate G1
 

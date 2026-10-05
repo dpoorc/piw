@@ -9,8 +9,9 @@ Findings planted:
   - a fake secret in the working tree
   - a fake secret that exists only in git history
   - a PII string
-  - an image with EXIF identity and GPS tags
+  - an image with EXIF identity, GPS, and orientation tags
   - an Office document with an author field
+  - a remote URL with an embedded credential
   - a stray editor artifact
   - a non-resilient .gitignore entry
   - a tracked large file
@@ -47,7 +48,17 @@ def run(args, cwd):
 
 
 def git(args, cwd):
-    run(["git", "-c", "user.name=Fixture", "-c", "user.email=fixture@example.com"] + args, cwd)
+    # The host may export GIT_AUTHOR_* / GIT_COMMITTER_*. Pin the fixture
+    # identity so the metadata scan is deterministic.
+    env = dict(os.environ)
+    env.update({
+        "GIT_AUTHOR_NAME": "Fixture",
+        "GIT_AUTHOR_EMAIL": "fixture@example.com",
+        "GIT_COMMITTER_NAME": "Fixture",
+        "GIT_COMMITTER_EMAIL": "fixture@example.com",
+    })
+    subprocess.run(["git"] + args, cwd=cwd, check=True, env=env,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def write(path, text):
@@ -98,6 +109,11 @@ def build(target, exiftool=None):
         shutil.rmtree(target)
     os.makedirs(target)
     run(["git", "init", "-q"], target)
+    # A remote URL with an embedded credential. The metadata vector must
+    # find it; the secret scanners do not, because `.git/config` is not in
+    # the working tree.
+    git(["remote", "add", "origin",
+         "https://fixture-user:fixture-token@example.com/org/repo.git"], target)
 
     # Plain content.
     write(os.path.join(target, "README.md"), "# Fixture project\n")
@@ -137,6 +153,7 @@ def build(target, exiftool=None):
                         "-Artist=Damien Fixture",
                         "-GPSLatitude=51.5", "-GPSLongitude=-0.12",
                         "-Make=FixtureCam", "-Model=Model X",
+                        "-Orientation#=6",
                         image_path],
                        check=False, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL)

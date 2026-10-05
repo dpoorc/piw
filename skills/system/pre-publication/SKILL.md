@@ -170,6 +170,40 @@ not substitute a weaker scan.
 Metadata PII (EXIF, GPS, and document properties) belongs to the
 metadata vector.
 
+### Metadata
+
+`exiftool` is required when the inventory holds image, office, or PDF
+carriers. Run `scripts/metadata.py scan`:
+
+```
+python3 scripts/metadata.py scan --project-root . --format text
+```
+
+It reads file metadata with exiftool, checks the repository metadata
+with git, and collects the commit identities. It writes `metadata.json`
+to the output directory. If exiftool is absent while carriers exist,
+the file-metadata check is recorded as skipped and the git checks still
+run. There is no weaker fallback for file metadata.
+
+The report lists the three commit identity options: a project identity
+for future commits, a history rewrite for the past, and `.mailmap` for
+display only.
+
+Removal is a separate, gated step. It selects the identity and location
+tags by default and keeps functional tags such as `Orientation`:
+
+```
+python3 scripts/metadata.py remove photo.jpg \
+  --confirm-destructive --backup photo.jpg.bak
+python3 scripts/metadata.py remove photo.jpg --out photo.clean.jpg
+```
+
+`--strip-all` is opt-in and warns that it drops functional tags.
+In-place removal is destructive under the gate. The script re-reads the
+file to confirm the tags are gone. exiftool cannot write OOXML; for an
+OOXML file the script rewrites the identity parts with the standard
+library `zipfile` module.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:
@@ -182,6 +216,7 @@ python3 scripts/report.py --project-root . \
   --tools tools.json \
   --findings .local/prepublish/secrets.json \
   --findings .local/prepublish/pii.json \
+  --findings .local/prepublish/metadata.json \
   --stage intake --stage inventory --stage scan
 ```
 

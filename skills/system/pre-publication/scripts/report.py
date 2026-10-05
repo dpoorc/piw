@@ -56,9 +56,10 @@ def render_known_risks(known_risks):
 
 
 def load_findings(paths):
-    """Read findings files. Return (findings, skipped_checks)."""
+    """Read findings files. Return (findings, skipped_checks, advice)."""
     findings = []
     skipped = []
+    advice = []
     for path in paths:
         data = load_json(path)
         if not data:
@@ -69,8 +70,10 @@ def load_findings(paths):
                 "reason": data.get("reason", "skipped"),
                 "tool": (data.get("tool") or {}).get("name", "unknown"),
             })
+        skipped.extend(data.get("skipped_checks", []))
+        advice.extend(data.get("advice", []))
         findings.extend(data.get("findings", []))
-    return findings, skipped
+    return findings, skipped, advice
 
 
 def render_findings(findings):
@@ -96,6 +99,8 @@ def render_findings(findings):
                 lines.append("  - rule: `%s`" % finding["rule"])
             if finding.get("entity"):
                 lines.append("  - entity: `%s`" % finding["entity"])
+            if finding.get("tags"):
+                lines.append("  - tags: %s" % ", ".join(finding["tags"]))
             if finding.get("value"):
                 lines.append("  - value: `%s`" % finding["value"])
             if finding.get("commit"):
@@ -156,6 +161,15 @@ def render_plan(findings):
     return lines
 
 
+def render_advice(advice):
+    if not advice:
+        return []
+    lines = ["## Commit identity options", ""]
+    for line in advice:
+        lines.append("- %s" % line)
+    return lines
+
+
 def render_non_findings(findings):
     lines = ["## Non-findings", ""]
     if findings:
@@ -180,7 +194,7 @@ def render_readiness(known_risks, findings):
 
 
 def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
-           findings, skipped_checks):
+           findings, skipped_checks, advice):
     parts = ["# Pre-publication report", ""]
     parts += render_header(project_root, public_mode, inventory, tools)
     parts.append("")
@@ -192,6 +206,10 @@ def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
     parts.append("")
     parts += render_plan(findings)
     parts.append("")
+    advice_lines = render_advice(advice)
+    if advice_lines:
+        parts += advice_lines
+        parts.append("")
     parts += render_non_findings(findings)
     parts.append("")
     parts += render_readiness(known_risks, findings)
@@ -221,10 +239,10 @@ def main():
     inventory = load_json(args.inventory)
     tools = load_json(args.tools)
     stages = args.stage or ["intake"]
-    findings, skipped_checks = load_findings(args.findings)
+    findings, skipped_checks, advice = load_findings(args.findings)
 
     text = render(project_root, args.public_mode, args.known_risk,
-                  inventory, tools, stages, findings, skipped_checks)
+                  inventory, tools, stages, findings, skipped_checks, advice)
 
     report_path = os.path.join(output_dir, "report.md")
     with open(report_path, "w", encoding="utf-8") as handle:

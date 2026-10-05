@@ -132,3 +132,71 @@ history rewrite, which the git history vector owns.
 - NER has false positives. A name in ordinary prose is reported at
   `likely`.
 - Metadata PII is deferred to the metadata vector.
+
+## Metadata
+
+Tool: `exiftool`. Required when the inventory holds image, office, or
+PDF carriers. Git is used for the repository metadata. No weaker
+fallback for file metadata.
+
+### What runs
+
+`scripts/metadata.py scan` reads file metadata with exiftool, checks the
+repository metadata with git, and collects the commit identities. It
+writes `metadata.json` to the output directory.
+
+### Detection
+
+File metadata: exiftool reads every image, office, and PDF carrier. The
+scan matches identity and location tags: `Artist`, `OwnerName`,
+`SerialNumber`, `Creator`, `LastModifiedBy`, `Author`, `By-line`,
+`Credit`, `Source`, `Company`, `Manager`, `Make`, `Model`, `Software`,
+`CreatorTool`, and every `GPS*` tag. Copyright and licensor fields
+belong to the licensing vector.
+
+Repository metadata: remote URLs with an embedded credential,
+`credential.helper`, config values with an absolute path, `.gitmodules`
+URLs, stashes, notes, annotated tags, custom hooks, and a changed
+`.git/description`.
+
+Commit identity: the distinct author and committer identities in
+history. The report lists the three options: a project identity for
+future commits, a history rewrite for the past, and `.mailmap` for
+display only.
+
+### Severity and remediation
+
+A credential in a remote URL is `critical` with `rotate-credential`. A
+credential helper, a local path in config, or a stash is `medium`. An
+identity or location tag is `high`. Device tags are `medium`. Tags,
+notes, hooks, and a changed description are `low`. File metadata uses
+`forward-fix`. Annotated tags use `history-rewrite`.
+
+### Removal
+
+`scripts/metadata.py remove` selects the identity and location tags by
+default. It keeps functional tags, including `Orientation`, the color
+profile, and dimensions. `--strip-all` is opt-in and warns that it
+drops functional tags. An in-place edit is destructive and needs
+`--confirm-destructive`. An out-of-place write with `--out` is not
+destructive. The script re-reads the file to confirm the tags are gone.
+
+exiftool cannot write OOXML. For OOXML the script rewrites
+`docProps/core.xml`, `docProps/app.xml`, and `docProps/custom.xml` with
+the standard library `zipfile` module. It preserves the entry order and
+the entry metadata, and replaces the file atomically.
+
+### False-positive controls
+
+- A tag is reported only when exiftool reads it from the file.
+- The remote check flags a userinfo field with a colon, not a bare
+  username such as `git@host`.
+- The value in the report is masked: the password becomes `***`.
+
+### Limits
+
+- exiftool is the only file reader. There is no fallback.
+- PDF removal is offered through exiftool; OOXML removal uses
+  `zipfile`. Other formats are report-only.
+- The scan reads metadata; it does not prove that no metadata remains.
+- Commit identity rewriting belongs to the git history vector.

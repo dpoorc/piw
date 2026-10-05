@@ -73,23 +73,38 @@ def verify_pii_content(root):
     return make_fixture.PII_EMAIL in text, "the example email is present"
 
 
+def exiftool_tags(exiftool, path, *names):
+    result = subprocess.run([exiftool, "-j"] + list(names) + [path],
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            text=True)
+    try:
+        return json.loads(result.stdout)[0]
+    except (ValueError, IndexError):
+        return {}
+
+
 def verify_exif_identity(root):
     exiftool = shutil.which("exiftool")
     if not exiftool:
         return None, "exiftool is absent, EXIF was not planted"
-    result = subprocess.run(
-        [exiftool, "-j", "-Artist", "-GPSLatitude", "-Make", "-Model",
-         os.path.join(root, "photo.jpg")],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    try:
-        tags = json.loads(result.stdout)[0]
-    except (ValueError, IndexError):
-        return False, "exiftool returned no tags"
-    missing = [t for t in ("Artist", "GPSLatitude", "Make", "Model")
-               if not tags.get(t)]
+    tags = exiftool_tags(exiftool, os.path.join(root, "photo.jpg"),
+                         "-Artist", "-GPSLatitude", "-Make", "-Model",
+                         "-Orientation")
+    missing = [t for t in ("Artist", "GPSLatitude", "Make", "Model",
+                           "Orientation") if not tags.get(t)]
     if missing:
         return False, "missing EXIF tags: %s" % ", ".join(missing)
-    return True, "EXIF identity and GPS tags are present"
+    return True, "EXIF identity, GPS, and orientation tags are present"
+
+
+def verify_remote_credential(root):
+    path = os.path.join(root, ".git", "config")
+    if not os.path.exists(path):
+        return False, "the repository has no config"
+    text = read_text(path)
+    if "fixture-user:fixture-token@" in text:
+        return True, "a remote URL carries an embedded credential"
+    return False, "the remote credential is missing"
 
 
 def verify_office_author(root):
@@ -148,6 +163,7 @@ VERIFIERS = {
     "pii-content": verify_pii_content,
     "exif-identity": verify_exif_identity,
     "office-author": verify_office_author,
+    "remote-credential": verify_remote_credential,
     "stray-artifact": verify_stray_artifact,
     "ignore-gap": verify_ignore_gap,
     "large-file": verify_large_file,
@@ -337,6 +353,107 @@ def check_pii(root, results):
         results.fail("pii: findings carry confidence")
 
 
+def run_metadata(root, extra=None):
+    args = [sys.executable, os.path.join(SCRIPTS, "metadata.py"), "scan",
+            "--project-root", root, "--format", "json"] + (extra or [])
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+
+
+def check_metadata(root, results):
+    # Missing exiftool: the file-metadata check is skipped, the git checks run.
+    absent = run_metadata(root, ["--no-exiftool"])
+    if absent.returncode == 0:
+        data = json.loads(absent.stdout)
+        skipped = [s["check"] for s in data.get("skipped_checks", [])]
+        if "file metadata" in skipped:
+            results.ok("metadata: missing exiftool records a skip")
+        else:
+            results.fail("metadata: missing exiftool records a skip",
+                         "skipped=%s" % skipped)
+        if any(f["location"].startswith("remote:")
+               for f in data.get("findings", [])):
+            results.ok("metadata: git checks run without exiftool")
+        else:
+            results.fail("metadata: git checks run without exiftool")
+    else:
+        results.fail("metadata: missing exiftool records a skip",
+                     "exit %s" % absent.returncode)
+
+    if not shutil.which("exiftool"):
+        results.skip("metadata: EXIF and office author found", "exiftool is absent")
+        return
+
+    result = run_metadata(root)
+    if result.returncode != 0:
+        results.fail("metadata: scan runs", result.stderr.strip())
+        return
+    results.ok("metadata: scan runs")
+    data = json.loads(result.stdout)
+    by_location = {f["location"]: f for f in data["findings"]}
+
+    photo = by_location.get("photo.jpg", {})
+    if {"Artist", "GPSLatitude", "Make", "Model"} <= set(photo.get("tags", [])):
+        results.ok("metadata: EXIF identity found")
+    else:
+        results.fail("metadata: EXIF identity found", "tags=%s" % photo.get("tags"))
+    doc = by_location.get("docs/report.docx", {})
+    if "Creator" in doc.get("tags", []):
+        results.ok("metadata: office author found")
+    else:
+        results.fail("metadata: office author found", "tags=%s" % doc.get("tags"))
+    if any(f["location"].startswith("remote:") and f["severity"] == "critical"
+           for f in data["findings"]):
+        results.ok("metadata: remote credential found")
+    else:
+        results.fail("metadata: remote credential found")
+    if any("mailmap" in line for line in data.get("advice", [])):
+        results.ok("metadata: commit identity options presented")
+    else:
+        results.fail("metadata: commit identity options presented")
+
+    import tempfile
+    clean = tempfile.mkdtemp(prefix="prepublish-meta-")
+    exiftool = shutil.which("exiftool")
+    out_image = os.path.join(clean, "photo.jpg")
+    code, _ = run_remove(root, os.path.join(root, "photo.jpg"), "--out", out_image)
+    tags = exiftool_tags(exiftool, out_image, "-Orientation", "-Artist",
+                         "-GPSLatitude") if code == 0 else {}
+    if code == 0 and tags.get("Orientation") and not tags.get("Artist") \
+            and not tags.get("GPSLatitude"):
+        results.ok("metadata: selective removal keeps orientation")
+    else:
+        results.fail("metadata: selective removal keeps orientation",
+                     "exit %s tags=%s" % (code, tags))
+
+    out_doc = os.path.join(clean, "report.docx")
+    code, _ = run_remove(root, os.path.join(root, "docs", "report.docx"),
+                         "--out", out_doc)
+    doc_tags = exiftool_tags(exiftool, out_doc, "-XMP:Creator",
+                             "-XML:LastModifiedBy") if code == 0 else {"Creator": "?"}
+    if code == 0 and not doc_tags.get("Creator") \
+            and not doc_tags.get("LastModifiedBy"):
+        results.ok("metadata: OOXML removal removes the author")
+    else:
+        results.fail("metadata: OOXML removal removes the author",
+                     "exit %s tags=%s" % (code, doc_tags))
+
+    code, out = run_remove(root, os.path.join(root, "photo.jpg"))
+    if code == 1 and "destructive" in out:
+        results.ok("metadata: in-place removal is gated")
+    else:
+        results.fail("metadata: in-place removal is gated", "exit %s" % code)
+    shutil.rmtree(clean, ignore_errors=True)
+
+
+def run_remove(root, path, *extra):
+    args = [sys.executable, os.path.join(SCRIPTS, "metadata.py"), "remove",
+            path, "--project-root", root] + list(extra)
+    result = subprocess.run(args, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True)
+    return result.returncode, result.stdout + result.stderr
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
     args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
@@ -344,7 +461,7 @@ def check_report(root, results):
             "--public-mode", "open source",
             "--known-risk", "a legacy token",
             "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
-    for name in ("secrets.json", "pii.json"):
+    for name in ("secrets.json", "pii.json", "metadata.json"):
         path = os.path.join(output_dir, name)
         if os.path.exists(path):
             args += ["--findings", path]
@@ -379,6 +496,11 @@ def check_report(root, results):
             results.ok("report carries the PII findings")
         else:
             results.fail("report carries the PII findings")
+    if os.path.exists(os.path.join(output_dir, "metadata.json")):
+        if "Commit identity options" in text:
+            results.ok("report carries the commit identity options")
+        else:
+            results.fail("report carries the commit identity options")
 
 
 def check_g1(results):
@@ -464,6 +586,7 @@ def main():
     check_inventory(target, results)
     check_secrets(target, results)
     check_pii(target, results)
+    check_metadata(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)

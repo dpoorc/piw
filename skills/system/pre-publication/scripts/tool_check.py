@@ -29,7 +29,7 @@ TOOLS = [
         "when": "metadata carriers are present",
         "check": ("cmd", "exiftool"),
         "purpose": "file, document, and media metadata",
-        "install": "apt install libimage-exiftool-perl",
+        "install": "add the pre-publish layer: piw layer add pre-publish",
     },
     {
         "name": "git-filter-repo",
