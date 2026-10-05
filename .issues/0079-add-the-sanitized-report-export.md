@@ -1,7 +1,7 @@
 ---
 id: 79
 title: Add the sanitized report export
-status: open
+status: closed
 priority: high
 labels:
     - kind:feature
@@ -11,6 +11,7 @@ relations:
         - 75
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent

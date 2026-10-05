@@ -1,7 +1,7 @@
 ---
 id: 80
 title: Complete the remediation plan with forward fixes and history rewrites
-status: open
+status: closed
 priority: medium
 labels:
     - kind:feature
@@ -11,6 +11,7 @@ relations:
         - 75
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent
