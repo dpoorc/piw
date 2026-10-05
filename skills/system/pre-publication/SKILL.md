@@ -92,6 +92,10 @@ carriers exist), `git-filter-repo` (when a history rewrite is chosen),
 Optional enhancers: `trufflehog` (invoke only, never bundle),
 Kingfisher, or Titus.
 
+The `pre-publish` layer provides `gitleaks`, `git-filter-repo`,
+`exiftool`, and `presidio` in one step: `piw layer add pre-publish`.
+The optional enhancers are not in the layer.
+
 Never install a tool automatically.
 
 ### 6. Output directory
@@ -378,10 +382,21 @@ Optional arguments:
 
 ## Known limits
 
-- Live verification, hosted services, and non-English PII are not
-  covered.
+- Live verification is out of scope. The skill reads the repository.
+  It does not call a provider to confirm whether a credential is
+  active.
+- Hosted services are out of scope. It cannot inspect a remote host, a
+  package registry, or a CI system.
+- Non-English PII is not covered. The PII check uses an English
+  analyzer.
+- Very large repositories are not exercised. A full history walk and a
+  large-tree scan can be slow.
 - Archive and binary extraction is covered only by the optional
-  enhancers.
-- Submodule contents are scanned as tree files; a submodule's own
-  history is not scanned.
-- Windows paths and very large repos are not exercised.
+  enhancers. The default checks read text and file metadata, not the
+  contents of a zip, a tarball, or a binary.
+- Non-git history is not covered. The history checks need a git
+  repository. A non-git project is scanned as a working tree only.
+- Windows paths are not exercised. The scripts are tested on POSIX
+  paths.
+- Submodule history is not covered. Submodule contents are scanned as
+  tree files; the submodule's own history is not scanned.
