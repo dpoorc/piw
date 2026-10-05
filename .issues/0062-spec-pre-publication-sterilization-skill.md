@@ -1,13 +1,14 @@
 ---
 id: 62
 title: 'Spec: pre-publication sterilization skill'
-status: open
+status: closed
 priority: high
 labels:
     - kind:feature
     - state:ready-for-agent
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Problem Statement

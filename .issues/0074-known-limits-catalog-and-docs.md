@@ -1,7 +1,7 @@
 ---
 id: 74
 title: Known limits, catalog, and docs
-status: open
+status: closed
 priority: medium
 labels:
     - kind:feature
@@ -16,7 +16,8 @@ relations:
         - 72
         - 73
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent
