@@ -105,7 +105,20 @@ Seam A runs `scripts/hygiene.py` against the fixture and checks that:
   configurable;
 - a generic TODO comment is not reported, and a leaky one is.
 
-It also checks that the report carries the ignore additions.
+It also checks that the report carries the protection additions.
+
+## Licensing scan
+
+Seam A runs `scripts/licensing.py` against the fixture and checks that:
+
+- the scan runs and finds the declared-versus-actual mismatch at `high`;
+- the vendored directory with no notice is found;
+- the licensing scope and authorship preference are presented;
+- `--authorship named` emits no authorship finding, and
+  `--authorship anonymous` flags the `AUTHORS` file;
+- a missing license is a `medium` decision with `add-protection`.
+
+It also checks that the report carries the licensing advice.
 
 ## Gate G1
 

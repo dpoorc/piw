@@ -44,6 +44,27 @@
       "note": "a remote URL with an embedded credential"
     },
     {
+      "id": "license-mismatch",
+      "vector": "licensing",
+      "carrier": "working tree",
+      "location": "README.md",
+      "note": "the README declares MIT while the LICENSE file is Apache-2.0"
+    },
+    {
+      "id": "vendor-attribution",
+      "vector": "licensing",
+      "carrier": "working tree",
+      "location": "vendor/",
+      "note": "a vendored directory with no license or notice"
+    },
+    {
+      "id": "authors-file",
+      "vector": "licensing",
+      "carrier": "working tree",
+      "location": "AUTHORS",
+      "note": "a personal name in an authorship file"
+    },
+    {
       "id": "stray-artifact",
       "vector": "hygiene",
       "carrier": "working tree",

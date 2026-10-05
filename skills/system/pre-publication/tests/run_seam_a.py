@@ -97,6 +97,34 @@ def verify_exif_identity(root):
     return True, "EXIF identity, GPS, and orientation tags are present"
 
 
+def verify_license_mismatch(root):
+    readme = read_text(os.path.join(root, "README.md"))
+    license_text = read_text(os.path.join(root, "LICENSE"))
+    if "MIT" not in readme:
+        return False, "the README does not declare MIT"
+    if "Apache License" not in license_text:
+        return False, "the LICENSE file is not Apache-2.0"
+    return True, "the README declares MIT while the LICENSE file is Apache-2.0"
+
+
+def verify_vendor_attribution(root):
+    vendored = os.path.join(root, "vendor")
+    if not os.path.isdir(vendored):
+        return False, "the vendored directory is missing"
+    for _dirpath, _dirs, filenames in os.walk(vendored):
+        for name in filenames:
+            if name.upper().startswith(("LICENSE", "COPYING", "NOTICE")):
+                return False, "the vendored directory has a license or notice"
+    return True, "a vendored directory with no license or notice"
+
+
+def verify_authors_file(root):
+    path = os.path.join(root, "AUTHORS")
+    if not os.path.isfile(path):
+        return False, "the AUTHORS file is missing"
+    return bool(read_text(path).strip()), "a personal name is present"
+
+
 def verify_remote_credential(root):
     path = os.path.join(root, ".git", "config")
     if not os.path.exists(path):
@@ -164,6 +192,9 @@ VERIFIERS = {
     "exif-identity": verify_exif_identity,
     "office-author": verify_office_author,
     "remote-credential": verify_remote_credential,
+    "license-mismatch": verify_license_mismatch,
+    "vendor-attribution": verify_vendor_attribution,
+    "authors-file": verify_authors_file,
     "stray-artifact": verify_stray_artifact,
     "ignore-gap": verify_ignore_gap,
     "large-file": verify_large_file,
@@ -407,7 +438,9 @@ def check_metadata(root, results):
         results.ok("metadata: remote credential found")
     else:
         results.fail("metadata: remote credential found")
-    if any("mailmap" in line for line in data.get("advice", [])):
+    advice_lines = [line for block in data.get("advice", [])
+                    for line in block.get("lines", [])]
+    if any("mailmap" in line for line in advice_lines):
         results.ok("metadata: commit identity options presented")
     else:
         results.fail("metadata: commit identity options presented")
@@ -525,6 +558,68 @@ def check_hygiene(root, results):
     shutil.rmtree(probe, ignore_errors=True)
 
 
+def run_licensing(root, extra=None):
+    args = [sys.executable, os.path.join(SCRIPTS, "licensing.py"),
+            "--project-root", root, "--format", "json"] + (extra or [])
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+
+
+def check_licensing(root, results):
+    result = run_licensing(root)
+    if result.returncode != 0:
+        results.fail("licensing: scan runs", result.stderr.strip())
+        return
+    results.ok("licensing: scan runs")
+    data = json.loads(result.stdout)
+    findings = data["findings"]
+
+    if any(f["category"] == "license consistency" and f["severity"] == "high"
+           for f in findings):
+        results.ok("licensing: declared-versus-actual mismatch is high")
+    else:
+        results.fail("licensing: declared-versus-actual mismatch is high")
+    if any(f["category"] == "attribution" and f["location"].startswith("vendor/")
+           for f in findings):
+        results.ok("licensing: vendored code without a notice found")
+    else:
+        results.fail("licensing: vendored code without a notice found")
+
+    topics = [block["topic"] for block in data.get("advice", [])]
+    if "Authorship preference" in topics and "Licensing scope" in topics:
+        results.ok("licensing: scope and authorship advice presented")
+    else:
+        results.fail("licensing: scope and authorship advice presented",
+                     "topics=%s" % topics)
+
+    named = json.loads(run_licensing(root, ["--authorship", "named"]).stdout)
+    if not any(f["category"] == "authorship" for f in named["findings"]):
+        results.ok("licensing: named preference is respected")
+    else:
+        results.fail("licensing: named preference is respected")
+    anonymous = json.loads(run_licensing(root,
+                                         ["--authorship", "anonymous"]).stdout)
+    if any(f["category"] == "authorship" and f["location"] == "AUTHORS"
+           for f in anonymous["findings"]):
+        results.ok("licensing: anonymity flags the AUTHORS file")
+    else:
+        results.fail("licensing: anonymity flags the AUTHORS file")
+
+    import tempfile
+    probe = tempfile.mkdtemp(prefix="prepublish-lic-")
+    with open(os.path.join(probe, "README.md"), "w", encoding="utf-8") as handle:
+        handle.write("# Demo\n")
+    data = json.loads(run_licensing(probe).stdout)
+    missing = [f for f in data["findings"] if f["category"] == "license presence"]
+    if missing and missing[0]["severity"] == "medium" \
+            and missing[0]["remediation"] == "add-protection":
+        results.ok("licensing: a missing license is a medium decision")
+    else:
+        results.fail("licensing: a missing license is a medium decision",
+                     "missing=%s" % missing)
+    shutil.rmtree(probe, ignore_errors=True)
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
     args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
@@ -532,7 +627,8 @@ def check_report(root, results):
             "--public-mode", "open source",
             "--known-risk", "a legacy token",
             "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
-    for name in ("secrets.json", "pii.json", "metadata.json", "hygiene.json"):
+    for name in ("secrets.json", "pii.json", "metadata.json", "hygiene.json",
+                 "licensing.json"):
         path = os.path.join(output_dir, name)
         if os.path.exists(path):
             args += ["--findings", path]
@@ -573,10 +669,15 @@ def check_report(root, results):
         else:
             results.fail("report carries the commit identity options")
     if os.path.exists(os.path.join(output_dir, "hygiene.json")):
-        if "Ignore additions" in text:
-            results.ok("report carries the ignore additions")
+        if "Protection additions" in text:
+            results.ok("report carries the protection additions")
         else:
-            results.fail("report carries the ignore additions")
+            results.fail("report carries the protection additions")
+    if os.path.exists(os.path.join(output_dir, "licensing.json")):
+        if "Licensing scope" in text:
+            results.ok("report carries the licensing advice")
+        else:
+            results.fail("report carries the licensing advice")
 
 
 def check_g1(results):
@@ -664,6 +765,7 @@ def main():
     check_pii(target, results)
     check_metadata(target, results)
     check_hygiene(target, results)
+    check_licensing(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)

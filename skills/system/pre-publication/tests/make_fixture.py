@@ -12,6 +12,8 @@ Findings planted:
   - an image with EXIF identity, GPS, and orientation tags
   - an Office document with an author field
   - a remote URL with an embedded credential
+  - a license mismatch and a vendored file with no notice
+  - an AUTHORS file with a personal name
   - a stray editor artifact
   - a non-resilient .gitignore entry
   - a tracked large file
@@ -115,8 +117,20 @@ def build(target, exiftool=None):
     git(["remote", "add", "origin",
          "https://fixture-user:fixture-token@example.com/org/repo.git"], target)
 
-    # Plain content.
-    write(os.path.join(target, "README.md"), "# Fixture project\n")
+    # Plain content. The README declares MIT; the LICENSE file is
+    # Apache-2.0, so the declared and the actual license disagree.
+    write(os.path.join(target, "README.md"),
+          "# Fixture project\n\nThis project is licensed under the MIT License.\n")
+    write(os.path.join(target, "LICENSE"),
+          "                                 Apache License\n"
+          "                           Version 2.0, January 2004\n"
+          "                        http://www.apache.org/licenses/\n")
+    write(os.path.join(target, "AUTHORS"),
+          "Damien Fixture <damien@example.com>\n")
+
+    # Vendored code with no license or notice beside it.
+    write(os.path.join(target, "vendor", "lib", "foo.c"),
+          "int foo(void) { return 0; }\n")
     write(os.path.join(target, "src", "app.py"), "def main():\n    return 0\n")
     write(os.path.join(target, "docs", "contact.md"),
           "Contact: %s, %s\n" % (PII_EMAIL, PII_PHONE))

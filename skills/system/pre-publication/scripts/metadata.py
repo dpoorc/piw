@@ -433,7 +433,9 @@ def cmd_scan(args):
         errors.extend(file_errors)
 
     findings.extend(scan_repository(root))
-    advice = identity_advice(root)
+    advice_lines = identity_advice(root)
+    advice = [{"topic": "Commit identity options", "lines": advice_lines}] \
+        if advice_lines else []
 
     for index, item in enumerate(findings, start=1):
         item["id"] = "meta-%d" % index
@@ -475,10 +477,10 @@ def render_text(result):
             lines.append("      value: %s" % item["value"])
     for item in result.get("skipped_checks", []):
         lines.append("SKIPPED: %s - %s" % (item["check"], item["reason"]))
-    if result.get("advice"):
+    for block in result.get("advice", []):
         lines.append("")
-        lines.append("commit identity options:")
-        for line in result["advice"]:
+        lines.append("%s:" % block["topic"])
+        for line in block["lines"]:
             lines.append("  - %s" % line)
     if result.get("errors"):
         lines.append("")

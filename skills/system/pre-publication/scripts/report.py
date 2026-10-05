@@ -158,9 +158,9 @@ def render_plan(findings):
     protection = [f for f in findings
                   if f.get("remediation") == "add-protection"]
     if protection:
-        lines.append("### Ignore additions")
+        lines.append("### Protection additions")
         lines.append("")
-        lines.append("Add these resilient patterns to `.gitignore`:")
+        lines.append("Add these to protect the project:")
         lines.append("")
         for finding in protection:
             suggestion = finding.get("suggestion") or finding.get("value") or "?"
@@ -179,9 +179,13 @@ def render_plan(findings):
 def render_advice(advice):
     if not advice:
         return []
-    lines = ["## Commit identity options", ""]
-    for line in advice:
-        lines.append("- %s" % line)
+    lines = ["## Advice", ""]
+    for block in advice:
+        lines.append("### %s" % block.get("topic", "Advice"))
+        lines.append("")
+        for line in block.get("lines", []):
+            lines.append("- %s" % line)
+        lines.append("")
     return lines
 
 

@@ -261,3 +261,58 @@ file. It is `add-protection` for an ignore gap.
 - Personal names in comments are left to the PII vector.
 - File-system metadata stays with the metadata vector.
 - Doc-reality checking stays with the `verify-docs` skill.
+
+## Licensing, attribution, and authorship
+
+Tool: none. The check is high-level and read-only.
+
+### What runs
+
+`scripts/licensing.py` checks license presence and consistency,
+third-party notices and attribution, and the authorship preference. It
+writes `licensing.json` to the output directory.
+
+### Detection
+
+- License presence: a license file at the project root.
+- Consistency: the license named in a README or a manifest against the
+  license file text. The license file is identified by its text, such as
+  `Apache License, Version 2.0` or `Permission is hereby granted, free
+  of charge`. Two files that declare different licenses are a conflict.
+- SPDX: an `SPDX-License-Identifier` line. A malformed identifier is
+  `medium`. An unrecognized but well-formed identifier is `low`, with a
+  prompt to verify.
+- Attribution: a vendored directory (`vendor`, `third_party`, `deps`,
+  and others) with no license or notice beside it. An Apache-2.0 license
+  with no `NOTICE` file.
+- Authorship: with `--authorship anonymous`, a personal name in
+  `AUTHORS`, `CONTRIBUTORS`, `CREDITS`, `MAINTAINERS`, or a manifest
+  author field.
+
+### Severity and remediation
+
+A declared-versus-actual mismatch, a conflicting statement, and a
+missing third-party notice are `high`. A missing license and a personal
+name when anonymity is wanted are `medium`. A cosmetic SPDX issue is
+`low`.
+
+Remediation is `forward-fix` (correct or redact) or `add-protection`
+(add a `LICENSE` or `NOTICE`). It is never automatic.
+
+### False-positive controls
+
+- A missing license is framed as a decision, not a defect.
+- A dual declaration such as `MIT OR Apache-2.0` is not a mismatch when
+  the actual license is one of the declared set.
+- An unrecognized SPDX identifier is `low` with a verify prompt, not an
+  error.
+- The authorship preference is asked, not assumed.
+
+### Limits
+
+- The skill flags only. It does not select a license, audit dependency
+  compatibility, or author legal text.
+- Deeper compliance is a hand-off to a compliance workflow, on request.
+- Contribution policy (DCO, CLA) is out of scope.
+- License selection and naming stay out of scope.
+- The license fingerprints cover the common licenses, not every license.

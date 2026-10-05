@@ -222,6 +222,33 @@ separately. A TODO, FIXME, or HACK comment is reported only when the
 line carries leaky content. `.gitignore` findings suggest a resilient
 directory or pattern ignore.
 
+### Licensing, attribution, and authorship
+
+Run `scripts/licensing.py`:
+
+```
+python3 scripts/licensing.py --project-root . --format text \
+  --authorship ask
+```
+
+It checks license presence and consistency, third-party notices and
+attribution, and the authorship preference. It writes `licensing.json`
+to the output directory.
+
+A missing license is a decision, not a defect: it is `medium` and the
+report prompts for a chosen license or an explicit all-rights-reserved
+notice. A declared-versus-actual mismatch and a conflicting statement
+are `high`.
+
+The `--authorship` preference is `ask`, `named`, or `anonymous`. With
+`ask`, the report prompts for the preference. With `anonymous`, a
+personal name in an authorship artifact is `medium`. With `named`, no
+authorship finding is emitted.
+
+The check is high-level. It does not select a license, audit dependency
+compatibility, or author legal text. A deeper audit is a hand-off to a
+compliance workflow.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:
@@ -236,6 +263,7 @@ python3 scripts/report.py --project-root . \
   --findings .local/prepublish/pii.json \
   --findings .local/prepublish/metadata.json \
   --findings .local/prepublish/hygiene.json \
+  --findings .local/prepublish/licensing.json \
   --stage intake --stage inventory --stage scan
 ```
 
