@@ -60,13 +60,12 @@ DEFAULT_ENTITIES = [
     "US_DRIVER_LICENSE", "MEDICAL_LICENSE",
 ]
 
-# Entities that only NER can find. Their score sets the confidence.
-NER_ENTITIES = ("PERSON", "NRP", "LOCATION")
-
 # Recognizers with a high false-positive rate. Report them at `possible`.
 LOW_PRECISION_ENTITIES = ("NRP",)
 
-NER_LIKELY_SCORE = 0.6
+# A pattern with context scores at or above this. A bare pattern scores
+# below it and is only `possible`.
+LIKELY_SCORE = 0.6
 
 
 def luhn_valid(value):
@@ -112,14 +111,10 @@ def confidence_for(entity, value, score):
     if entity == "IBAN_CODE":
         return "certain" if iban_valid(value) else None
     if entity == "US_SSN":
-        return "likely" if ssn_plausible(value) else None
+        return "certain" if ssn_plausible(value) else None
     if entity in LOW_PRECISION_ENTITIES:
         return "possible"
-    if entity in NER_ENTITIES:
-        return "likely" if score >= NER_LIKELY_SCORE else "possible"
-    if entity in ("EMAIL_ADDRESS", "PHONE_NUMBER"):
-        return "likely"
-    return "likely" if score >= NER_LIKELY_SCORE else "possible"
+    return "likely" if score >= LIKELY_SCORE else "possible"
 
 
 def output_dir(project_root):

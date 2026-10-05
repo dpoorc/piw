@@ -100,11 +100,12 @@ out, because they are not personal data on their own.
 
 Each finding carries one value:
 
-- `certain` - a checksum-valid card number or IBAN.
-- `likely` - an email, a phone number, a person name, a location, or a
-  structurally valid SSN.
-- `possible` - a low-precision recognizer such as NRP, or a low NER
-  score.
+- `certain` - a checksum-valid card number or IBAN, or a structurally
+  valid SSN.
+- `likely` - a pattern with context: a score at or above 0.6. This
+  covers an email, a phone number, a person name, and a location.
+- `possible` - a bare pattern below 0.6, or a low-precision recognizer
+  such as NRP.
 
 An invalid checksum suppresses the finding. A card number that fails
 Luhn, an IBAN that fails MOD-97, and an SSN with an invalid area, group,
@@ -121,7 +122,8 @@ history rewrite, which the git history vector owns.
 ### False-positive controls
 
 - Checksum validation suppresses invalid structured values.
-- NER entities are `likely`, not `certain`. NRP is `possible`.
+- A pattern with context is `likely`, not `certain`. A bare pattern and
+  NRP are `possible`.
 - The scan reports the score for each finding.
 - The user dismisses a finding by confidence, without a second pass.
 

@@ -23,6 +23,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL_DIR = os.path.dirname(HERE)
 SCRIPTS = os.path.join(SKILL_DIR, "scripts")
 sys.path.insert(0, HERE)
+sys.path.insert(0, SCRIPTS)
 
 import make_fixture  # noqa: E402
 
@@ -382,6 +383,28 @@ def check_pii(root, results):
         results.ok("pii: findings carry confidence")
     else:
         results.fail("pii: findings carry confidence")
+
+
+def check_pii_confidence(results):
+    # Direct unit checks. These do not need presidio.
+    import pii
+    cases = [
+        (("US_SSN", "123-45-6789", 0.85), "certain"),
+        (("US_SSN", "000-45-6789", 0.85), None),
+        (("EMAIL_ADDRESS", "jane@example.com", 1.0), "likely"),
+        (("EMAIL_ADDRESS", "jane@example.com", 0.4), "possible"),
+        (("PHONE_NUMBER", "+1-202-555-0143", 0.4), "possible"),
+        (("CREDIT_CARD", "4111111111111111", 1.0), "certain"),
+        (("CREDIT_CARD", "4111111111111112", 1.0), None),
+        (("NRP", "any", 0.9), "possible"),
+    ]
+    for (entity, value, score), expected in cases:
+        got = pii.confidence_for(entity, value, score)
+        label = "pii: %s at %.1f is %s" % (entity, score, expected)
+        if got == expected:
+            results.ok(label)
+        else:
+            results.fail(label, "got %s" % got)
 
 
 def run_metadata(root, extra=None):
@@ -842,6 +865,7 @@ def main():
     check_inventory(target, results)
     check_secrets(target, results)
     check_pii(target, results)
+    check_pii_confidence(results)
     check_metadata(target, results)
     check_hygiene(target, results)
     check_licensing(target, results)
