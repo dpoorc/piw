@@ -1,7 +1,7 @@
 ---
 id: 88
 title: Require a backup for an in-place metadata removal
-status: open
+status: closed
 priority: medium
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 75
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent
