@@ -1,0 +1,5 @@
+# apt packages for the pre-publish layer.
+#
+# exiftool reads and writes file, document, and media metadata. The
+# Debian package is libimage-exiftool-perl.
+libimage-exiftool-perl

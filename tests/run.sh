@@ -1343,26 +1343,29 @@ cp -r "$ROOT/layers/pre-publish" "$SANDBOX/.local/layers/pre-publish"
 printf '[layers]\nrun:pre-publish\n' > "$SANDBOX/.local/piw.conf"
 
 out="$(piw layer show pre-publish 2>&1)"
-if [[ "$out" == *"mise.toml: yes"* && "$out" == *"install.sh: yes"* ]]; then
-  ok "layer show names the pre-publish mise table and script"
+if [[ "$out" == *"libimage-exiftool-perl"* && "$out" == *"mise.toml: yes"* && "$out" == *"install.sh: yes"* ]]; then
+  ok "layer show names the pre-publish apt package, mise table, and script"
 else
-  bad "layer show names the pre-publish mise table and script"
+  bad "layer show names the pre-publish apt package, mise table, and script"
 fi
 
-if grep -q '^gitleaks' "$ROOT/layers/pre-publish/mise.toml"; then
-  ok "the pre-publish layer declares gitleaks"
+if grep -q '^gitleaks' "$ROOT/layers/pre-publish/mise.toml" \
+   && grep -q '^libimage-exiftool-perl' "$ROOT/layers/pre-publish/apt"; then
+  ok "the pre-publish layer declares gitleaks and exiftool"
 else
-  bad "the pre-publish layer declares gitleaks"
+  bad "the pre-publish layer declares gitleaks and exiftool"
 fi
 
 plan="$(piw_fn compose_plan 2>&1)"
 plan_summary="$(printf '%s\n' "$plan" | awk '
+  /apt-get install/ {apt++}
+  /^        libimage-exiftool-perl/ {pkg++}
   /^COPY pre-publish\// {copy++}
   /^RUN bash \/tmp\/piw-layer-pre-publish\/install.sh/ {run++}
-  END {printf "copy=%d run=%d", copy, run}
+  END {printf "apt=%d pkg=%d copy=%d run=%d", apt, pkg, copy, run}
 ')"
-assert_output "the pre-publish layer composes its script" \
-  "$plan_summary" "copy=1 run=1"
+assert_output "the pre-publish layer composes its apt package and script" \
+  "$plan_summary" "apt=1 pkg=1 copy=1 run=1"
 
 printf '== sandbox stays clean\n'
 if [[ -z "$(git -C "$SANDBOX" status --porcelain)" ]]; then

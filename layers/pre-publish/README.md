@@ -9,6 +9,7 @@ Adopt it with `piw layer add pre-publish`.
 
 - `mise.toml`: `gitleaks` for secret detection in the working tree and in
   git history.
+- `apt`: `libimage-exiftool-perl` for file, document, and media metadata.
 - `install.sh`: `presidio-analyzer` and the spaCy `en_core_web_sm` model,
   installed into the system Python. presidio finds the content PII that
   regex cannot, such as names and postal addresses.
