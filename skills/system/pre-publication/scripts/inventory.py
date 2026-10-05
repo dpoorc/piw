@@ -92,58 +92,84 @@ def path_exists(root, rel):
     return os.path.exists(os.path.join(root, rel))
 
 
-def inventory(root):
+def _is_within(path, parent):
+    return path == parent or path.startswith(parent + os.sep)
+
+
+def iter_files(root):
+    """Walk the project. Return (files, skipped_dirs).
+
+    Each file is (relpath, abspath, category). The output directory is
+    excluded by exact path. Heavy directories are reported as carriers
+    and not recursed into.
+    """
     root = os.path.abspath(root)
     output_dir = os.path.join(root, OUTPUT_SUBPATH)
-
-    counts = {c: 0 for c in CATEGORY_EXT}
-    counts["other"] = 0
-    total = 0
-    mismatches = []
-    skipped_dirs = []
+    files = []
+    skipped = []
 
     for dirpath, dirnames, filenames in os.walk(root):
-        if os.path.abspath(dirpath).startswith(output_dir):
+        if _is_within(os.path.abspath(dirpath), output_dir):
             dirnames[:] = []
             continue
         keep = []
         for name in dirnames:
             full = os.path.join(dirpath, name)
             if name in HEAVY_DIRS:
-                skipped_dirs.append(os.path.relpath(full, root))
+                skipped.append(os.path.relpath(full, root))
             else:
                 keep.append(name)
         dirnames[:] = keep
 
         for name in filenames:
             path = os.path.join(dirpath, name)
-            if os.path.abspath(path).startswith(output_dir):
+            if _is_within(os.path.abspath(path), output_dir):
                 continue
             rel = os.path.relpath(path, root)
             ext = os.path.splitext(name)[1]
             category = category_for_ext(ext) or "other"
-            counts[category] = counts.get(category, 0) + 1
-            total += 1
+            files.append((rel, path, category))
+    return files, skipped
 
-            if category in VERIFY_CATEGORIES:
-                detected = detect_magic(path)
-                if detected is None:
-                    mismatches.append({
-                        "path": rel,
-                        "expected": category,
-                        "detected": None,
-                        "reason": "content could not be identified",
-                    })
-                elif detected != category:
-                    # zip-based office documents are legitimately zip files
-                    if category == "office" and detected == "archive":
-                        continue
-                    mismatches.append({
-                        "path": rel,
-                        "expected": category,
-                        "detected": detected,
-                        "reason": "content contradicts the extension",
-                    })
+
+def text_files(root):
+    """Return (relpath, abspath) for every text-like file."""
+    files, _ = iter_files(root)
+    return [(rel, path) for rel, path, category in files if category == "text"]
+
+
+def inventory(root):
+    root = os.path.abspath(root)
+    files, skipped_dirs = iter_files(root)
+
+    counts = {c: 0 for c in CATEGORY_EXT}
+    counts["other"] = 0
+    total = 0
+    mismatches = []
+
+    for rel, path, category in files:
+        counts[category] = counts.get(category, 0) + 1
+        total += 1
+
+        if category in VERIFY_CATEGORIES:
+            detected = detect_magic(path)
+            if detected is None:
+                mismatches.append({
+                    "path": rel,
+                    "expected": category,
+                    "detected": None,
+                    "reason": "content could not be identified",
+                })
+            elif detected != category:
+                # zip-based office documents are legitimately zip files
+                if category == "office" and detected == "archive":
+                    continue
+                mismatches.append({
+                    "path": rel,
+                    "expected": category,
+                    "detected": detected,
+                    "reason": "content contradicts the extension",
+                })
 
     meta = []
     for label, candidates, _is_dir in META_LAYERS:
