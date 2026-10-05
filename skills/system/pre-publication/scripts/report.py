@@ -101,6 +101,9 @@ def render_findings(findings):
                 lines.append("  - entity: `%s`" % finding["entity"])
             if finding.get("tags"):
                 lines.append("  - tags: %s" % ", ".join(finding["tags"]))
+            if finding.get("tracked") is not None:
+                lines.append("  - tracked: %s"
+                             % ("yes" if finding["tracked"] else "no"))
             if finding.get("value"):
                 lines.append("  - value: `%s`" % finding["value"])
             if finding.get("commit"):
@@ -151,6 +154,18 @@ def render_plan(findings):
         lines.append("Confirmation step: make a test request with the old "
                      "credential and confirm it fails. Publication stays "
                      "blocked until each rotation is confirmed.")
+        lines.append("")
+    protection = [f for f in findings
+                  if f.get("remediation") == "add-protection"]
+    if protection:
+        lines.append("### Ignore additions")
+        lines.append("")
+        lines.append("Add these resilient patterns to `.gitignore`:")
+        lines.append("")
+        for finding in protection:
+            suggestion = finding.get("suggestion") or finding.get("value") or "?"
+            lines.append("- `%s` (for `%s`)"
+                         % (suggestion, finding.get("location", "?")))
         lines.append("")
     if not findings:
         lines.append("None. Each fix is proposed as an exact action once "

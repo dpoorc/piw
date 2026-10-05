@@ -200,3 +200,64 @@ the entry metadata, and replaces the file atomically.
   `zipfile`. Other formats are report-only.
 - The scan reads metadata; it does not prove that no metadata remains.
 - Commit identity rewriting belongs to the git history vector.
+
+## Hygiene
+
+Tool: none required. Git is used when the project is a repository.
+
+### What runs
+
+`scripts/hygiene.py` walks the working tree and the git metadata. It
+writes `hygiene.json` to the output directory. The check list is
+open-ended, not exhaustive.
+
+### Detection
+
+- Strays: editor and OS artifacts, backup and swap files, editor lock
+  files, logs, crash dumps, local databases, editor and scratch
+  directories. An empty file and a broken symlink are low findings.
+- Large files: one threshold, default 5 MB per file, with a hard flag
+  above 50 MB. Tracked and untracked files are reported separately. A
+  tracked large file is a repository problem. An untracked one is only
+  an export problem.
+- Internal references: an absolute home path, a private URL
+  (`localhost`, a loopback or private address), an internal host
+  (`.internal`, `.corp`, `.lan`, `.intranet`, `.local`), and an internal
+  ticket link.
+- Leaky comments: a `TODO`, `FIXME`, or `HACK` comment is reported only
+  when the line also carries a leaky marker: a private link, an email,
+  a home path, a ticket ID, or internal or confidential language. A
+  generic TODO is not a finding.
+- Internal-facing documents: the soft filter. A file whose path or
+  content reads as internal is treated as one.
+- `.gitignore` gaps: a direct file entry that is not resilient, a
+  present local artifact that is not ignored, and a missing standard
+  ignore for a detected carrier.
+- Extension and content mismatch, from the inventory.
+
+### Severity and remediation
+
+A tracked large file, an internal-facing document, an internal host, and
+an internal ticket link are `high`. A private URL, an absolute home
+path, an ignore gap, a leaky comment, and an extension mismatch are
+`medium`. A stray is `low`, except a local database, which is `medium`.
+
+Remediation is `forward-fix` for a stray, a large file, a leaky
+comment, and a mismatch. It is `history-rewrite` for a tracked large
+file. It is `add-protection` for an ignore gap.
+
+### False-positive controls
+
+- TODO-type comments need a leaky marker. A bare TODO is not reported.
+- A binary file with no known signature is not an extension mismatch.
+- The internal-document filter is soft and reports its reason.
+- Ignore suggestions prefer a directory or a pattern over a file path.
+
+### Limits
+
+- The check list is open-ended. A clean run is not proof of hygiene.
+- Specific codenames and ticket prefixes come from a project-supplied
+  list, not from guesswork.
+- Personal names in comments are left to the PII vector.
+- File-system metadata stays with the metadata vector.
+- Doc-reality checking stays with the `verify-docs` skill.

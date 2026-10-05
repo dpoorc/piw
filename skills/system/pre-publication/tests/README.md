@@ -94,6 +94,19 @@ The scan check is skipped when `exiftool` is absent. The removal checks
 need `exiftool` for the image and only the standard library for the
 Office document.
 
+## Hygiene scan
+
+Seam A runs `scripts/hygiene.py` against the fixture and checks that:
+
+- the scan runs and finds the stray artifact, the non-resilient ignore
+  entry with a suggestion, the tracked large file, the extension
+  mismatch, and the internal-facing document;
+- an untracked large file is `medium`, and the threshold is
+  configurable;
+- a generic TODO comment is not reported, and a leaky one is.
+
+It also checks that the report carries the ignore additions.
+
 ## Gate G1
 
 `g1_hygiene.py` fails if the shipped skill carries planning residue:

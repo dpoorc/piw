@@ -204,6 +204,24 @@ file to confirm the tags are gone. exiftool cannot write OOXML; for an
 OOXML file the script rewrites the identity parts with the standard
 library `zipfile` module.
 
+### Hygiene
+
+Run `scripts/hygiene.py`:
+
+```
+python3 scripts/hygiene.py --project-root . --format text
+```
+
+It finds strays, large files, internal references, leaky TODO-type
+comments, internal-facing documents, `.gitignore` gaps, and extension
+and content mismatch. It writes `hygiene.json` to the output directory.
+
+The large-file threshold is 5 MB by default (`--large-mb`) with a 50 MB
+hard flag (`--hard-mb`). Tracked and untracked files are reported
+separately. A TODO, FIXME, or HACK comment is reported only when the
+line carries leaky content. `.gitignore` findings suggest a resilient
+directory or pattern ignore.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:
@@ -217,6 +235,7 @@ python3 scripts/report.py --project-root . \
   --findings .local/prepublish/secrets.json \
   --findings .local/prepublish/pii.json \
   --findings .local/prepublish/metadata.json \
+  --findings .local/prepublish/hygiene.json \
   --stage intake --stage inventory --stage scan
 ```
 

@@ -454,6 +454,77 @@ def run_remove(root, path, *extra):
     return result.returncode, result.stdout + result.stderr
 
 
+def run_hygiene(root, extra=None):
+    args = [sys.executable, os.path.join(SCRIPTS, "hygiene.py"),
+            "--project-root", root, "--format", "json"] + (extra or [])
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+
+
+def check_hygiene(root, results):
+    result = run_hygiene(root)
+    if result.returncode != 0:
+        results.fail("hygiene: scan runs", result.stderr.strip())
+        return
+    results.ok("hygiene: scan runs")
+    findings = json.loads(result.stdout)["findings"]
+
+    def has(location, category):
+        return any(f["location"] == location and f["category"] == category
+                   for f in findings)
+
+    if has(".DS_Store", "stray file"):
+        results.ok("hygiene: stray artifact found")
+    else:
+        results.fail("hygiene: stray artifact found")
+    if any(f["location"] == ".gitignore"
+           and f["remediation"] == "add-protection" and f.get("suggestion")
+           for f in findings):
+        results.ok("hygiene: non-resilient ignore found with a suggestion")
+    else:
+        results.fail("hygiene: non-resilient ignore found with a suggestion")
+    big = [f for f in findings if f["location"] == "big.bin"]
+    if big and big[0].get("tracked") is True and big[0]["severity"] == "high":
+        results.ok("hygiene: tracked large file found")
+    else:
+        results.fail("hygiene: tracked large file found", "big=%s" % big)
+    if has("broken.png", "extension mismatch"):
+        results.ok("hygiene: extension mismatch found")
+    else:
+        results.fail("hygiene: extension mismatch found")
+    if has("src/notes/about-damien.md", "internal-facing document"):
+        results.ok("hygiene: internal-facing document found")
+    else:
+        results.fail("hygiene: internal-facing document found")
+
+    import tempfile
+    probe = tempfile.mkdtemp(prefix="prepublish-hyg-")
+    with open(os.path.join(probe, "blob.dat"), "wb") as handle:
+        handle.truncate(6 * 1024 * 1024)
+    with open(os.path.join(probe, "generic.md"), "w", encoding="utf-8") as handle:
+        handle.write("TODO: tidy this later\n")
+    with open(os.path.join(probe, "leaky.md"), "w", encoding="utf-8") as handle:
+        handle.write("TODO: see https://jira.internal/browse/ABC-1\n")
+    data = json.loads(run_hygiene(probe).stdout)
+    blob = [f for f in data["findings"] if f["location"] == "blob.dat"]
+    if blob and blob[0]["severity"] == "medium" \
+            and blob[0].get("tracked") is False:
+        results.ok("hygiene: untracked large file is medium")
+    else:
+        results.fail("hygiene: untracked large file is medium", "blob=%s" % blob)
+    data = json.loads(run_hygiene(probe, ["--large-mb", "10"]).stdout)
+    if not any(f["location"] == "blob.dat" for f in data["findings"]):
+        results.ok("hygiene: the large-file threshold is configurable")
+    else:
+        results.fail("hygiene: the large-file threshold is configurable")
+    if any(f["location"] == "leaky.md" for f in data["findings"]) \
+            and not any(f["location"] == "generic.md" for f in data["findings"]):
+        results.ok("hygiene: only leaky TODO comments are reported")
+    else:
+        results.fail("hygiene: only leaky TODO comments are reported")
+    shutil.rmtree(probe, ignore_errors=True)
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
     args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
@@ -461,7 +532,7 @@ def check_report(root, results):
             "--public-mode", "open source",
             "--known-risk", "a legacy token",
             "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
-    for name in ("secrets.json", "pii.json", "metadata.json"):
+    for name in ("secrets.json", "pii.json", "metadata.json", "hygiene.json"):
         path = os.path.join(output_dir, name)
         if os.path.exists(path):
             args += ["--findings", path]
@@ -501,6 +572,11 @@ def check_report(root, results):
             results.ok("report carries the commit identity options")
         else:
             results.fail("report carries the commit identity options")
+    if os.path.exists(os.path.join(output_dir, "hygiene.json")):
+        if "Ignore additions" in text:
+            results.ok("report carries the ignore additions")
+        else:
+            results.fail("report carries the ignore additions")
 
 
 def check_g1(results):
@@ -587,6 +663,7 @@ def main():
     check_secrets(target, results)
     check_pii(target, results)
     check_metadata(target, results)
+    check_hygiene(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)
