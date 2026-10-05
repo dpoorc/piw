@@ -95,7 +95,9 @@ def run_git(root, args):
 
 
 def is_git_repo(root):
-    return os.path.isdir(os.path.join(root, ".git"))
+    # A worktree has a .git file, not a directory. Ask git instead.
+    result = run_git(root, ["rev-parse", "--is-inside-work-tree"])
+    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 # ---- File metadata (exiftool) ------------------------------------------------

@@ -744,6 +744,41 @@ def check_gate(results):
     shutil.rmtree(gate, ignore_errors=True)
 
 
+def check_worktree(root, results):
+    # In a worktree .git is a file. The git checks must still run.
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="prepublish-worktree-")
+    tree = os.path.join(tmp, "wt")
+    add = subprocess.run(
+        ["git", "-C", root, "worktree", "add", "--detach", tree, "HEAD"],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if add.returncode != 0:
+        results.fail("worktree: git worktree add", add.stderr.strip())
+        shutil.rmtree(tmp, ignore_errors=True)
+        return
+    try:
+        meta = run_metadata(tree, ["--no-exiftool"])
+        data = json.loads(meta.stdout) if meta.returncode == 0 else {}
+        if any(f["location"].startswith("remote:")
+               for f in data.get("findings", [])):
+            results.ok("worktree: metadata git checks run")
+        else:
+            results.fail("worktree: metadata git checks run",
+                         "exit %s" % meta.returncode)
+
+        hyg = run_hygiene(tree)
+        hdata = json.loads(hyg.stdout) if hyg.returncode == 0 else {}
+        if any(f.get("tracked") for f in hdata.get("findings", [])):
+            results.ok("worktree: hygiene git checks run")
+        else:
+            results.fail("worktree: hygiene git checks run",
+                         "exit %s" % hyg.returncode)
+    finally:
+        subprocess.run(["git", "-C", root, "worktree", "remove", "--force", tree],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", default=None,
@@ -769,6 +804,7 @@ def main():
     check_report(target, results)
     check_g1(results)
     check_gate(results)
+    check_worktree(target, results)
     return results.report()
 
 

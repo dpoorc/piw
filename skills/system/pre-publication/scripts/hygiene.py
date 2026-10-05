@@ -133,7 +133,11 @@ def git_output(root, args):
 
 
 def is_git_repo(root):
-    return os.path.isdir(os.path.join(root, ".git"))
+    # A worktree has a .git file, not a directory. Ask git instead.
+    result = subprocess.run(
+        ["git", "-C", root, "rev-parse", "--is-inside-work-tree"],
+        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    return result.returncode == 0 and result.stdout.strip() == "true"
 
 
 def tracked_files(root):
