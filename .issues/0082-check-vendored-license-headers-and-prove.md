@@ -1,7 +1,7 @@
 ---
 id: 82
 title: Check vendored license headers and provenance
-status: open
+status: wontfix
 priority: medium
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 75
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent

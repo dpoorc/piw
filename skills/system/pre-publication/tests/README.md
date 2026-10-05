@@ -10,6 +10,15 @@ Run:
 python3 tests/run_seam_a.py
 ```
 
+or, from anywhere:
+
+```
+bash skills/system/pre-publication/tests/run.sh
+```
+
+This runner is separate from the host repository suite, because the
+skill may move to its own repository.
+
 Seam A builds the fixture, proves every planted finding is present,
 runs the scripts, and checks the output. It exits non-zero on failure.
 Use `--target DIR` to build the fixture at a known path and keep it for
