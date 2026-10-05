@@ -338,6 +338,25 @@ def check_secrets(root, results):
         results.fail("secrets: findings carry confidence")
 
 
+def check_secrets_confidence(results):
+    # Direct unit checks. These do not need gitleaks.
+    import secrets_scan
+    cases = [
+        (("github-pat", 4.8), "likely"),
+        (("github-pat", 2.0), "possible"),
+        (("github-pat", None), "possible"),
+        (("generic-api-key", 5.0), "possible"),
+        (("private-key", 0.0), "certain"),
+    ]
+    for (rule, entropy), expected in cases:
+        got = secrets_scan.confidence_for(rule, entropy)
+        label = "secrets: %s at entropy %s is %s" % (rule, entropy, expected)
+        if got == expected:
+            results.ok(label)
+        else:
+            results.fail(label, "got %s" % got)
+
+
 def run_pii(root, module=None):
     args = [sys.executable, os.path.join(SCRIPTS, "pii.py"),
             "--project-root", root, "--format", "json"]
@@ -878,6 +897,7 @@ def main():
     check_planted_findings(target, results)
     check_inventory(target, results)
     check_secrets(target, results)
+    check_secrets_confidence(results)
     check_pii(target, results)
     check_pii_confidence(results)
     check_metadata(target, results)

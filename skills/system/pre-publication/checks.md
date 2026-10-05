@@ -30,8 +30,8 @@ approach that the mature scanners converge on.
 Each finding carries one value:
 
 - `certain` - a private-key PEM block, or a checksum-valid token.
-- `likely` - a provider-prefixed rule with entropy above threshold.
-- `possible` - a generic rule, or a provider rule with no context.
+- `likely` - a provider-prefixed rule with entropy at or above 3.0.
+- `possible` - a generic rule, or a provider rule below 3.0 (no context).
 
 Live verification stays off. It needs network and authorization, and it
 sends the secret to a third party. A verified credential would be

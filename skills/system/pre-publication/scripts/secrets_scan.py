@@ -37,6 +37,10 @@ PRIVATE_KEY_RULES = ("private-key", "private_key")
 # possible, not likely.
 GENERIC_RULES = ("generic-api-key", "generic")
 
+# A provider rule needs this much Shannon entropy to be `likely`. Below
+# it, the value has no context and is only `possible`.
+ENTROPY_LIKELY = 3.0
+
 # Where each credential is revoked. The agent completes the provider
 # location when a rule is not listed here.
 REVOCATION = {
@@ -118,11 +122,13 @@ def run_scan(path, config, source, mode):
             os.remove(report)
 
 
-def confidence_for(rule_id):
+def confidence_for(rule_id, entropy=None):
     rule = (rule_id or "").lower()
     if any(key in rule for key in PRIVATE_KEY_RULES):
         return "certain"
     if any(rule == g or rule.startswith(g + "-") for g in GENERIC_RULES):
+        return "possible"
+    if entropy is None or entropy < ENTROPY_LIKELY:
         return "possible"
     return "likely"
 
@@ -159,7 +165,7 @@ def to_finding(item, mode, index, project_root):
         "carrier": carrier,
         "location": location_for(item, mode, project_root),
         "severity": "critical",
-        "confidence": confidence_for(rule_id),
+        "confidence": confidence_for(rule_id, item.get("Entropy")),
         "remediation": "rotate-credential",
         "rule": rule_id,
         "description": item.get("Description") or "",
