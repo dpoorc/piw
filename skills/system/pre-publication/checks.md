@@ -295,8 +295,8 @@ writes `licensing.json` to the output directory.
 
 ### Severity and remediation
 
-A declared-versus-actual mismatch, a conflicting statement, and a
-missing third-party notice are `high`. A missing license and a personal
+A declared-versus-actual mismatch and a conflicting statement are
+`high`. A missing license, a missing third-party notice, and a personal
 name when anonymity is wanted are `medium`. A cosmetic SPDX issue is
 `low`.
 

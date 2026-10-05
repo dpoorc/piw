@@ -36,9 +36,9 @@ Sterilize a project before it becomes public.
 5. **Gated fixes** - propose each fix, apply only what is approved,
    and gate destructive actions separately.
 
-Intake, inventory, the secrets scan, the report, and the gated-fix
-protocol are implemented. The remaining scan vectors arrive with
-their own work.
+All stages are implemented: intake, inventory, the secrets, PII,
+metadata, hygiene, and licensing vectors, the report, and the gated-fix
+protocol.
 
 ## Stage 1: Intake
 

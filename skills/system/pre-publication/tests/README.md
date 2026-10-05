@@ -46,8 +46,7 @@ content contradicts its extension.
 so a broken fixture fails loudly instead of passing every later check.
 
 Both planted secret tokens are GitHub token shapes that the gitleaks
-default rules detect. A sequential token shape is not detected, so the
-fixture does not use one.
+default rules detect. Each token has enough entropy to pass the rule.
 
 ## Secrets scan
 
