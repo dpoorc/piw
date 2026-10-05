@@ -1,7 +1,7 @@
 ---
 id: 89
 title: Correct the licensing severity note and the stale skill text
-status: open
+status: closed
 priority: low
 labels:
     - kind:enhancement
@@ -11,6 +11,7 @@ relations:
         - 75
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent
