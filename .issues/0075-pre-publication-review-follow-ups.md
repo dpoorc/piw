@@ -1,7 +1,7 @@
 ---
 id: 75
 title: Pre-publication review follow-ups
-status: open
+status: closed
 priority: high
 labels:
     - kind:enhancement
@@ -25,6 +25,7 @@ relations:
         - 90
 created: "2026-10-05"
 updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Source
