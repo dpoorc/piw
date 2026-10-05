@@ -88,7 +88,8 @@ that:
 - the commit identity options are presented;
 - selective removal keeps `Orientation` and removes `Artist` and GPS;
 - OOXML removal removes the author field;
-- an in-place removal is refused without `--confirm-destructive`.
+- an in-place removal is refused without `--confirm-destructive`;
+- an in-place removal is refused without `--backup`.
 
 The scan check is skipped when `exiftool` is absent. The removal checks
 need `exiftool` for the image and only the standard library for the

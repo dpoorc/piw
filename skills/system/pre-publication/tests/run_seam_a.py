@@ -528,6 +528,13 @@ def check_metadata(root, results):
         results.ok("metadata: in-place removal is gated")
     else:
         results.fail("metadata: in-place removal is gated", "exit %s" % code)
+    code, out = run_remove(root, os.path.join(root, "photo.jpg"),
+                           "--confirm-destructive")
+    if code == 1 and "backup" in out:
+        results.ok("metadata: in-place removal needs a backup")
+    else:
+        results.fail("metadata: in-place removal needs a backup",
+                     "exit %s out=%s" % (code, out.strip()))
     shutil.rmtree(clean, ignore_errors=True)
 
 

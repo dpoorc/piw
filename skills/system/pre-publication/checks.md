@@ -181,8 +181,9 @@ custom hook, and a changed description are `low`. File metadata uses
 default. It keeps functional tags, including `Orientation`, the color
 profile, and dimensions. `--strip-all` is opt-in and warns that it
 drops functional tags. An in-place edit is destructive and needs
-`--confirm-destructive`. An out-of-place write with `--out` is not
-destructive. The script re-reads the file to confirm the tags are gone.
+`--confirm-destructive` and `--backup`. An out-of-place write with
+`--out` is not destructive. The script re-reads the file to confirm the
+tags are gone.
 
 exiftool cannot write OOXML. For OOXML the script rewrites
 `docProps/core.xml`, `docProps/app.xml`, and `docProps/custom.xml` with

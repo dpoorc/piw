@@ -8,7 +8,8 @@ read-only and writes `metadata.json` to the output directory.
 `remove` strips identity and location metadata from one file. It selects
 the tags by default, keeps functional tags such as Orientation, and
 re-reads the file to confirm. It refuses an in-place edit without
-`--confirm-destructive`. It writes out of place with `--out`.
+`--confirm-destructive` and `--backup`. It writes out of place with
+`--out`.
 
 exiftool cannot write OOXML. For OOXML the script rewrites the identity
 parts with the Python standard library `zipfile` module.
@@ -520,6 +521,10 @@ def cmd_remove(args):
     if not args.out and not args.confirm_destructive:
         print("Refused: an in-place edit is destructive. Pass "
               "--confirm-destructive, or write out of place with --out.")
+        return 1
+    if not args.out and not args.backup:
+        print("Refused: an in-place edit needs --backup. Name a backup "
+              "path, or write out of place with --out.")
         return 1
     if args.strip_all:
         print("WARNING: --strip-all removes functional tags too, including "

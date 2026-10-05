@@ -299,6 +299,10 @@ Rules the script enforces:
 - A credential rotation is handed off. A history rewrite is never a
   substitute for rotation.
 
+After a destructive fix, offer to run the project's smoke test or test
+suite. Align with the user before you run it. When the user confirms the
+result, offer to remove the backup.
+
 Propose the exact action, not a description of the action. Name the
 file, the line, and the command.
 
