@@ -85,6 +85,13 @@ def detect_magic(path, size=16):
     for signature, category in MAGIC:
         if head.startswith(signature):
             return category
+    # No known signature. Decodable content with no null byte is text.
+    if head and b"\x00" not in head:
+        try:
+            head.decode("utf-8")
+            return "text"
+        except UnicodeDecodeError:
+            return None
     return None
 
 
