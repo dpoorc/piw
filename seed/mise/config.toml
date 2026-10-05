@@ -12,3 +12,4 @@
 
 [tools]
 "go:github.com/steviee/git-issues" = "latest"
+gitleaks = "latest"

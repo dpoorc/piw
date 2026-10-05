@@ -1182,9 +1182,11 @@ ERROR: git pull --ff-only failed.
 printf '== doctor: four checks, drift is a report\n'
 rm -rf "$SANDBOX/.local/layers"
 printf '[layers]\n' > "$SANDBOX/.local/piw.conf"
-# The seeded global manifest declares git-issues, so the stub must list it.
+# The seeded global manifest declares git-issues and gitleaks, so the
+# stub must list both.
 cp "$SANDBOX/seed/mise/config.toml" "$SANDBOX/.local/mise/config.toml"
-export PIW_TEST_MISE_LS="go:github.com/steviee/git-issues 0.0.0"
+export PIW_TEST_MISE_LS="go:github.com/steviee/git-issues 0.0.0
+gitleaks 8.30.1"
 PIW_TEST_IMAGES="piw:default"
 out="$(piw doctor 2>&1)"
 status=$?
