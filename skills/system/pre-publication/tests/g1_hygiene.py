@@ -20,9 +20,11 @@ PATTERNS = [
     (r"\bas discussed\b", "conversation reference"),
     (r"\bas agreed\b", "conversation reference"),
     (r"\bper the plan\b", "planning reference"),
-    (r"\bTODO\b", "todo marker"),
-    (r"\bFIXME\b", "fixme marker"),
-    (r"\bXXX\b", "stray marker"),
+    # A work marker is residue only when it reads as a note to do work:
+    # `TODO:`, `FIXME(`, or a comment marker. The hygiene vector names
+    # these words as its subject, and those uses are not residue.
+    (r"\b(TODO|FIXME|HACK|XXX)\s*[:(]", "work marker"),
+    (r"(^|\s)(#|//|/\*|\*|--)\s*(TODO|FIXME|HACK|XXX)\b", "work marker"),
 ]
 
 SKIP_DIRS = {".git", "__pycache__"}
