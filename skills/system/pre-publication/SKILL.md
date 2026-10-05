@@ -264,12 +264,16 @@ python3 scripts/report.py --project-root . \
   --findings .local/prepublish/metadata.json \
   --findings .local/prepublish/hygiene.json \
   --findings .local/prepublish/licensing.json \
+  --sanitize \
   --stage intake --stage inventory --stage scan
 ```
 
-It writes `report.md` to the output directory. The sections are header,
-declared known risks, findings, skipped checks, suggested remediation
-plan, non-findings, and readiness summary.
+It writes `report.md` to the output directory. With `--sanitize` it also
+writes `report.sanitized.md`, which strips values, rules, and tags and
+is safe to share. The sections are header, declared known risks,
+findings, skipped checks, suggested remediation plan, advice,
+non-findings, and readiness summary. Each declared known risk is marked
+found, not found, or not checked.
 
 ## Stage 5: Gated fixes
 

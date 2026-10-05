@@ -51,13 +51,33 @@ def render_header(project_root, public_mode, inventory, tools):
     return lines
 
 
-def render_known_risks(known_risks):
+def risk_status(risk, findings, skipped_checks):
+    """Return found, not found, or not checked for one declared risk."""
+    needle = risk.lower()
+    for finding in findings:
+        fields = (finding.get("class", ""), finding.get("category", ""),
+                  finding.get("rule", ""), finding.get("entity", ""),
+                  finding.get("value", ""), finding.get("location", ""))
+        haystack = " ".join(str(f) for f in fields)
+        haystack += " " + " ".join(finding.get("tags", []))
+        if needle in haystack.lower():
+            return "found"
+    for item in skipped_checks:
+        names = "%s %s" % (item.get("check", ""), item.get("tool", ""))
+        if needle in names.lower():
+            return "not checked"
+    return "not found"
+
+
+def render_known_risks(known_risks, findings, skipped_checks):
     lines = ["## Declared known risks", ""]
     if not known_risks:
         lines.append("None declared.")
         return lines
     for item in known_risks:
-        lines.append("- [ ] %s - not checked" % item)
+        status = risk_status(item, findings, skipped_checks)
+        mark = "x" if status == "found" else " "
+        lines.append("- [%s] %s - %s" % (mark, item, status))
     return lines
 
 
@@ -82,7 +102,7 @@ def load_findings(paths):
     return findings, skipped, advice
 
 
-def render_findings(findings):
+def render_findings(findings, sanitized=False):
     lines = ["## Findings", ""]
     if not findings:
         lines.append("None found by the checks that ran.")
@@ -101,6 +121,8 @@ def render_findings(findings):
                 % (finding.get("class", "?"), finding.get("carrier", "?"),
                    finding.get("location", "?"), finding.get("confidence", "?"),
                    finding.get("remediation", "?")))
+            if sanitized:
+                continue
             if finding.get("rule"):
                 lines.append("  - rule: `%s`" % finding["rule"])
             if finding.get("entity"):
@@ -133,8 +155,13 @@ def render_skipped(ran_stages, skipped_checks):
     return lines
 
 
-def render_plan(findings):
+def severity_key(finding):
+    return -support.SEVERITY_RANK.get(finding.get("severity"), 0)
+
+
+def render_plan(findings, sanitized=False):
     lines = ["## Suggested remediation plan", ""]
+    findings = sorted(findings, key=severity_key)
     rotation = [f for f in findings if f.get("remediation") == "rotate-credential"]
     if rotation:
         lines.append("### Credential rotation hand-off")
@@ -144,8 +171,11 @@ def render_plan(findings):
         lines.append("")
         grouped = {}
         for finding in rotation:
-            key = finding.get("value") or (finding.get("rule"),
-                                           finding.get("location"))
+            if sanitized:
+                key = (finding.get("rule"), finding.get("location"))
+            else:
+                key = (finding.get("value") or (finding.get("rule"),
+                                                finding.get("location")))
             entry = grouped.setdefault(key, {
                 "rule": finding.get("rule", "?"),
                 "revocation": finding.get("revocation", "the provider"),
@@ -161,6 +191,29 @@ def render_plan(findings):
                      "credential and confirm it fails. Publication stays "
                      "blocked until each rotation is confirmed.")
         lines.append("")
+    forward = [f for f in findings if f.get("remediation") == "forward-fix"]
+    if forward:
+        lines.append("### Forward fixes")
+        lines.append("")
+        lines.append("Remove these from the working tree and stop the leak:")
+        lines.append("")
+        for finding in forward:
+            lines.append("- `%s` (%s)" % (finding.get("location", "?"),
+                                          finding.get("category", "?")))
+        lines.append("")
+
+    rewrites = [f for f in findings if f.get("remediation") == "history-rewrite"]
+    if rewrites:
+        lines.append("### History rewrites")
+        lines.append("")
+        lines.append("These paths are in tracked history. A rewrite is a "
+                     "separate, destructive step. It is proposed on request.")
+        lines.append("")
+        for finding in rewrites:
+            lines.append("- `%s` (%s)" % (finding.get("location", "?"),
+                                          finding.get("category", "?")))
+        lines.append("")
+
     protection = [f for f in findings
                   if f.get("remediation") == "add-protection"]
     if protection:
@@ -204,13 +257,15 @@ def render_non_findings(findings):
     return lines
 
 
-def render_readiness(known_risks, findings):
+def render_readiness(known_risks, findings, skipped_checks):
     blocking = [f for f in findings
                 if f.get("severity") in ("critical", "high")]
+    statuses = [risk_status(r, findings, skipped_checks) for r in known_risks]
     lines = ["## Readiness summary", ""]
     lines.append("- Blocking findings open: %d" % len(blocking))
-    lines.append("- Declared known risks: 0 found, 0 not found, %d not checked"
-                 % len(known_risks))
+    lines.append("- Declared known risks: %d found, %d not found, %d not checked"
+                 % (statuses.count("found"), statuses.count("not found"),
+                    statuses.count("not checked")))
     lines.append("")
     lines.append("This is a readiness summary, not a verdict. The skill")
     lines.append("reports coverage and risk. It does not certify a project")
@@ -219,17 +274,23 @@ def render_readiness(known_risks, findings):
 
 
 def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
-           findings, skipped_checks, advice):
-    parts = ["# Pre-publication report", ""]
+           findings, skipped_checks, advice, sanitized=False):
+    title = "# Pre-publication report"
+    if sanitized:
+        title += " (sanitized)"
+    parts = [title, ""]
+    if sanitized:
+        parts += ["This copy strips values and raw snippets. It is safe to "
+                  "share.", ""]
     parts += render_header(project_root, public_mode, inventory, tools)
     parts.append("")
-    parts += render_known_risks(known_risks)
+    parts += render_known_risks(known_risks, findings, skipped_checks)
     parts.append("")
-    parts += render_findings(findings)
+    parts += render_findings(findings, sanitized)
     parts.append("")
     parts += render_skipped(ran_stages, skipped_checks)
     parts.append("")
-    parts += render_plan(findings)
+    parts += render_plan(findings, sanitized)
     parts.append("")
     advice_lines = render_advice(advice)
     if advice_lines:
@@ -237,7 +298,7 @@ def render(project_root, public_mode, known_risks, inventory, tools, ran_stages,
         parts.append("")
     parts += render_non_findings(findings)
     parts.append("")
-    parts += render_readiness(known_risks, findings)
+    parts += render_readiness(known_risks, findings, skipped_checks)
     parts.append("")
     return re.sub(r"\n{3,}", "\n\n", "\n".join(parts))
 
@@ -254,6 +315,8 @@ def main():
                         help="a stage that ran (repeatable)")
     parser.add_argument("--findings", action="append", default=[],
                         help="a findings JSON file (repeatable)")
+    parser.add_argument("--sanitize", action="store_true",
+                        help="also write report.sanitized.md")
     args = parser.parse_args()
 
     project_root = os.path.abspath(args.project_root)
@@ -272,6 +335,15 @@ def main():
     with open(report_path, "w", encoding="utf-8") as handle:
         handle.write(text)
     print("Wrote %s" % report_path)
+
+    if args.sanitize:
+        clean = render(project_root, args.public_mode, args.known_risk,
+                       inventory, tools, stages, findings, skipped_checks,
+                       advice, sanitized=True)
+        clean_path = os.path.join(output_dir, "report.sanitized.md")
+        with open(clean_path, "w", encoding="utf-8") as handle:
+            handle.write(clean)
+        print("Wrote %s" % clean_path)
     return 0
 
 

@@ -626,6 +626,8 @@ def check_report(root, results):
             "--project-root", root,
             "--public-mode", "open source",
             "--known-risk", "a legacy token",
+            "--known-risk", "big.bin",
+            "--sanitize",
             "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
     for name in ("secrets.json", "pii.json", "metadata.json", "hygiene.json",
                  "licensing.json"):
@@ -678,6 +680,31 @@ def check_report(root, results):
             results.ok("report carries the licensing advice")
         else:
             results.fail("report carries the licensing advice")
+    if "- [x] big.bin - found" in text:
+        results.ok("report resolves a found known risk")
+    else:
+        results.fail("report resolves a found known risk")
+    if "- [ ] a legacy token - not found" in text:
+        results.ok("report resolves an absent known risk")
+    else:
+        results.fail("report resolves an absent known risk")
+    if "### Forward fixes" in text and "### History rewrites" in text:
+        results.ok("report carries the forward and rewrite plan")
+    else:
+        results.fail("report carries the forward and rewrite plan")
+    clean_path = os.path.join(output_dir, "report.sanitized.md")
+    if os.path.exists(clean_path):
+        clean = read_text(clean_path)
+        stripped = ("  - value:" not in clean and "  - rule:" not in clean
+                    and "  - tags:" not in clean)
+        if "sanitized" in clean and stripped:
+            results.ok("report writes a sanitized copy")
+        else:
+            results.fail("report writes a sanitized copy",
+                         "label=%s stripped=%s"
+                         % ("sanitized" in clean, stripped))
+    else:
+        results.fail("report writes a sanitized copy", "file missing")
 
 
 def check_g1(results):
