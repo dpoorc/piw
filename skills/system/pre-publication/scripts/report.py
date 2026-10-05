@@ -94,6 +94,8 @@ def render_findings(findings):
                    finding.get("remediation", "?")))
             if finding.get("rule"):
                 lines.append("  - rule: `%s`" % finding["rule"])
+            if finding.get("entity"):
+                lines.append("  - entity: `%s`" % finding["entity"])
             if finding.get("value"):
                 lines.append("  - value: `%s`" % finding["value"])
             if finding.get("commit"):

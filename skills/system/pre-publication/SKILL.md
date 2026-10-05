@@ -134,10 +134,10 @@ file. A carrier check runs only when its carrier is present. See
 
 ### Secrets
 
-`gitleaks` is required. Run `scripts/secrets.py`:
+`gitleaks` is required. Run `scripts/secrets_scan.py`:
 
 ```
-python3 scripts/secrets.py --project-root . --format text
+python3 scripts/secrets_scan.py --project-root . --format text
 ```
 
 It scans the working tree (`gitleaks dir`) and, when a git repository
@@ -152,6 +152,24 @@ and remediation kind. Secrets default to `critical` and
 `rotate-credential`. The report's rotation hand-off lists the
 affected credentials and the provider revocation location.
 
+### PII
+
+`presidio` is required for content PII. Run `scripts/pii.py`:
+
+```
+python3 scripts/pii.py --project-root . --format text
+```
+
+It scans text-like files with presidio and applies a bundled checksum
+cross-check to cards, IBANs, and SSNs. An invalid checksum suppresses
+the finding. It writes `pii.json` to the output directory.
+
+If `presidio` is absent, the script exits 3 and records the skip. Do
+not substitute a weaker scan.
+
+Metadata PII (EXIF, GPS, and document properties) belongs to the
+metadata vector.
+
 ## Stage 4: Report
 
 Run `scripts/report.py`:
@@ -163,6 +181,7 @@ python3 scripts/report.py --project-root . \
   --inventory inventory.json \
   --tools tools.json \
   --findings .local/prepublish/secrets.json \
+  --findings .local/prepublish/pii.json \
   --stage intake --stage inventory --stage scan
 ```
 

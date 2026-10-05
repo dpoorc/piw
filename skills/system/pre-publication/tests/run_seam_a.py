@@ -11,6 +11,7 @@ the same fixture. It is run by hand and is not automated here.
 """
 
 import argparse
+import importlib.util
 import json
 import os
 import shutil
@@ -243,7 +244,7 @@ def check_inventory(root, results):
 
 
 def run_secrets(root, gitleaks=None):
-    args = [sys.executable, os.path.join(SCRIPTS, "secrets.py"),
+    args = [sys.executable, os.path.join(SCRIPTS, "secrets_scan.py"),
             "--project-root", root, "--format", "json"]
     if gitleaks:
         args += ["--gitleaks", gitleaks]
@@ -289,16 +290,64 @@ def check_secrets(root, results):
         results.fail("secrets: findings carry confidence")
 
 
+def run_pii(root, module=None):
+    args = [sys.executable, os.path.join(SCRIPTS, "pii.py"),
+            "--project-root", root, "--format", "json"]
+    if module:
+        args += ["--presidio-module", module]
+    return subprocess.run(args, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True)
+
+
+def check_pii(root, results):
+    # A missing required tool stops the check with a clear message.
+    absent = run_pii(root, module="nonexistent_xyz")
+    if absent.returncode == 3 and "presidio is required" in absent.stderr:
+        results.ok("pii: missing tool stops the check")
+    else:
+        results.fail("pii: missing tool stops the check",
+                     "exit %s" % absent.returncode)
+
+    if importlib.util.find_spec("presidio_analyzer") is None:
+        results.skip("pii: fixture PII found", "presidio is absent")
+        return
+
+    result = run_pii(root)
+    if result.returncode != 0:
+        results.fail("pii: scan runs", result.stderr.strip())
+        return
+    results.ok("pii: scan runs")
+    data = json.loads(result.stdout)
+    findings = data["findings"]
+
+    pairs = {(f["entity"], f["location"]) for f in findings}
+    if any(entity == "EMAIL_ADDRESS" and loc.startswith("docs/contact.md")
+           for entity, loc in pairs):
+        results.ok("pii: email found")
+    else:
+        results.fail("pii: email found", "entities=%s" % sorted(pairs))
+    if any(entity == "PHONE_NUMBER" and loc.startswith("docs/contact.md")
+           for entity, loc in pairs):
+        results.ok("pii: phone found")
+    else:
+        results.fail("pii: phone found", "entities=%s" % sorted(pairs))
+    if findings and all(f.get("confidence") for f in findings):
+        results.ok("pii: findings carry confidence")
+    else:
+        results.fail("pii: findings carry confidence")
+
+
 def check_report(root, results):
     output_dir = os.path.join(root, ".local", "prepublish")
-    secrets_json = os.path.join(output_dir, "secrets.json")
     args = [sys.executable, os.path.join(SCRIPTS, "report.py"),
             "--project-root", root,
             "--public-mode", "open source",
             "--known-risk", "a legacy token",
             "--stage", "intake", "--stage", "inventory", "--stage", "scan"]
-    if os.path.exists(secrets_json):
-        args += ["--findings", secrets_json]
+    for name in ("secrets.json", "pii.json"):
+        path = os.path.join(output_dir, name)
+        if os.path.exists(path):
+            args += ["--findings", path]
     result = subprocess.run(
         args,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -325,6 +374,11 @@ def check_report(root, results):
             results.ok("report carries the rotation hand-off")
         else:
             results.fail("report carries the rotation hand-off")
+    if importlib.util.find_spec("presidio_analyzer") is not None:
+        if "personal data" in text:
+            results.ok("report carries the PII findings")
+        else:
+            results.fail("report carries the PII findings")
 
 
 def check_g1(results):
@@ -409,6 +463,7 @@ def main():
     check_planted_findings(target, results)
     check_inventory(target, results)
     check_secrets(target, results)
+    check_pii(target, results)
     check_report(target, results)
     check_g1(results)
     check_gate(results)

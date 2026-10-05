@@ -50,7 +50,7 @@ fixture does not use one.
 
 ## Secrets scan
 
-Seam A runs `scripts/secrets.py` against the fixture and checks that:
+Seam A runs `scripts/secrets_scan.py` against the fixture and checks that:
 
 - a missing `gitleaks` stops the check with exit code 3 and a clear
   message;
@@ -61,6 +61,19 @@ Seam A runs `scripts/secrets.py` against the fixture and checks that:
 It also runs `report.py` with the findings and checks that the report
 carries the rotation hand-off. The check is skipped when `gitleaks` is
 absent from the environment.
+
+## PII scan
+
+Seam A runs `scripts/pii.py` against the fixture and checks that:
+
+- a missing `presidio` stops the check with exit code 3 and a clear
+  message;
+- the scan finds the fixture email and phone number;
+- every finding carries a confidence value.
+
+It also checks that the report carries the PII findings. The check is
+skipped when `presidio` is absent. To run it, use an interpreter where
+`presidio_analyzer` is importable.
 
 ## Gate G1
 

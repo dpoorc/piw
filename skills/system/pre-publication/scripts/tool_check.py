@@ -21,7 +21,7 @@ TOOLS = [
         "when": "always",
         "check": ("cmd", "gitleaks"),
         "purpose": "secret detection in the working tree and git history",
-        "install": "https://github.com/gitleaks/gitleaks (or add it to the container image)",
+        "install": "add the pre-publish layer: piw layer add pre-publish",
     },
     {
         "name": "exiftool",
@@ -45,7 +45,7 @@ TOOLS = [
         "when": "content PII checks run",
         "check": ("module", "presidio_analyzer"),
         "purpose": "content PII detection",
-        "install": "pip install presidio-analyzer && python -m spacy download en_core_web_sm",
+        "install": "add the pre-publish layer: piw layer add pre-publish",
     },
     {
         "name": "trufflehog",
