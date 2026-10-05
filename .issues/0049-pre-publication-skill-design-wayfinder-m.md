@@ -1,12 +1,13 @@
 ---
 id: 49
 title: pre-publication skill design — wayfinder map
-status: open
+status: closed
 priority: high
 labels:
     - wayfinder:map
 created: "2026-09-29"
-updated: "2026-09-29"
+updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 **Status:** map clear as of 2026-10-01. All 12 tickets closed. The way
