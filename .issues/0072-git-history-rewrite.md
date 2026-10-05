@@ -1,7 +1,7 @@
 ---
 id: 72
 title: Git history rewrite
-status: open
+status: closed
 priority: high
 labels:
     - kind:feature
@@ -13,7 +13,8 @@ relations:
         - 66
         - 67
 created: "2026-10-01"
-updated: "2026-10-01"
+updated: "2026-10-05"
+closed: "2026-10-05"
 ---
 
 ## Parent
