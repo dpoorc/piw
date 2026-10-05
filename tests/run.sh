@@ -1350,10 +1350,11 @@ else
 fi
 
 if grep -q '^gitleaks' "$ROOT/layers/pre-publish/mise.toml" \
+   && grep -q '^git-filter-repo' "$ROOT/layers/pre-publish/mise.toml" \
    && grep -q '^libimage-exiftool-perl' "$ROOT/layers/pre-publish/apt"; then
-  ok "the pre-publish layer declares gitleaks and exiftool"
+  ok "the pre-publish layer declares gitleaks, git-filter-repo, and exiftool"
 else
-  bad "the pre-publish layer declares gitleaks and exiftool"
+  bad "the pre-publish layer declares gitleaks, git-filter-repo, and exiftool"
 fi
 
 plan="$(piw_fn compose_plan 2>&1)"

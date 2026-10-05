@@ -1,14 +1,14 @@
 # pre-publish layer
 
-The tools for the `pre-publication` skill: secret detection and content
-PII detection.
+The tools for the `pre-publication` skill: secret detection, content PII
+detection, metadata removal, and git history rewrite.
 
 Adopt it with `piw layer add pre-publish`.
 
 ## What it carries
 
 - `mise.toml`: `gitleaks` for secret detection in the working tree and in
-  git history.
+  git history, and `git-filter-repo` for a git history rewrite.
 - `apt`: `libimage-exiftool-perl` for file, document, and media metadata.
 - `install.sh`: `presidio-analyzer` and the spaCy `en_core_web_sm` model,
   installed into the system Python. presidio finds the content PII that

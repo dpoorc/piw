@@ -37,7 +37,7 @@ TOOLS = [
         "when": "a git history rewrite is chosen",
         "check": ("cmd", "git-filter-repo"),
         "purpose": "git history rewrite",
-        "install": "pip install git-filter-repo",
+        "install": "add the pre-publish layer: piw layer add pre-publish",
     },
     {
         "name": "presidio",

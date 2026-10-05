@@ -6,3 +6,4 @@
 
 [tools]
 gitleaks = "latest"
+git-filter-repo = "latest"
