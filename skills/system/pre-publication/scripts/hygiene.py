@@ -269,11 +269,12 @@ def scan_ignore_entries(root):
             continue
         if any(c in entry for c in "*?[]"):
             continue
-        if entry.endswith("/"):
+        # A directory entry with more than one segment names one
+        # directory. It is not resilient. A top-level directory is fine.
+        bare = entry[:-1] if entry.endswith("/") else entry
+        if "/" not in bare and not DATE_RE.search(bare):
             continue
-        if "/" not in entry and not DATE_RE.search(entry):
-            continue
-        suggestion = resilient_suggestion(entry)
+        suggestion = resilient_suggestion(bare)
         if not suggestion or suggestion == entry:
             continue
         findings.append(finding(

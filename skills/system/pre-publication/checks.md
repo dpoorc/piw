@@ -231,9 +231,9 @@ open-ended, not exhaustive.
   generic TODO is not a finding.
 - Internal-facing documents: the soft filter. A file whose path or
   content reads as internal is treated as one.
-- `.gitignore` gaps: a direct file entry that is not resilient, a
-  present local artifact that is not ignored, and a missing standard
-  ignore for a detected carrier.
+- `.gitignore` gaps: a direct file entry or a multi-segment directory
+  entry that is not resilient, a present local artifact that is not
+  ignored, and a missing standard ignore for a detected carrier.
 - Extension and content mismatch, from the inventory.
 
 ### Severity and remediation

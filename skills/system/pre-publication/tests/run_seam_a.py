@@ -526,6 +526,13 @@ def check_hygiene(root, results):
         results.ok("hygiene: non-resilient ignore found with a suggestion")
     else:
         results.fail("hygiene: non-resilient ignore found with a suggestion")
+    dirgap = [f for f in findings if f["location"] == ".gitignore"
+              and str(f.get("value", "")).endswith("/")]
+    if dirgap and dirgap[0].get("suggestion"):
+        results.ok("hygiene: non-resilient directory ignore found")
+    else:
+        results.fail("hygiene: non-resilient directory ignore found",
+                     "dirgap=%s" % dirgap)
     big = [f for f in findings if f["location"] == "big.bin"]
     if big and big[0].get("tracked") is True and big[0]["severity"] == "high":
         results.ok("hygiene: tracked large file found")

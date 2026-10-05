@@ -145,7 +145,9 @@ def build(target, exiftool=None):
           "DATABASE_URL=postgres://fixture:fixture@localhost:5432/fixture\n")
 
     # A non-resilient .gitignore entry, and the file it hides.
-    write(os.path.join(target, ".gitignore"), "src/notes/about-damien.md\n")
+    write(os.path.join(target, ".gitignore"),
+          "src/notes/about-damien.md\n"
+          "docs/ref/competitor-product-re/\n")
     write(os.path.join(target, "src", "notes", "about-damien.md"),
           "Internal notes.\n")
 
