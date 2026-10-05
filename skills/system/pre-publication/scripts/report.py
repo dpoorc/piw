@@ -12,7 +12,13 @@ import os
 import re
 import sys
 
-OUTPUT_SUBPATH = os.path.join(".local", "prepublish")
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import support  # noqa: E402
+
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 
 SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
@@ -248,7 +254,6 @@ def main():
                         help="a stage that ran (repeatable)")
     parser.add_argument("--findings", action="append", default=[],
                         help="a findings JSON file (repeatable)")
-    parser.add_argument("--stdout", action="store_true")
     args = parser.parse_args()
 
     project_root = os.path.abspath(args.project_root)
@@ -266,11 +271,7 @@ def main():
     report_path = os.path.join(output_dir, "report.md")
     with open(report_path, "w", encoding="utf-8") as handle:
         handle.write(text)
-
-    if args.stdout:
-        print(text)
-    else:
-        print("Wrote %s" % report_path)
+    print("Wrote %s" % report_path)
     return 0
 
 

@@ -31,8 +31,9 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import inventory  # noqa: E402
+import support  # noqa: E402
 
-OUTPUT_SUBPATH = inventory.OUTPUT_SUBPATH
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 FILE_CARRIERS = {"image", "office", "pdf"}
 OOXML_EXTS = {".docx", ".docm", ".xlsx", ".xlsm", ".pptx", ".pptm",
               ".odt", ".ods", ".odp"}
@@ -48,7 +49,6 @@ DEVICE_TAGS = {"Make", "Model", "Software", "CreatorTool"}
 GROUP_OVERRIDES = {("PDF", "Creator"): "device"}
 
 KIND_SEVERITY = {"location": "high", "identity": "high", "device": "medium"}
-SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
 
 # OOXML identity elements. app.xml and custom.xml carry unprefixed names.
 OOXML_PARTS = ("docProps/core.xml", "docProps/app.xml", "docProps/custom.xml")
@@ -68,7 +68,7 @@ def output_dir(project_root):
 
 
 def severity_of(kinds):
-    order = sorted(kinds, key=lambda k: SEVERITY_RANK[KIND_SEVERITY[k]])
+    order = sorted(kinds, key=lambda k: support.SEVERITY_RANK[KIND_SEVERITY[k]])
     return KIND_SEVERITY[order[-1]]
 
 
@@ -88,16 +88,8 @@ def classify_tag(group, name):
     return None
 
 
-def run_git(root, args):
-    return subprocess.run(["git", "-C", root] + args,
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                          text=True)
-
-
-def is_git_repo(root):
-    # A worktree has a .git file, not a directory. Ask git instead.
-    result = run_git(root, ["rev-parse", "--is-inside-work-tree"])
-    return result.returncode == 0 and result.stdout.strip() == "true"
+run_git = support.run_git
+is_git_repo = support.is_git_repo
 
 
 # ---- File metadata (exiftool) ------------------------------------------------
@@ -173,19 +165,13 @@ def scan_file_metadata(exiftool, carrier_list):
 
 def finding(location, severity, remediation, value,
             carrier="repository metadata", revocation=None):
-    item = {
-        "class": "metadata",
-        "category": "repository metadata",
-        "carrier": carrier,
-        "location": location,
-        "severity": severity,
-        "confidence": "certain",
-        "remediation": remediation,
-        "value": value,
-    }
+    """Build one repository-metadata finding."""
+    extra = {"value": value}
     if revocation:
-        item["revocation"] = revocation
-    return item
+        extra["revocation"] = revocation
+    return support.make_finding("metadata", "repository metadata", location,
+                                severity, remediation, carrier=carrier,
+                                confidence="certain", **extra)
 
 
 def host_of(url):

@@ -25,8 +25,9 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import inventory  # noqa: E402
+import support  # noqa: E402
 
-OUTPUT_SUBPATH = inventory.OUTPUT_SUBPATH
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 DEFAULT_LARGE_MB = 5
 DEFAULT_HARD_MB = 50
 
@@ -97,47 +98,20 @@ INTERNAL_DOC_MARKER_RE = re.compile(
 
 DATE_RE = re.compile(r"\d{4}[-_]\d{2}[-_]\d{2}")
 
-SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1}
-
-
-def read_text(path, limit=2 * 1024 * 1024):
-    try:
-        if os.path.getsize(path) > limit:
-            return None
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            return handle.read()
-    except OSError:
-        return None
-
-
 def finding(class_name, category, carrier, location, severity, confidence,
             remediation, **extra):
-    item = {
-        "class": class_name,
-        "category": category,
-        "carrier": carrier,
-        "location": location,
-        "severity": severity,
-        "confidence": confidence,
-        "remediation": remediation,
-    }
-    item.update(extra)
-    return item
+    """Build one hygiene finding. Every key is required."""
+    return support.make_finding(class_name, category, location, severity,
+                                remediation, carrier=carrier,
+                                confidence=confidence, **extra)
 
 
 def git_output(root, args):
-    result = subprocess.run(["git", "-C", root] + args,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                            text=True)
-    return result.stdout
+    return support.run_git(root, args).stdout
 
 
-def is_git_repo(root):
-    # A worktree has a .git file, not a directory. Ask git instead.
-    result = subprocess.run(
-        ["git", "-C", root, "rev-parse", "--is-inside-work-tree"],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    return result.returncode == 0 and result.stdout.strip() == "true"
+is_git_repo = support.is_git_repo
+read_text = support.read_text
 
 
 def tracked_files(root):
@@ -225,7 +199,7 @@ def scan_internal_references(files):
                 kinds["internal ticket link"] = "high"
         if kinds:
             severity = max(kinds.values(),
-                           key=lambda s: SEVERITY_RANK.get(s, 0))
+                           key=lambda s: support.SEVERITY_RANK.get(s, 0))
             findings.append(finding(
                 "internal reference", "internal reference", "working tree",
                 rel, severity, "likely", "forward-fix",

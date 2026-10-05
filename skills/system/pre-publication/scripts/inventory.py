@@ -9,7 +9,9 @@ import json
 import os
 import sys
 
-OUTPUT_SUBPATH = os.path.join(".local", "prepublish")
+import support
+
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 
 # Directories that are carriers in themselves. Do not recurse into them;
 # report their presence instead.

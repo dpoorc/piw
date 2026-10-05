@@ -25,8 +25,9 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import inventory  # noqa: E402
+import support  # noqa: E402
 
-OUTPUT_SUBPATH = inventory.OUTPUT_SUBPATH
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 MAX_FILE_BYTES = 2 * 1024 * 1024
 
 # presidio entity -> (category, severity). The category is the kind of
@@ -154,18 +155,8 @@ def build_engine(module_name):
     return engine, None
 
 
-def read_text(path):
-    try:
-        if os.path.getsize(path) > MAX_FILE_BYTES:
-            return None
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            return handle.read()
-    except OSError:
-        return None
-
-
 def scan_file(engine, rel, path):
-    text = read_text(path)
+    text = support.read_text(path, MAX_FILE_BYTES)
     if not text:
         return []
     results = engine.analyze(text=text, language="en",
@@ -252,8 +243,6 @@ def main():
                         help="findings JSON path (default: output dir)")
     parser.add_argument("--presidio-module", default="presidio_analyzer",
                         help="module name to import (default: presidio_analyzer)")
-    parser.add_argument("--stdout", action="store_true",
-                        help="also print the JSON payload")
     args = parser.parse_args()
 
     project_root = os.path.abspath(args.project_root)
@@ -288,8 +277,6 @@ def main():
         print(json.dumps(result, indent=2))
     else:
         print(render_text(result))
-    if args.stdout and args.format != "json":
-        print(json.dumps(result, indent=2))
     return 0
 
 

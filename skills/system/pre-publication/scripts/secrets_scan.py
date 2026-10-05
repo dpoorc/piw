@@ -21,7 +21,13 @@ import subprocess
 import sys
 import tempfile
 
-OUTPUT_SUBPATH = os.path.join(".local", "prepublish")
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import support  # noqa: E402
+
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 CONFIG_NAME = "gitleaks-prepublish.toml"
 
 # Rule IDs that identify a private key. These are certain, not inferred.
@@ -228,8 +234,6 @@ def main():
                         help="findings JSON path (default: output dir)")
     parser.add_argument("--gitleaks", default=None,
                         help="gitleaks binary path (default: PATH lookup)")
-    parser.add_argument("--stdout", action="store_true",
-                        help="also print the JSON payload")
     args = parser.parse_args()
 
     project_root = os.path.abspath(args.project_root)
@@ -267,8 +271,6 @@ def main():
         print(json.dumps(result, indent=2))
     else:
         print(render_text(result))
-    if args.stdout and args.format != "json":
-        print(json.dumps(result, indent=2))
     return 0
 
 

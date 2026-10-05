@@ -8,25 +8,19 @@ path is gitignored. Never edits .gitignore.
 import argparse
 import json
 import os
-import subprocess
 import sys
 
-OUTPUT_SUBPATH = os.path.join(".local", "prepublish")
+HERE = os.path.dirname(os.path.abspath(__file__))
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+import support  # noqa: E402
+
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 PROPOSED_IGNORE_ENTRY = ".local"
 
-
-def run_git(root, args):
-    return subprocess.run(
-        ["git", "-C", root] + args,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-    )
-
-
-def is_git_repo(root):
-    result = run_git(root, ["rev-parse", "--is-inside-work-tree"])
-    return result.returncode == 0 and result.stdout.strip() == "true"
+run_git = support.run_git
+is_git_repo = support.is_git_repo
 
 
 def is_ignored(root, path):

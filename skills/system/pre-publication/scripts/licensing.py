@@ -21,8 +21,9 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import inventory  # noqa: E402
+import support  # noqa: E402
 
-OUTPUT_SUBPATH = inventory.OUTPUT_SUBPATH
+OUTPUT_SUBPATH = support.OUTPUT_SUBPATH
 
 LICENSE_FILENAMES = (
     "LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE.rst", "LICENCE",
@@ -91,29 +92,13 @@ KNOWN_SPDX = {
     "Python-2.0", "Unlicense", "WTFPL", "X11", "Zlib",
 }
 
-def read_text(path, limit=2 * 1024 * 1024):
-    try:
-        if os.path.getsize(path) > limit:
-            return None
-        with open(path, "r", encoding="utf-8", errors="replace") as handle:
-            return handle.read()
-    except OSError:
-        return None
+read_text = support.read_text
 
 
 def finding(category, location, severity, remediation, value, **extra):
-    item = {
-        "class": "licensing",
-        "category": category,
-        "carrier": "working tree",
-        "location": location,
-        "severity": severity,
-        "confidence": "likely",
-        "remediation": remediation,
-        "value": value,
-    }
-    item.update(extra)
-    return item
+    """Build one licensing finding. The carrier is the working tree."""
+    return support.make_finding("licensing", category, location, severity,
+                                remediation, value=value, **extra)
 
 
 def license_files(root):
