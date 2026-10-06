@@ -1,8 +1,6 @@
 # piw
 
-piw is a launcher and environment manager for the
-[pi coding agent](https://pi.dev). It runs pi inside a Docker container and
-keeps your workspace native.
+piw is a launcher and environment manager for the [pi coding agent](https://pi.dev) ([github](https://github.com/earendil-works/pi)). It runs pi inside a Docker container and keeps your workspace native.
 
 The container holds the tooling and the isolation. The workspace stays on the
 host and is bind-mounted at the same path. The agent cannot change the host
