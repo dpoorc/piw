@@ -7,7 +7,7 @@ directory holds the documentation. For installation and a first run, read the
 ## Quick links
 
 | If you want to... | Read |
-|-------------------|------|
+| ------------------- | ------ |
 | Understand the model | [overview.md](overview.md) |
 | Know why piw exists | [philosophy.md](philosophy.md) |
 | Use the command line | [piw.md](piw.md) |
@@ -15,7 +15,6 @@ directory holds the documentation. For installation and a first run, read the
 | Control the agent | [permissions.md](permissions.md) |
 | Learn the container strategy | [architecture/container-strategy.md](architecture/container-strategy.md) |
 | Understand the skill system | [architecture/skills.md](architecture/skills.md) |
-| Publish or contribute | [publishing.md](publishing.md) |
 | See what is planned | [../roadmap.md](../roadmap.md) |
 | Read the glossary | [../CONTEXT.md](../CONTEXT.md) |
 | Read the state-namespace decision | [adr/0001-local-state-namespace.md](adr/0001-local-state-namespace.md) |
