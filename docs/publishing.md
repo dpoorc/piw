@@ -13,11 +13,6 @@ what piw is, the prerequisites, the install steps, and a link to the docs.
 
 The repository is GPLv3. See [LICENSE](../LICENSE).
 
-### CONTRIBUTING
-
-Document the alignment-before-action workflow. A contributor should
-understand the proposal step before opening a pull request that skips it.
-
 ### CI
 
 `.github/workflows/ci.yml` runs shellcheck and the hermetic test suite. The
@@ -43,7 +38,7 @@ configurable permissions, and a composable tool environment.
 ## Friction points
 
 | Friction | Mitigation |
-|----------|------------|
+| ---------- | ------------ |
 | Docker is required | State it in the README. `piw doctor` diagnoses the setup. |
 | API key setup is manual | The README shows the `.env.example` copy step. |
 | The agent proposes before it acts | Frame this as a feature in the README. |
