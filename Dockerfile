@@ -88,6 +88,6 @@ ENV MISE_DATA_DIR=/home/pi/.local/share/mise \
     RUSTUP_HOME=/home/pi/.local/rustup \
     CARGO_HOME=/home/pi/.local/cargo \
     GOPATH=/home/pi/.local/go \
-    PATH=/opt/pi/node_modules/.bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:$PATH
+    PATH=/opt/pi/bin:/home/pi/.local/bin:/home/pi/.local/share/mise/shims:$PATH
 
 CMD ["pi"]

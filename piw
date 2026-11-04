@@ -360,7 +360,10 @@ compose_plan() {
     return 1
   fi
 
-  local -a ops=()
+  # System inputs come first, layer content last. A change to a layer's
+  # install.sh must not invalidate an apt install or an archive download. All
+  # apt packages merge into one RUN, so one apt-get update serves the image.
+  local -a apt_ops=() archive_ops=() layer_ops=()
   local kind name dir pkg line
   while IFS=$'\t' read -r kind name dir; do
     case "$kind" in
@@ -368,22 +371,34 @@ compose_plan() {
       local -a manifest_pkgs=()
       read -r -a manifest_pkgs <<<"$name"
       for pkg in "${manifest_pkgs[@]}"; do
-        [[ -n "$pkg" ]] && ops+=("apt|$pkg")
+        [[ -n "$pkg" ]] && apt_ops+=("apt|$pkg")
       done
       ;;
     run)
       while IFS= read -r pkg; do
-        [[ -n "$pkg" ]] && ops+=("apt|$pkg")
+        [[ -n "$pkg" ]] && apt_ops+=("apt|$pkg")
       done < <(_layer_apt_packages "$dir/apt")
       while IFS= read -r line; do
-        [[ -n "$line" ]] && ops+=("archive|$dir/archives|$line")
+        [[ -n "$line" ]] && archive_ops+=("archive|$dir/archives|$line")
       done < <(_layer_archives "$dir/archives")
       if [[ -f "$dir/install.sh" ]]; then
-        ops+=("layer|$name")
+        layer_ops+=("layer|$name")
       fi
       ;;
     esac
   done <<<"$steps"
+
+  # Two layers may name the same package. The merged RUN installs it once.
+  local -a apt_unique=()
+  local -A apt_seen=()
+  for pkg in "${apt_ops[@]}"; do
+    pkg="${pkg#apt|}"
+    [[ -n "${apt_seen[$pkg]:-}" ]] && continue
+    apt_seen[$pkg]=1
+    apt_unique+=("apt|$pkg")
+  done
+
+  local -a ops=("${apt_unique[@]}" "${archive_ops[@]}" "${layer_ops[@]}")
 
   # ADD --checksum needs syntax 1.6 or later. The directive does not carry
   # over from the root Dockerfile, so the generated plan states it too.
@@ -690,7 +705,7 @@ _in_container() {
 # ── Utility: installed pi version (host-side read from the app dir) ─────────
 _pi_installed_version() {
   local pi_host="$1"
-  local pkg_json="$pi_host/node_modules/@earendil-works/pi-coding-agent/package.json"
+  local pkg_json="$pi_host/lib/node_modules/@earendil-works/pi-coding-agent/package.json"
   if [[ ! -f "$pkg_json" ]]; then
     echo ""
     return
@@ -732,13 +747,17 @@ ensure_pi() {
   fi
 
   echo "INFO: Installing pi $latest into app mount…"
-  if ! container_run -- sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules && npm install --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@$latest'"; then
+  # A global install with an explicit prefix puts pi at
+  # <prefix>/lib/node_modules. pi infers that prefix, so it can self-update
+  # back into the mount. The old layout put pi at <prefix>/node_modules; clear
+  # it too, so a migration does not leave a stale copy behind.
+  if ! container_run -- sh -c "rm -rf '$PI_MOUNT_PREFIX'/node_modules '$PI_MOUNT_PREFIX'/lib '$PI_MOUNT_PREFIX'/bin && npm install -g --prefix '$PI_MOUNT_PREFIX' '$PI_NPM_PKG@$latest'"; then
     echo "ERROR: npm install of pi failed (see output above)." >&2
     exit 1
   fi
 
   # Verify the installed CLI actually runs from the mount
-  if ! container_run -- /opt/pi/node_modules/.bin/pi --version; then
+  if ! container_run -- /opt/pi/bin/pi --version; then
     echo "ERROR: installed pi does not run from /opt/pi (broken mount or install)." >&2
     exit 1
   fi
@@ -1207,7 +1226,7 @@ cmd_launch() {
   # exec error. Fail here with an actionable message instead.
   local pi_host
   pi_host="$(resolve_pi_host_dir)"
-  if [[ ! -x "$pi_host/node_modules/.bin/pi" ]]; then
+  if [[ ! -x "$pi_host/bin/pi" ]]; then
     echo "ERROR: pi CLI missing in app mount ($pi_host)." >&2
     echo "  Run 'piw update' (or delete .local/app and retry) to repair." >&2
     exit 1

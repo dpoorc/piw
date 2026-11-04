@@ -1,16 +1,17 @@
 ---
 id: 48
 title: pi cannot self-update from the app mount
-status: open
+status: closed
 priority: high
 labels:
+    - state:ready-for-agent
     - kind:bug
-    - state:ready-for-human
 relations:
     related-to:
         - 27
 created: "2026-10-04"
-updated: "2026-10-04"
+updated: "2026-11-04"
+closed: "2026-11-04"
 ---
 
 Found while diagnosing the laptop.
@@ -66,15 +67,30 @@ Knock-on changes:
 - The mount stays `.local/app` -> `/opt/pi`; the on-disk layout gains `lib/` and
   `bin/`.
 
-## Do not implement yet
+## Hold lifted
 
-Hold this change. pi 1.0.2 breaks the Fireworks AI provider on the desktop: it
-returns 401 "the API key you provided is invalid" for every key. An upgrade
-triggered by this fix could remove a working provider. Wait until upstream
-fixes the 1.0.2 provider defect, then land this.
+The original hold waited on the pi 1.0.2 Fireworks provider defect. pi is now
+1.3.0, and its changelog lists the Fireworks fixes. The install shape change
+lands now.
+
+Original hold text: "Hold this change. pi 1.0.2 breaks the Fireworks AI
+provider on the desktop: it returns 401 for every key. An upgrade triggered by
+this fix could remove a working provider. Wait until upstream fixes the 1.0.2
+provider defect, then land this."
 
 ## Acceptance
 
 - After the fix, `pi update` in the container recognizes the installation as a
   global npm install and reports a self-update command that targets `/opt/pi`.
 - A test pins the install path (`lib/node_modules`) and the image `PATH`.
+
+## Implementation
+
+Landed. `ensure_pi` installs with `npm install -g --prefix /opt/pi`, clears
+`node_modules`, `lib`, and `bin` first, and verifies `/opt/pi/bin/pi`.
+`_pi_installed_version` reads `lib/node_modules`, the `cmd_launch` guard checks
+`bin/pi`, and the image `PATH` uses `/opt/pi/bin`. `tests/run.sh` carries the
+new layout.
+
+The live check passed on pi 1.5.0. `piw update` rebuilt the image, pi
+self-updated through the mount, and the Fireworks provider still works.

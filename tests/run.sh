@@ -50,12 +50,12 @@ printf 'Updatable layer\n' > "$SANDBOX/layers/updatable/README.md"
 
 # A fake pi install, so ensure_pi takes the offline "already present" path.
 PI_APP="$SANDBOX/.local/app"
-mkdir -p "$PI_APP/node_modules/.bin" \
-  "$PI_APP/node_modules/@earendil-works/pi-coding-agent"
+mkdir -p "$PI_APP/bin" \
+  "$PI_APP/lib/node_modules/@earendil-works/pi-coding-agent"
 printf '{"name":"@earendil-works/pi-coding-agent","version":"9.9.9"}\n' \
-  > "$PI_APP/node_modules/@earendil-works/pi-coding-agent/package.json"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$PI_APP/node_modules/.bin/pi"
-chmod +x "$PI_APP/node_modules/.bin/pi"
+  > "$PI_APP/lib/node_modules/@earendil-works/pi-coding-agent/package.json"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$PI_APP/bin/pi"
+chmod +x "$PI_APP/bin/pi"
 
 # Sandbox git repo: proves that piw writes only into the ignored namespace.
 git -C "$SANDBOX" init -q
@@ -571,11 +571,19 @@ plan="$(piw_fn compose_plan 2>&1)"
 assert_output "consecutive apt declarations coalesce" "$plan" \
   "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n' zsh gdb ripgrep)"
 
-# A non-apt step between apt declarations keeps them separate.
+# Apt declarations from every layer merge into one block before the content.
 printf '[layers]\napt:zsh\nrun:first\napt:gdb\n' > "$SANDBOX/.local/piw.conf"
 plan="$(piw_fn compose_plan 2>&1)"
-assert_output "a non-apt step splits apt groups" "$plan" \
-  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n' zsh ripgrep gdb)"
+assert_output "apt from every layer merges before layer content" "$plan" \
+  "$(printf '# syntax=docker/dockerfile:1.6\nFROM piw:default\n\n# apt\nRUN apt-get update \\\n && apt-get install -y --no-install-recommends \\\n        %s \\\n        %s \\\n        %s \\\n && rm -rf /var/lib/apt/lists/*\n\n# layer first\nCOPY first/ /tmp/piw-layer-first/\nRUN bash /tmp/piw-layer-first/install.sh \\\n && rm -rf /tmp/piw-layer-first\n' zsh ripgrep gdb)"
+
+# A package named by two layers appears once in the merged apt block.
+printf '[layers]\nrun:first\nrun:second\n' > "$SANDBOX/.local/piw.conf"
+printf 'ripgrep\n' > "$LAYERS/first/apt"
+printf 'ripgrep\nnmap\n' > "$LAYERS/second/apt"
+plan="$(piw_fn compose_plan 2>&1)"
+assert_status "a package named by two layers appears once" \
+  "$(printf '%s\n' "$plan" | grep -c '^        ripgrep \\$')" "1"
 
 # Archives become one ADD --checksum each.
 mkdir -p "$LAYERS/arch"
@@ -837,6 +845,12 @@ assert_status "mise discovers its config from HOME, not a pinned file" \
   "$(grep -c 'MISE_GLOBAL_CONFIG_FILE=' "$df" || true)" "0"
 assert_contains "the mise data dir lives in the mounted store" \
   "$df_body" "MISE_DATA_DIR=/home/pi/.local/share/mise"
+
+# pi installs as a global npm install, so its CLI sits in <prefix>/bin.
+assert_contains "the image PATH resolves pi from the app mount bin" \
+  "$df_body" "PATH=/opt/pi/bin:"
+assert_status "the old app mount bin path is gone" \
+  "$(grep -c '/opt/pi/node_modules/.bin' "$df" || true)" "0"
 
 # The rejected decisions stay rejected.
 bad_names=()
@@ -1321,8 +1335,8 @@ show_summary="$(printf '%s\n' "$out" | awk '
   sec=="arch" && /^  / {r++}
   END {printf "apt=%d arch=%d mise=%d script=%d", a, r, mise, script}
 ')"
-assert_output "layer show names the 25 apt packages, 3 archives, mise table, and script" \
-  "$show_summary" "apt=25 arch=3 mise=1 script=1"
+assert_output "layer show names the 28 apt packages, 3 archives, mise table, and script" \
+  "$show_summary" "apt=28 arch=3 mise=1 script=1"
 
 plan="$(piw_fn compose_plan 2>&1)"
 plan_summary="$(printf '%s\n' "$plan" | awk '
@@ -1334,7 +1348,7 @@ plan_summary="$(printf '%s\n' "$plan" | awk '
   END {printf "apt=%d pkgs=%d add=%d copy=%d run=%d", apt, pkg, add, copy, run}
 ')"
 assert_output "the shipped layer composes one apt install, three archives, and the script" \
-  "$plan_summary" "apt=1 pkgs=25 add=3 copy=1 run=1"
+  "$plan_summary" "apt=1 pkgs=28 add=3 copy=1 run=1"
 
 printf '== layers: the shipped pre-publish layer\n'
 rm -rf "$SANDBOX/.local/layers"
