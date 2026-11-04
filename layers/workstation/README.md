@@ -7,12 +7,13 @@ security research. Adopt it with `piw layer add workstation`.
 
 ## What it carries
 
-- `apt`: language runtimes, reverse-engineering tools, packet capture, and
-  file forensics.
+- `apt`: language runtimes, reverse-engineering tools, packet capture,
+  file forensics, and the Pango libraries that WeasyPrint renders with.
 - `archives`: rizin, ffmpeg with ffprobe, and yadm. Docker fetches each one
   with a sha256 checksum. The ffmpeg pin is a dated BtbN build, because the
   BtbN `latest` tag is rebuilt daily and its checksum changes.
-- `mise.toml`: the store tools, including the Go and Rust toolchains.
+- `mise.toml`: the store tools, including the Go and Rust toolchains,
+  pandoc, and WeasyPrint.
 - `install.sh`: extracts the three archives and installs the binaries.
 
 ## Root risk
