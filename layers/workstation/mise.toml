@@ -26,3 +26,5 @@ rust = { version = "latest", targets = "x86_64-unknown-linux-musl" }
 "pypi:mypy" = "latest"
 "pypi:pylint" = "latest"
 "pypi:weasyprint" = "latest"
+"git-filter-repo" = "latest"
+"gitleaks" = "latest"
