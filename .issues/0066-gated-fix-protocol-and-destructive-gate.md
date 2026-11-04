@@ -1,7 +1,7 @@
 ---
 id: 66
 title: Gated-fix protocol and destructive gate
-status: in-progress
+status: closed
 priority: high
 labels:
     - kind:feature
@@ -13,6 +13,7 @@ relations:
         - 64
 created: "2026-10-01"
 updated: "2026-10-01"
+closed: "2026-10-01"
 ---
 
 ## Parent
