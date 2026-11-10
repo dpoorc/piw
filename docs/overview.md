@@ -118,6 +118,10 @@ relabeling, which Fedora and RHEL need.
 The launch also passes `--env-file .local/.env` when the file exists, and
 `--user $(id -u):$(id -g)` so files on the mount belong to the host user.
 
+Every launch attaches to the `localai` Docker network when Docker has it, so
+pi can reach a dockerized model service. Set `PIW_NETWORK` to another network,
+or to an empty value to disable the attachment.
+
 `/home/pi` is not writable and does not survive the container. The store
 mount at `/home/pi/.local` is the writable, persistent home area. Every tool
 that writes to `$HOME` points at a path under `.local/`.

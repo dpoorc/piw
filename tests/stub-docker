@@ -43,6 +43,19 @@ if [[ "${args[0]:-}" == "image" && "${args[1]:-}" == "inspect" ]]; then
   exit 0
 fi
 
+# `docker network inspect <name>` reports success only when <name> is listed
+# in PIW_TEST_NETWORKS (space-separated). An unset or empty list means no
+# network exists, so piw skips the attachment.
+if [[ "${args[0]:-}" == "network" && "${args[1]:-}" == "inspect" ]]; then
+  name="${args[-1]}"
+  found="false"
+  for net in ${PIW_TEST_NETWORKS:-}; do
+    [[ "$net" == "$name" ]] && found="true"
+  done
+  [[ "$found" == "true" ]] || exit 1
+  exit 0
+fi
+
 # `docker run ... mise ls` prints PIW_TEST_MISE_LS, so doctor can be tested
 # without a real mise.
 if [[ "${args[0]:-}" == "run" && "${args[-2]:-}" == "mise" && "${args[-1]:-}" == "ls" ]]; then

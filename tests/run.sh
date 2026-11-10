@@ -10,7 +10,7 @@ set -uo pipefail
 
 # The developer shell may export piw overrides. Clear them so the suite is
 # hermetic.
-unset PI_CONFIG_DIR PI_PI_DIR PI_TOOLS_DIR PIW_CONF PIW_MISE_CONFIG PIW_MODE
+unset PI_CONFIG_DIR PI_PI_DIR PI_TOOLS_DIR PIW_CONF PIW_MISE_CONFIG PIW_MODE PIW_NETWORK
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PASS=0
@@ -118,6 +118,10 @@ export PIW_TEST_DOCKER_LOG="$WORK/docker.log"
 # Empty means no image exists, so a launch falls back to piw:default.
 export PIW_TEST_IMAGES=""
 
+# Which Docker networks `docker network inspect` reports as present.
+# Space-separated. `localai` by default, so a launch attaches to it.
+export PIW_TEST_NETWORKS="localai"
+
 # A controlled home keeps the host git identity and host git config out of the
 # runs, so the exact container argv is deterministic.
 TEST_HOME="$WORK/home"
@@ -125,7 +129,7 @@ mkdir -p "$TEST_HOME"
 piw() {
   (cd "$SANDBOX" && env \
     -u PI_CONFIG_DIR -u PI_PI_DIR -u PI_TOOLS_DIR \
-    -u PIW_CONF -u PIW_MISE_CONFIG -u PIW_MODE \
+    -u PIW_CONF -u PIW_MISE_CONFIG -u PIW_MODE -u PIW_NETWORK \
     HOME="$TEST_HOME" \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
     PATH="$STUB:$PATH" ./piw "$@")
@@ -133,6 +137,9 @@ piw() {
 # Call a piw function directly, without running a command. The source guard in
 # piw stops before main, so only the definitions load.
 piw_fn() { (source "$SANDBOX/piw"; "$@"); }
+# Call a piw function with the stub docker on PATH. A caller sets PIW_NETWORK
+# around the call to exercise resolve_network.
+piw_fn_stub() { (cd "$SANDBOX" && PATH="$STUB:$PATH" bash -c "source ./piw; $1"); }
 log() { cat "$PIW_TEST_DOCKER_LOG"; }
 reset_log() { : > "$PIW_TEST_DOCKER_LOG"; }
 
@@ -186,6 +193,7 @@ assert_output() { # name actual expected
 # exact-argv tests build the expected run line from this base. The layer mount
 # is separate because a workspace mount can precede it.
 seam_base="--add-host host.docker.internal:host-gateway"
+seam_base+=" --network localai"
 seam_base+=" --user $(id -u):$(id -g)"
 seam_base+=" -e HOME=/home/pi"
 seam_base+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
@@ -296,12 +304,12 @@ reset_log
 out="$(piw --mode readonly "$WORK/proj" 2>&1)"
 status=$?
 readonly_run="run --rm -it --add-host host.docker.internal:host-gateway"
+readonly_run+=" --network localai"
 readonly_run+=" --user $(id -u):$(id -g)"
 readonly_run+=" -e HOME=/home/pi"
 readonly_run+=" -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent"
 readonly_run+=" -e npm_config_cache=/tmp/.npm-cache"
 readonly_run+=" -e npm_config_ignore_scripts=true"
-readonly_run+=" --network none"
 readonly_run+=" -v $SANDBOX/.local/agent:/home/pi/.pi/agent:z"
 readonly_run+=" -v $SANDBOX/.local/store:/home/pi/.local:z,ro"
 readonly_run+=" -v $SANDBOX/.local/mise:/home/pi/.config/mise:z,ro"
@@ -318,6 +326,44 @@ assert_output "readonly launch argv is exact" \
   "$(printf 'status=%s\n%s' "$status" "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)")" \
   "status=0
 $readonly_run"
+
+printf '== piw network\n'
+# The resolver defaults to `localai` and returns it when Docker has it.
+out="$(piw_fn_stub resolve_network 2>&1)"
+status=$?
+assert_output "the default network resolves when present" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" "status=0
+localai"
+
+# An absent default network resolves to nothing, without error.
+export PIW_TEST_NETWORKS=""
+out="$(piw_fn_stub resolve_network 2>&1)"
+status=$?
+assert_output "an absent default network resolves to nothing" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" "status=0"
+sync_label
+reset_log
+out="$(piw "$WORK/proj" 2>&1)"
+status=$?
+assert_status "a launch without the local AI network still runs" "$status" "0"
+assert_not_contains "an absent network adds no --network flag" \
+  "$(grep '^run ' "$PIW_TEST_DOCKER_LOG" | head -1)" "--network"
+export PIW_TEST_NETWORKS="localai"
+
+# An explicit missing network stops the resolver.
+out="$(PIW_NETWORK=missing piw_fn_stub resolve_network 2>&1)"
+status=$?
+assert_output "an explicit missing network errors" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" \
+  "status=1
+ERROR: PIW_NETWORK='missing' is not a Docker network.
+  Create it, or unset PIW_NETWORK to use the default."
+
+# An explicit empty value disables the attachment without error.
+out="$(PIW_NETWORK= piw_fn_stub resolve_network 2>&1)"
+status=$?
+assert_output "an empty PIW_NETWORK disables the network" \
+  "$(printf 'status=%s\n%s' "$status" "$out")" "status=0"
 
 printf '== piw build (missing Dockerfile)\n'
 mv "$SANDBOX/Dockerfile" "$WORK/Dockerfile.bak"

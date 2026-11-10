@@ -47,6 +47,7 @@
 #   PIW_CONF        Override the layer manifest (default: .local/piw.conf)
 #   PIW_MISE_CONFIG Override the mise config (default: .local/mise/config.toml)
 #   PIW_MODE        Permission mode (permissive, restricted, readonly)
+#   PIW_NETWORK     Docker network for local AI services (default: localai)
 #
 set -euo pipefail
 
@@ -142,6 +143,34 @@ resolve_mise_config() {
   else
     echo "$SCRIPT_DIR/${PIW_MISE_CONFIG:-.local/mise/config.toml}"
   fi
+}
+
+# ── Utility: resolve the local AI network ─────────────────────────────────────
+# PIW_NETWORK names the Docker network that carries local AI services. The
+# default is `localai`. An empty value disables the network. Print the name
+# when Docker has the network, and nothing otherwise. Return 1 only when
+# PIW_NETWORK is set explicitly and Docker does not have the network.
+resolve_network() {
+  local name defaulted="false"
+  if [[ -n "${PIW_NETWORK+x}" ]]; then
+    name="$PIW_NETWORK"
+  else
+    name="localai"
+    defaulted="true"
+  fi
+  if [[ -z "$name" ]]; then
+    return 0
+  fi
+  if docker network inspect "$name" >/dev/null 2>&1; then
+    printf '%s\n' "$name"
+    return 0
+  fi
+  if [[ "$defaulted" == "false" ]]; then
+    echo "ERROR: PIW_NETWORK='$name' is not a Docker network." >&2
+    echo "  Create it, or unset PIW_NETWORK to use the default." >&2
+    return 1
+  fi
+  return 0
 }
 
 # ── Utility: bootstrap pi config on the host ─────────────────────────────────
@@ -627,14 +656,20 @@ container_run() {
 
   # Read-only mode restricts the project and its store, never pi's own state.
   # pi must write sessions, auth, and extension logs to the agent directory.
+  # The mode does not restrict the network: pi must reach a model service.
   local store_mode="" mise_mode="" agents_mode="" workspace_mode=""
-  local -a mode_flags=()
   if [[ "$mode" == "readonly" ]]; then
     store_mode=",ro"
     mise_mode=",ro"
     agents_mode=",ro"
     workspace_mode=",ro"
-    mode_flags+=(--network none)
+  fi
+
+  # The local AI network carries dockerized model services. Attach every mode
+  # when Docker has the network. The default is `localai`; see resolve_network.
+  local network
+  if ! network="$(resolve_network)"; then
+    return 1
   fi
 
   # The git identity is part of the user identity, so it lives here too.
@@ -644,8 +679,9 @@ container_run() {
 
   local -a args=(--rm)
   [[ "$interactive" == "true" ]] && args+=(-it)
+  args+=(--add-host host.docker.internal:host-gateway)
+  [[ -n "$network" ]] && args+=(--network "$network")
   args+=(
-    --add-host host.docker.internal:host-gateway
     --user "$(id -u):$(id -g)"
     -e HOME=/home/pi
     -e PI_CODING_AGENT_DIR=/home/pi/.pi/agent
@@ -655,7 +691,6 @@ container_run() {
   [[ "$secrets" == "true" && -f "$SCRIPT_DIR/.local/.env" ]] && args+=(--env-file "$SCRIPT_DIR/.local/.env")
   [[ -n "$git_name" ]] && args+=(-e GIT_AUTHOR_NAME="$git_name")
   [[ -n "$git_email" ]] && args+=(-e GIT_AUTHOR_EMAIL="$git_email")
-  args+=("${mode_flags[@]}")
 
   # Base mounts. The order follows the mount map in issue #24.
   args+=(-v "$(resolve_config_dir):/home/pi/.pi/agent:z")

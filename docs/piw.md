@@ -197,6 +197,7 @@ piw update --dry-run        Show the plan, run nothing
 | `PIW_CONF` | Override the layer manifest (default: `.local/piw.conf`) |
 | `PIW_MISE_CONFIG` | Override the store tool manifest (default: `.local/mise/config.toml`) |
 | `PIW_MODE` | Select a permission mode |
+| `PIW_NETWORK` | Docker network for local AI services (default: `localai`) |
 
 Secrets are read from `.local/.env`. See [.env.example](../.env.example).
 

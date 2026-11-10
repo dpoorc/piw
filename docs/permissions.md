@@ -113,8 +113,10 @@ For a non-default mode, piw mounts the mode file over `config.json` in the
 container, read-only. The permission system reads the same path, so no
 extension change is needed.
 
-For `readonly`, piw also applies container-level restrictions: the workspace
-mounts read-only, and the network is disabled.
+For `readonly`, piw mounts the workspace read-only and applies the read-only
+permission policy. It does not restrict the network: pi must reach a model
+service, so a network cutoff would defeat the mode. The tool permissions are
+the read-only enforcement.
 
 ### Custom modes
 
